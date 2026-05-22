@@ -1,0 +1,15 @@
+## Build
+**/bin/
+**/obj/
+
+## IDE
+.vs/
+**/*.user
+**/*.suo
+
+## Secrets
+**/appsettings.Development.json
+**/appsettings.*.local.json
+
+## Tools / temp
+_tools/
