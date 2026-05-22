@@ -1,3 +1,72 @@
-@PRN232v1_HostAddress = http://localhost:5120
+@PRN232v1_HostAddress = https://localhost:7054
+@accessToken = {{login.response.body.accessToken}}
 
-###
+### Trang chủ (không cần đăng nhập)
+GET {{PRN232v1_HostAddress}}/api/home
+
+### Trang chủ (đã đăng nhập)
+GET {{PRN232v1_HostAddress}}/api/home
+Authorization: Bearer {{accessToken}}
+
+### Đăng ký email
+POST {{PRN232v1_HostAddress}}/api/auth/register
+Content-Type: application/json
+
+{
+  "email": "user@example.com",
+  "password": "YourPassword123!",
+  "fullName": "Nguyen Van A"
+}
+
+### Đăng nhập email
+# @name login
+POST {{PRN232v1_HostAddress}}/api/auth/login
+Content-Type: application/json
+
+{
+  "email": "user@example.com",
+  "password": "YourPassword123!"
+}
+
+### Thông tin user hiện tại
+GET {{PRN232v1_HostAddress}}/api/auth/me
+Authorization: Bearer {{accessToken}}
+
+### Đăng xuất
+POST {{PRN232v1_HostAddress}}/api/auth/logout
+Authorization: Bearer {{accessToken}}
+Content-Type: application/json
+
+{
+  "refreshToken": "PASTE_REFRESH_TOKEN"
+}
+
+### Làm mới token
+POST {{PRN232v1_HostAddress}}/api/auth/refresh
+Content-Type: application/json
+
+{
+  "refreshToken": "PASTE_REFRESH_TOKEN"
+}
+
+### Google OAuth — lấy URL (mở trong trình duyệt, sau đó callback trả code)
+GET {{PRN232v1_HostAddress}}/api/auth/google/url
+
+### Google OAuth — đổi code lấy JWT (sau khi redirect)
+POST {{PRN232v1_HostAddress}}/api/auth/google/code
+Content-Type: application/json
+
+{
+  "code": "PASTE_AUTHORIZATION_CODE"
+}
+
+### Google — đăng nhập bằng id_token (Google Sign-In)
+POST {{PRN232v1_HostAddress}}/api/auth/google
+Content-Type: application/json
+
+{
+  "idToken": "PASTE_GOOGLE_ID_TOKEN"
+}
+
+### Google qua Supabase (bật Google trong Supabase Auth)
+GET {{PRN232v1_HostAddress}}/api/auth/google/supabase-url

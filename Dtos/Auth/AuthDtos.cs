@@ -1,0 +1,44 @@
+using System.ComponentModel.DataAnnotations;
+
+namespace PRN232v1.Dtos.Auth;
+
+public record RegisterRequest(
+    [Required, EmailAddress] string Email,
+    [Required, MinLength(6)] string Password,
+    string? FullName);
+
+public record LoginRequest(
+    [Required, EmailAddress] string Email,
+    [Required] string Password);
+
+public record RefreshTokenRequest(
+    [Required] string RefreshToken);
+
+public record LogoutRequest(string? RefreshToken);
+
+public record GoogleIdTokenRequest(
+    [Required] string IdToken);
+
+public record GoogleCodeRequest(
+    [Required] string Code);
+
+public record AuthTokenResponse(
+    string AccessToken,
+    string RefreshToken,
+    int ExpiresIn,
+    string TokenType,
+    UserInfoResponse User);
+
+public record UserInfoResponse(
+    Guid Id,
+    string? Email,
+    string? FullName,
+    string Role,
+    string? AvatarUrl);
+
+public record GoogleAuthUrlResponse(string AuthorizationUrl);
+
+public record HomeResponse(
+    string Message,
+    bool IsAuthenticated,
+    UserInfoResponse? User);

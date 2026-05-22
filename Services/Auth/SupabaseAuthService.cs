@@ -1,0 +1,369 @@
+using System.Net;
+using System.Net.Http.Headers;
+using System.Net.Http.Json;
+using System.Text.Json;
+using System.Text.Json.Serialization;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
+using PRN232v1.Configuration;
+using PRN232v1.Data;
+using PRN232v1.Dtos.Auth;
+using PRN232v1.Models;
+
+namespace PRN232v1.Services.Auth;
+
+public class SupabaseAuthService : IAuthService
+{
+    private static readonly JsonSerializerOptions JsonOptions = new()
+    {
+        PropertyNameCaseInsensitive = true,
+        PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower,
+        DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
+    };
+
+    private readonly HttpClient _httpClient;
+    private readonly AppDbContext _db;
+    private readonly SupabaseOptions _supabase;
+    private readonly GoogleAuthOptions _google;
+    private readonly ILogger<SupabaseAuthService> _logger;
+
+    public SupabaseAuthService(
+        HttpClient httpClient,
+        AppDbContext db,
+        IOptions<SupabaseOptions> supabase,
+        IOptions<GoogleAuthOptions> google,
+        ILogger<SupabaseAuthService> logger)
+    {
+        _httpClient = httpClient;
+        _db = db;
+        _supabase = supabase.Value;
+        _google = google.Value;
+        _logger = logger;
+    }
+
+    public async Task<AuthTokenResponse> RegisterAsync(RegisterRequest request, CancellationToken cancellationToken = default)
+    {
+        EnsureSupabaseConfigured();
+
+        var payload = new
+        {
+            email = request.Email,
+            password = request.Password,
+            data = new { full_name = request.FullName }
+        };
+
+        using var response = await PostAuthAsync("signup", payload, cancellationToken);
+        var session = await ReadSessionOrThrowAsync(response, cancellationToken);
+        await EnsureProfileAsync(session.User, request.FullName, cancellationToken);
+        return await MapSessionAsync(session, cancellationToken);
+    }
+
+    public async Task<AuthTokenResponse> LoginWithEmailAsync(LoginRequest request, CancellationToken cancellationToken = default)
+    {
+        EnsureSupabaseConfigured();
+
+        var payload = new { email = request.Email, password = request.Password };
+        using var response = await PostAuthAsync("token?grant_type=password", payload, cancellationToken);
+        var session = await ReadSessionOrThrowAsync(response, cancellationToken);
+        await EnsureProfileAsync(session.User, null, cancellationToken);
+        return await MapSessionAsync(session, cancellationToken);
+    }
+
+    public async Task<AuthTokenResponse> LoginWithGoogleIdTokenAsync(string idToken, CancellationToken cancellationToken = default)
+    {
+        EnsureSupabaseConfigured();
+
+        var payload = new { provider = "google", id_token = idToken };
+        using var response = await PostAuthAsync("token?grant_type=id_token", payload, cancellationToken);
+        var session = await ReadSessionOrThrowAsync(response, cancellationToken);
+        await EnsureProfileAsync(session.User, null, cancellationToken);
+        return await MapSessionAsync(session, cancellationToken);
+    }
+
+    public async Task<AuthTokenResponse> LoginWithGoogleCodeAsync(string code, CancellationToken cancellationToken = default)
+    {
+        EnsureGoogleConfigured();
+
+        var tokenRequest = new Dictionary<string, string>
+        {
+            ["code"] = code,
+            ["client_id"] = _google.ClientId,
+            ["client_secret"] = _google.ClientSecret,
+            ["redirect_uri"] = _google.RedirectUri,
+            ["grant_type"] = "authorization_code"
+        };
+
+        using var googleResponse = await _httpClient.PostAsync(
+            "https://oauth2.googleapis.com/token",
+            new FormUrlEncodedContent(tokenRequest),
+            cancellationToken);
+
+        if (!googleResponse.IsSuccessStatusCode)
+        {
+            var error = await googleResponse.Content.ReadAsStringAsync(cancellationToken);
+            _logger.LogWarning("Google token exchange failed: {Error}", error);
+            throw new AuthServiceException("Google authorization code is invalid or expired.", HttpStatusCode.BadRequest);
+        }
+
+        var googleToken = await googleResponse.Content.ReadFromJsonAsync<GoogleTokenPayload>(JsonOptions, cancellationToken)
+            ?? throw new AuthServiceException("Empty response from Google token endpoint.", HttpStatusCode.BadGateway);
+
+        if (string.IsNullOrWhiteSpace(googleToken.IdToken))
+        {
+            throw new AuthServiceException("Google did not return an id_token.", HttpStatusCode.BadGateway);
+        }
+
+        return await LoginWithGoogleIdTokenAsync(googleToken.IdToken, cancellationToken);
+    }
+
+    public GoogleAuthUrlResponse GetGoogleAuthorizationUrl()
+    {
+        EnsureGoogleConfigured();
+
+        var query = new Dictionary<string, string?>
+        {
+            ["client_id"] = _google.ClientId,
+            ["redirect_uri"] = _google.RedirectUri,
+            ["response_type"] = "code",
+            ["scope"] = "openid email profile",
+            ["access_type"] = "offline",
+            ["prompt"] = "consent"
+        };
+
+        var url = "https://accounts.google.com/o/oauth2/v2/auth?" + string.Join("&",
+            query.Where(kv => !string.IsNullOrEmpty(kv.Value))
+                .Select(kv => $"{kv.Key}={Uri.EscapeDataString(kv.Value!)}"));
+
+        return new GoogleAuthUrlResponse(url);
+    }
+
+    public GoogleAuthUrlResponse GetSupabaseGoogleAuthorizationUrl()
+    {
+        EnsureSupabaseConfigured();
+
+        var redirectTo = Uri.EscapeDataString(_google.RedirectUri);
+        var url = $"{_supabase.Url.TrimEnd('/')}/auth/v1/authorize?provider=google&redirect_to={redirectTo}";
+        return new GoogleAuthUrlResponse(url);
+    }
+
+    public async Task LogoutAsync(string? accessToken, string? refreshToken, CancellationToken cancellationToken = default)
+    {
+        EnsureSupabaseConfigured();
+
+        if (string.IsNullOrWhiteSpace(accessToken))
+        {
+            return;
+        }
+
+        using var request = new HttpRequestMessage(HttpMethod.Post, BuildAuthUri("logout"));
+        request.Headers.Add("apikey", _supabase.AnonKey);
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
+
+        if (!string.IsNullOrWhiteSpace(refreshToken))
+        {
+            request.Content = JsonContent.Create(new { refresh_token = refreshToken }, options: JsonOptions);
+        }
+
+        using var response = await _httpClient.SendAsync(request, cancellationToken);
+        if (!response.IsSuccessStatusCode)
+        {
+            var body = await response.Content.ReadAsStringAsync(cancellationToken);
+            _logger.LogWarning("Supabase logout returned {Status}: {Body}", response.StatusCode, body);
+        }
+    }
+
+    public async Task<AuthTokenResponse> RefreshAsync(string refreshToken, CancellationToken cancellationToken = default)
+    {
+        EnsureSupabaseConfigured();
+
+        var payload = new { refresh_token = refreshToken };
+        using var response = await PostAuthAsync("token?grant_type=refresh_token", payload, cancellationToken);
+        var session = await ReadSessionOrThrowAsync(response, cancellationToken);
+        return await MapSessionAsync(session, cancellationToken);
+    }
+
+    public async Task<UserInfoResponse?> GetCurrentUserAsync(Guid userId, CancellationToken cancellationToken = default)
+    {
+        var profile = await _db.Profiles.AsNoTracking().FirstOrDefaultAsync(p => p.Id == userId, cancellationToken);
+        return profile is null ? null : MapProfile(profile, email: null);
+    }
+
+    private async Task<HttpResponseMessage> PostAuthAsync(string path, object payload, CancellationToken cancellationToken)
+    {
+        using var request = new HttpRequestMessage(HttpMethod.Post, BuildAuthUri(path));
+        request.Headers.Add("apikey", _supabase.AnonKey);
+        request.Content = JsonContent.Create(payload, options: JsonOptions);
+        return await _httpClient.SendAsync(request, cancellationToken);
+    }
+
+    private Uri BuildAuthUri(string path) =>
+        new($"{_supabase.Url.TrimEnd('/')}/auth/v1/{path.TrimStart('/')}");
+
+    private async Task<SupabaseSession> ReadSessionOrThrowAsync(HttpResponseMessage response, CancellationToken cancellationToken)
+    {
+        var body = await response.Content.ReadAsStringAsync(cancellationToken);
+
+        if (!response.IsSuccessStatusCode)
+        {
+            var message = TryParseSupabaseError(body) ?? "Authentication failed.";
+            var status = response.StatusCode == HttpStatusCode.Unauthorized
+                ? HttpStatusCode.Unauthorized
+                : HttpStatusCode.BadRequest;
+            throw new AuthServiceException(message, status);
+        }
+
+        var session = JsonSerializer.Deserialize<SupabaseSession>(body, JsonOptions);
+        if (session?.AccessToken is null || session.User?.Id is null)
+        {
+            throw new AuthServiceException("Invalid authentication response from Supabase.", HttpStatusCode.BadGateway);
+        }
+
+        return session;
+    }
+
+    private static string? TryParseSupabaseError(string body)
+    {
+        try
+        {
+            using var doc = JsonDocument.Parse(body);
+            if (doc.RootElement.TryGetProperty("msg", out var msg))
+            {
+                return msg.GetString();
+            }
+
+            if (doc.RootElement.TryGetProperty("error_description", out var desc))
+            {
+                return desc.GetString();
+            }
+
+            if (doc.RootElement.TryGetProperty("message", out var message))
+            {
+                return message.GetString();
+            }
+        }
+        catch (JsonException)
+        {
+            // ignore parse errors
+        }
+
+        return null;
+    }
+
+    private async Task EnsureProfileAsync(SupabaseUser? user, string? fullName, CancellationToken cancellationToken)
+    {
+        if (user?.Id is null || !Guid.TryParse(user.Id, out var userId))
+        {
+            return;
+        }
+
+        var exists = await _db.Profiles.AnyAsync(p => p.Id == userId, cancellationToken);
+        if (exists)
+        {
+            return;
+        }
+
+        var profile = new Profile
+        {
+            Id = userId,
+            Role = "reader",
+            FullName = fullName ?? user.UserMetadata?.FullName ?? user.Email?.Split('@')[0],
+            CreatedAt = DateTime.UtcNow,
+            EmailNotifEnabled = true,
+            PushNotifEnabled = true
+        };
+
+        _db.Profiles.Add(profile);
+        await _db.SaveChangesAsync(cancellationToken);
+    }
+
+    private async Task<AuthTokenResponse> MapSessionAsync(SupabaseSession session, CancellationToken cancellationToken)
+    {
+        if (!Guid.TryParse(session.User!.Id, out var userId))
+        {
+            throw new AuthServiceException("Invalid user id in token.", HttpStatusCode.BadGateway);
+        }
+
+        var profile = await _db.Profiles.AsNoTracking().FirstOrDefaultAsync(p => p.Id == userId, cancellationToken);
+        var userInfo = profile is not null
+            ? MapProfile(profile, session.User.Email)
+            : new UserInfoResponse(
+                userId,
+                session.User.Email,
+                session.User.UserMetadata?.FullName,
+                "reader",
+                session.User.UserMetadata?.AvatarUrl);
+
+        return new AuthTokenResponse(
+            session.AccessToken!,
+            session.RefreshToken ?? string.Empty,
+            session.ExpiresIn ?? 3600,
+            session.TokenType ?? "bearer",
+            userInfo);
+    }
+
+    private static UserInfoResponse MapProfile(Profile profile, string? email) =>
+        new(
+            profile.Id,
+            email,
+            profile.FullName,
+            profile.Role,
+            profile.AvatarUrl);
+
+    private void EnsureSupabaseConfigured()
+    {
+        if (string.IsNullOrWhiteSpace(_supabase.Url) || string.IsNullOrWhiteSpace(_supabase.AnonKey))
+        {
+            throw new AuthServiceException(
+                "Supabase is not configured. Set Supabase:Url and Supabase:AnonKey in appsettings.",
+                HttpStatusCode.ServiceUnavailable);
+        }
+    }
+
+    private void EnsureGoogleConfigured()
+    {
+        if (string.IsNullOrWhiteSpace(_google.ClientId) || string.IsNullOrWhiteSpace(_google.ClientSecret))
+        {
+            throw new AuthServiceException(
+                "Google OAuth is not configured. Set Google:ClientId and Google:ClientSecret in appsettings.",
+                HttpStatusCode.ServiceUnavailable);
+        }
+    }
+
+    private sealed class SupabaseSession
+    {
+        public string? AccessToken { get; set; }
+        public string? RefreshToken { get; set; }
+        public int? ExpiresIn { get; set; }
+        public string? TokenType { get; set; }
+        public SupabaseUser? User { get; set; }
+    }
+
+    private sealed class SupabaseUser
+    {
+        public string? Id { get; set; }
+        public string? Email { get; set; }
+        public SupabaseUserMetadata? UserMetadata { get; set; }
+    }
+
+    private sealed class SupabaseUserMetadata
+    {
+        public string? FullName { get; set; }
+        public string? AvatarUrl { get; set; }
+    }
+
+    private sealed class GoogleTokenPayload
+    {
+        public string? IdToken { get; set; }
+        public string? AccessToken { get; set; }
+    }
+}
+
+public class AuthServiceException : Exception
+{
+    public HttpStatusCode StatusCode { get; }
+
+    public AuthServiceException(string message, HttpStatusCode statusCode) : base(message)
+    {
+        StatusCode = statusCode;
+    }
+}
