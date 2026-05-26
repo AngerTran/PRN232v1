@@ -1,27 +1,27 @@
 # PRN232v1
 
-Monorepo gồm backend API và frontend (khi có).
+Monorepo — **BE đã được xóa sạch** để bạn tự tạo lại và kết nối Supabase mới.
 
 ## Cấu trúc
 
 ```
 PRN232v1/
-├── BE/          # ASP.NET Core Web API (REST)
-├── FE/          # Frontend (chưa khởi tạo — xem FE/README.md)
+├── BE/          # (trống) — tạo Web API mới tại đây
+├── FE/          # Frontend (xem FE/README.md)
 ├── PRN232v1.slnx
 └── README.md
 ```
 
-## Backend (BE)
+## Backend
+
+Tạo project mới trong `BE/` (ví dụ):
 
 ```bash
-cd BE
-dotnet run
+dotnet new webapi -n PRN232v1 -o BE --use-controllers
 ```
 
-- Swagger: https://localhost:7054/swagger
-- Cấu hình: copy `appsettings.Development.example.json` → `appsettings.Development.json`
+Cấu hình Supabase trong `BE/appsettings.Development.json` (file này nên nằm trong `.gitignore`, không commit password).
 
 ## Frontend (FE)
 
-Tạo project FE trong thư mục `FE/` và gọi API tại `BE`.
+Gọi API từ project trong `FE/` khi đã có BE.

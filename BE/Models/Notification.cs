@@ -9,11 +9,9 @@ public partial class Notification
 
     public Guid? UserId { get; set; }
 
-    public string Title { get; set; } = null!;
+    public string? Title { get; set; }
 
-    public string Body { get; set; } = null!;
-
-    public string? Metadata { get; set; }
+    public string? Message { get; set; }
 
     public bool? IsRead { get; set; }
 

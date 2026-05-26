@@ -13,13 +13,13 @@ public static class SwaggerExtensions
             {
                 Title = "PRN232 API",
                 Version = "v1",
-                Description = "REST API — đăng nhập email, Google OAuth2, trang chủ."
+                Description = "REST API — đăng nhập email, Google OAuth2 (Supabase Auth)."
             });
 
             options.AddSecurityDefinition("Bearer", new OpenApiSecurityScheme
             {
                 Name = "Authorization",
-                Description = "JWT từ POST /api/auth/login hoặc POST /api/auth/google. Chỉ nhập token (Swagger tự thêm Bearer).",
+                Description = "JWT từ /api/auth/login hoặc /api/auth/google. Chỉ nhập token.",
                 In = ParameterLocation.Header,
                 Type = SecuritySchemeType.Http,
                 Scheme = "bearer",
@@ -42,7 +42,6 @@ public static class SwaggerExtensions
         {
             options.SwaggerEndpoint("/swagger/v1/swagger.json", "PRN232 API v1");
             options.RoutePrefix = "swagger";
-            options.DocumentTitle = "PRN232 API";
         });
 
         return app;

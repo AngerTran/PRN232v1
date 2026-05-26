@@ -1,7 +1,8 @@
-using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using PRN232v1.Common;
 using PRN232v1.Dtos.Auth;
+using PRN232v1.Dtos.Profiles;
 using PRN232v1.Services.Auth;
 using PRN232v1.Services.Profiles;
 
@@ -21,7 +22,6 @@ public class AuthController : ControllerBase
         _profileService = profileService;
     }
 
-    /// <summary>Đăng ký tài khoản bằng email và mật khẩu.</summary>
     [HttpPost("register")]
     [AllowAnonymous]
     [ProducesResponseType(typeof(AuthTokenResponse), StatusCodes.Status200OK)]
@@ -33,7 +33,6 @@ public class AuthController : ControllerBase
         return Ok(result);
     }
 
-    /// <summary>Đăng nhập bằng email và mật khẩu.</summary>
     [HttpPost("login")]
     [AllowAnonymous]
     [ProducesResponseType(typeof(AuthTokenResponse), StatusCodes.Status200OK)]
@@ -45,7 +44,6 @@ public class AuthController : ControllerBase
         return Ok(result);
     }
 
-    /// <summary>Đăng xuất — thu hồi phiên Supabase (gửi kèm Bearer token).</summary>
     [HttpPost("logout")]
     [Authorize]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
@@ -53,16 +51,14 @@ public class AuthController : ControllerBase
         [FromBody] LogoutRequest? request,
         CancellationToken cancellationToken)
     {
-        var accessToken = GetBearerToken();
-        await _authService.LogoutAsync(accessToken, request?.RefreshToken, cancellationToken);
+        await _authService.LogoutAsync(GetBearerToken(), request?.RefreshToken, cancellationToken);
         return NoContent();
     }
 
-    /// <summary>Làm mới access token bằng refresh token.</summary>
-    [HttpPost("refresh")]
+    [HttpPost("refresh-token")]
     [AllowAnonymous]
     [ProducesResponseType(typeof(AuthTokenResponse), StatusCodes.Status200OK)]
-    public async Task<ActionResult<AuthTokenResponse>> Refresh(
+    public async Task<ActionResult<AuthTokenResponse>> RefreshToken(
         [FromBody] RefreshTokenRequest request,
         CancellationToken cancellationToken)
     {
@@ -70,41 +66,67 @@ public class AuthController : ControllerBase
         return Ok(result);
     }
 
-    /// <summary>Thông tin người dùng hiện tại (cần JWT).</summary>
-    [HttpGet("me")]
+    [HttpPost("sync")]
     [Authorize]
-    [ProducesResponseType(typeof(UserInfoResponse), StatusCodes.Status200OK)]
-    [ProducesResponseType(StatusCodes.Status404NotFound)]
-    public async Task<ActionResult<UserInfoResponse>> Me(CancellationToken cancellationToken)
+    [ProducesResponseType(typeof(ProfileResponse), StatusCodes.Status200OK)]
+    public async Task<ActionResult<ProfileResponse>> Sync(
+        [FromBody] SyncProfileRequest? request,
+        CancellationToken cancellationToken)
     {
-        if (!TryGetUserId(out var userId))
+        if (!this.TryGetUserId(out var userId))
         {
             return Unauthorized();
         }
 
-        var user = await _profileService.GetUserInfoAsync(userId, cancellationToken: cancellationToken);
-        return user is null ? NotFound() : Ok(user);
+        var email = User.FindFirst("email")?.Value;
+        var profile = await _profileService.SyncFromAuthAsync(userId, request, email, cancellationToken);
+        return Ok(profile);
     }
 
-    /// <summary>URL Google OAuth (luồng code — redirect về /api/auth/google/callback).</summary>
+    [HttpGet("me")]
+    [Authorize]
+    [ProducesResponseType(typeof(ProfileResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<ActionResult<ProfileResponse>> Me(CancellationToken cancellationToken)
+    {
+        if (!this.TryGetUserId(out var userId))
+        {
+            return Unauthorized();
+        }
+
+        var profile = await _profileService.GetDtoByIdAsync(userId, cancellationToken);
+        return profile is null ? NotFound() : Ok(profile);
+    }
+
+    [HttpPut("profile")]
+    [Authorize]
+    [ProducesResponseType(typeof(ProfileResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<ActionResult<ProfileResponse>> UpdateProfile(
+        [FromBody] UpdateProfileRequest request,
+        CancellationToken cancellationToken)
+    {
+        if (!this.TryGetUserId(out var userId))
+        {
+            return Unauthorized();
+        }
+
+        var updated = await _profileService.UpdateFromDtoAsync(userId, request, cancellationToken);
+        return updated is null ? NotFound() : Ok(updated);
+    }
+
     [HttpGet("google/url")]
     [AllowAnonymous]
     [ProducesResponseType(typeof(GoogleAuthUrlResponse), StatusCodes.Status200OK)]
-    public ActionResult<GoogleAuthUrlResponse> GetGoogleUrl()
-    {
-        return Ok(_authService.GetGoogleAuthorizationUrl());
-    }
+    public ActionResult<GoogleAuthUrlResponse> GetGoogleUrl() =>
+        Ok(_authService.GetGoogleAuthorizationUrl());
 
-    /// <summary>URL đăng nhập Google qua Supabase (bật Google provider trong Supabase Dashboard).</summary>
     [HttpGet("google/supabase-url")]
     [AllowAnonymous]
     [ProducesResponseType(typeof(GoogleAuthUrlResponse), StatusCodes.Status200OK)]
-    public ActionResult<GoogleAuthUrlResponse> GetSupabaseGoogleUrl()
-    {
-        return Ok(_authService.GetSupabaseGoogleAuthorizationUrl());
-    }
+    public ActionResult<GoogleAuthUrlResponse> GetSupabaseGoogleUrl() =>
+        Ok(_authService.GetSupabaseGoogleAuthorizationUrl());
 
-    /// <summary>Callback Google OAuth — đổi authorization code lấy JWT.</summary>
     [HttpGet("google/callback")]
     [AllowAnonymous]
     [ProducesResponseType(typeof(AuthTokenResponse), StatusCodes.Status200OK)]
@@ -116,7 +138,6 @@ public class AuthController : ControllerBase
         return Ok(result);
     }
 
-    /// <summary>Đăng nhập Google bằng id_token (Google Sign-In / mobile).</summary>
     [HttpPost("google")]
     [AllowAnonymous]
     [ProducesResponseType(typeof(AuthTokenResponse), StatusCodes.Status200OK)]
@@ -128,7 +149,6 @@ public class AuthController : ControllerBase
         return Ok(result);
     }
 
-    /// <summary>Đăng nhập Google bằng authorization code (POST thay cho callback GET).</summary>
     [HttpPost("google/code")]
     [AllowAnonymous]
     [ProducesResponseType(typeof(AuthTokenResponse), StatusCodes.Status200OK)]
@@ -138,14 +158,6 @@ public class AuthController : ControllerBase
     {
         var result = await _authService.LoginWithGoogleCodeAsync(request.Code, cancellationToken);
         return Ok(result);
-    }
-
-    private bool TryGetUserId(out Guid userId)
-    {
-        userId = default;
-        var sub = User.FindFirstValue(ClaimTypes.NameIdentifier)
-            ?? User.FindFirstValue("sub");
-        return sub is not null && Guid.TryParse(sub, out userId);
     }
 
     private string? GetBearerToken()

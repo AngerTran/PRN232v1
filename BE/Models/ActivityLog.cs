@@ -3,17 +3,21 @@ using System.Collections.Generic;
 
 namespace PRN232v1.Models;
 
-public partial class PayoutRequest
+public partial class ActivityLog
 {
     public Guid Id { get; set; }
 
     public Guid? UserId { get; set; }
 
-    public decimal Amount { get; set; }
+    public string? Action { get; set; }
 
-    public string BankInfo { get; set; } = null!;
+    public string? EntityType { get; set; }
 
-    public string? Status { get; set; }
+    public Guid? EntityId { get; set; }
+
+    public string? OldData { get; set; }
+
+    public string? NewData { get; set; }
 
     public DateTime? CreatedAt { get; set; }
 

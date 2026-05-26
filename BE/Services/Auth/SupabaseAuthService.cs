@@ -47,7 +47,7 @@ public class SupabaseAuthService
         {
             email = request.Email,
             password = request.Password,
-            data = new { full_name = request.FullName }
+            data = new { full_name = request.FullName, avatar_url = (string?)null }
         };
 
         using var response = await PostAuthAsync("signup", payload, cancellationToken);
@@ -138,6 +138,7 @@ public class SupabaseAuthService
     public GoogleAuthUrlResponse GetSupabaseGoogleAuthorizationUrl()
     {
         EnsureSupabaseConfigured();
+        EnsureGoogleConfigured();
 
         var redirectTo = Uri.EscapeDataString(_google.RedirectUri);
         var url = $"{_supabase.Url.TrimEnd('/')}/auth/v1/authorize?provider=google&redirect_to={redirectTo}";
@@ -235,7 +236,6 @@ public class SupabaseAuthService
         }
         catch (JsonException)
         {
-            // ignore parse errors
         }
 
         return null;
@@ -243,13 +243,14 @@ public class SupabaseAuthService
 
     private async Task EnsureProfileAsync(SupabaseUser? user, string? fullName, CancellationToken cancellationToken)
     {
-        if (user?.Id is null || !Guid.TryParse(user.Id, out var userId))
+        if (user?.Id is null || !Guid.TryParse(user.Id, out var userId) || string.IsNullOrWhiteSpace(user.Email))
         {
             return;
         }
 
         var name = fullName ?? user.UserMetadata?.FullName;
-        await _profileService.EnsureExistsForAuthAsync(userId, name, user.Email, cancellationToken);
+        var avatar = user.UserMetadata?.AvatarUrl;
+        await _profileService.EnsureExistsForAuthAsync(userId, user.Email, name, avatar, cancellationToken);
     }
 
     private async Task<AuthTokenResponse> MapSessionAsync(SupabaseSession session, CancellationToken cancellationToken)
@@ -264,8 +265,8 @@ public class SupabaseAuthService
                 userId,
                 session.User.Email,
                 session.User.UserMetadata?.FullName,
-                "reader",
-                session.User.UserMetadata?.AvatarUrl);
+                session.User.UserMetadata?.AvatarUrl,
+                true);
 
         return new AuthTokenResponse(
             session.AccessToken!,
@@ -320,7 +321,6 @@ public class SupabaseAuthService
     private sealed class GoogleTokenPayload
     {
         public string? IdToken { get; set; }
-        public string? AccessToken { get; set; }
     }
 }
 

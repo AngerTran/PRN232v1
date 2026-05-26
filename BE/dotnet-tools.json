@@ -4,10 +4,7 @@
   "tools": {
     "dotnet-ef": {
       "version": "10.0.8",
-      "commands": [
-        "dotnet-ef"
-      ],
-      "rollForward": false
+      "commands": ["dotnet-ef"]
     }
   }
 }

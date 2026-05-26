@@ -1,22 +1,18 @@
-using PRN232v1.Common;
 using PRN232v1.Dtos.Auth;
 using PRN232v1.Dtos.Profiles;
 using PRN232v1.Models;
 using PRN232v1.Repositories;
-using PRN232v1.Services.Common;
 
 namespace PRN232v1.Services.Profiles;
 
-public class ProfileService : GenericService<Profile>
+public class ProfileService
 {
-    public ProfileService(UnitOfWork unitOfWork) : base(unitOfWork)
-    {
-    }
+    private readonly UnitOfWork _unitOfWork;
+    private Repository<Profile> Repository => _unitOfWork.Repository<Profile>();
 
-    public async Task<ProfileResponse?> GetDtoByIdAsync(Guid id, CancellationToken cancellationToken = default)
+    public ProfileService(UnitOfWork unitOfWork)
     {
-        var profile = await GetByIdAsync(id, cancellationToken);
-        return profile is null ? null : MapToDto(profile);
+        _unitOfWork = unitOfWork;
     }
 
     public async Task<UserInfoResponse?> GetUserInfoAsync(
@@ -24,17 +20,24 @@ public class ProfileService : GenericService<Profile>
         string? email = null,
         CancellationToken cancellationToken = default)
     {
-        var profile = await GetByIdAsync(id, cancellationToken);
+        var profile = await Repository.GetByIdAsync(id, cancellationToken: cancellationToken);
         return profile is null ? null : MapToUserInfo(profile, email);
+    }
+
+    public async Task<ProfileResponse?> GetDtoByIdAsync(Guid id, CancellationToken cancellationToken = default)
+    {
+        var profile = await Repository.GetByIdAsync(id, cancellationToken: cancellationToken);
+        return profile is null ? null : MapToDto(profile);
     }
 
     public async Task EnsureExistsForAuthAsync(
         Guid userId,
+        string email,
         string? fullName,
-        string? email,
+        string? avatarUrl,
         CancellationToken cancellationToken = default)
     {
-        if (await ExistsAsync(userId, cancellationToken))
+        if (await Repository.AnyAsync(p => p.Id == userId, cancellationToken))
         {
             return;
         }
@@ -42,55 +45,63 @@ public class ProfileService : GenericService<Profile>
         var profile = new Profile
         {
             Id = userId,
-            Role = "reader",
-            FullName = fullName ?? email?.Split('@')[0],
+            Email = email,
+            FullName = fullName ?? email.Split('@')[0],
+            AvatarUrl = avatarUrl,
+            IsActive = true,
             CreatedAt = DateTime.UtcNow,
-            EmailNotifEnabled = true,
-            PushNotifEnabled = true
+            UpdatedAt = DateTime.UtcNow
         };
 
-        await CreateAsync(profile, cancellationToken);
+        await Repository.AddAsync(profile, cancellationToken);
+        await _unitOfWork.SaveChangesAsync(cancellationToken);
     }
 
-    private static UserInfoResponse MapToUserInfo(Profile profile, string? email) =>
-        new(profile.Id, email, profile.FullName, profile.Role, profile.AvatarUrl);
-
-    public async Task<PagedResult<ProfileResponse>> GetDtosPagedAsync(
-        int page,
-        int pageSize,
+    public async Task<ProfileResponse> SyncFromAuthAsync(
+        Guid userId,
+        SyncProfileRequest? request,
+        string? email,
         CancellationToken cancellationToken = default)
     {
-        var paged = await GetPagedAsync(
-            page,
-            pageSize,
-            orderBy: q => q.OrderByDescending(p => p.CreatedAt),
-            cancellationToken: cancellationToken);
+        var profile = await Repository.GetByIdAsync(userId, asNoTracking: false, cancellationToken);
 
-        return new PagedResult<ProfileResponse>
+        if (profile is null)
         {
-            Items = paged.Items.Select(MapToDto).ToList(),
-            TotalCount = paged.TotalCount,
-            Page = paged.Page,
-            PageSize = paged.PageSize
-        };
-    }
+            if (string.IsNullOrWhiteSpace(email))
+            {
+                throw new InvalidOperationException("Profile not found and email is required to create one.");
+            }
 
-    public async Task<ProfileResponse> CreateFromDtoAsync(CreateProfileRequest request, CancellationToken cancellationToken = default)
-    {
-        var profile = new Profile
+            profile = new Profile
+            {
+                Id = userId,
+                Email = email,
+                FullName = request?.FullName ?? email.Split('@')[0],
+                AvatarUrl = request?.AvatarUrl,
+                IsActive = true,
+                CreatedAt = DateTime.UtcNow,
+                UpdatedAt = DateTime.UtcNow
+            };
+            await Repository.AddAsync(profile, cancellationToken);
+        }
+        else
         {
-            Id = request.Id,
-            Role = request.Role,
-            FullName = request.FullName,
-            OrgId = request.OrgId,
-            AvatarUrl = request.AvatarUrl,
-            CreatedAt = DateTime.UtcNow,
-            EmailNotifEnabled = true,
-            PushNotifEnabled = true
-        };
+            if (!string.IsNullOrWhiteSpace(request?.FullName))
+            {
+                profile.FullName = request.FullName;
+            }
 
-        var created = await CreateAsync(profile, cancellationToken);
-        return MapToDto(created);
+            if (request?.AvatarUrl is not null)
+            {
+                profile.AvatarUrl = request.AvatarUrl;
+            }
+
+            profile.UpdatedAt = DateTime.UtcNow;
+            Repository.Update(profile);
+        }
+
+        await _unitOfWork.SaveChangesAsync(cancellationToken);
+        return MapToDto(profile);
     }
 
     public async Task<ProfileResponse?> UpdateFromDtoAsync(
@@ -109,43 +120,33 @@ public class ProfileService : GenericService<Profile>
             profile.FullName = request.FullName;
         }
 
-        if (request.Role is not null)
-        {
-            profile.Role = request.Role;
-        }
-
-        if (request.OrgId.HasValue)
-        {
-            profile.OrgId = request.OrgId;
-        }
-
         if (request.AvatarUrl is not null)
         {
             profile.AvatarUrl = request.AvatarUrl;
         }
 
-        if (request.EmailNotifEnabled.HasValue)
+        if (request.Bio is not null)
         {
-            profile.EmailNotifEnabled = request.EmailNotifEnabled;
+            profile.Bio = request.Bio;
         }
 
-        if (request.PushNotifEnabled.HasValue)
-        {
-            profile.PushNotifEnabled = request.PushNotifEnabled;
-        }
-
-        var updated = await UpdateAsync(profile, cancellationToken);
-        return MapToDto(updated);
+        profile.UpdatedAt = DateTime.UtcNow;
+        Repository.Update(profile);
+        await _unitOfWork.SaveChangesAsync(cancellationToken);
+        return MapToDto(profile);
     }
+
+    private static UserInfoResponse MapToUserInfo(Profile profile, string? email) =>
+        new(profile.Id, email ?? profile.Email, profile.FullName, profile.AvatarUrl, profile.IsActive);
 
     private static ProfileResponse MapToDto(Profile profile) =>
         new(
             profile.Id,
-            profile.OrgId,
+            profile.Email,
             profile.FullName,
-            profile.Role,
             profile.AvatarUrl,
-            profile.EmailNotifEnabled,
-            profile.PushNotifEnabled,
-            profile.CreatedAt);
+            profile.Bio,
+            profile.IsActive,
+            profile.CreatedAt,
+            profile.UpdatedAt);
 }

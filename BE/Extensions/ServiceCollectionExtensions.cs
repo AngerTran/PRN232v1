@@ -14,6 +14,7 @@ public static class ServiceCollectionExtensions
     {
         services.AddScoped<UnitOfWork>();
         services.AddScoped<ProfileService>();
+        services.AddHttpClient<SupabaseAuthService>();
         return services;
     }
 
@@ -21,8 +22,6 @@ public static class ServiceCollectionExtensions
     {
         services.Configure<SupabaseOptions>(configuration.GetSection(SupabaseOptions.SectionName));
         services.Configure<GoogleAuthOptions>(configuration.GetSection(GoogleAuthOptions.SectionName));
-
-        services.AddHttpClient<SupabaseAuthService>();
 
         var supabase = configuration.GetSection(SupabaseOptions.SectionName).Get<SupabaseOptions>() ?? new SupabaseOptions();
         var jwtSecret = supabase.JwtSecret;

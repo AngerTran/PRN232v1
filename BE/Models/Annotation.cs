@@ -7,19 +7,21 @@ public partial class Annotation
 {
     public Guid Id { get; set; }
 
-    public Guid? PageId { get; set; }
+    public Guid PageId { get; set; }
 
-    public Guid? AuthorId { get; set; }
+    public Guid? CreatedBy { get; set; }
 
-    public string PointData { get; set; } = null!;
+    public string Shape { get; set; } = null!;
 
-    public string Content { get; set; } = null!;
+    public string? Content { get; set; }
 
-    public bool? IsResolved { get; set; }
+    public string? Color { get; set; }
 
     public DateTime? CreatedAt { get; set; }
 
-    public virtual Profile? Author { get; set; }
+    public DateTime? UpdatedAt { get; set; }
 
-    public virtual Page? Page { get; set; }
+    public virtual Profile? CreatedByNavigation { get; set; }
+
+    public virtual Page Page { get; set; } = null!;
 }

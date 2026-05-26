@@ -1,15 +1,8 @@
-@PRN232v1_HostAddress = https://localhost:7054
-@accessToken = {{login.response.body.accessToken}}
+@host = https://localhost:7054
+@token = {{login.response.body.accessToken}}
 
-### Trang chủ (không cần đăng nhập)
-GET {{PRN232v1_HostAddress}}/api/home
-
-### Trang chủ (đã đăng nhập)
-GET {{PRN232v1_HostAddress}}/api/home
-Authorization: Bearer {{accessToken}}
-
-### Đăng ký email
-POST {{PRN232v1_HostAddress}}/api/auth/register
+### I. AUTH — POST /register
+POST {{host}}/api/auth/register
 Content-Type: application/json
 
 {
@@ -18,9 +11,9 @@ Content-Type: application/json
   "fullName": "Nguyen Van A"
 }
 
-### Đăng nhập email
+### I. AUTH — POST /login
 # @name login
-POST {{PRN232v1_HostAddress}}/api/auth/login
+POST {{host}}/api/auth/login
 Content-Type: application/json
 
 {
@@ -28,77 +21,53 @@ Content-Type: application/json
   "password": "YourPassword123!"
 }
 
-### Thông tin user hiện tại
-GET {{PRN232v1_HostAddress}}/api/auth/me
-Authorization: Bearer {{accessToken}}
-
-### Đăng xuất
-POST {{PRN232v1_HostAddress}}/api/auth/logout
-Authorization: Bearer {{accessToken}}
+### I. AUTH — POST /refresh-token
+POST {{host}}/api/auth/refresh-token
 Content-Type: application/json
 
 {
   "refreshToken": "PASTE_REFRESH_TOKEN"
 }
 
-### Làm mới token
-POST {{PRN232v1_HostAddress}}/api/auth/refresh
+### I. AUTH — POST /logout
+POST {{host}}/api/auth/logout
+Authorization: Bearer {{token}}
 Content-Type: application/json
 
 {
   "refreshToken": "PASTE_REFRESH_TOKEN"
 }
 
-### Google OAuth — lấy URL (mở trong trình duyệt, sau đó callback trả code)
-GET {{PRN232v1_HostAddress}}/api/auth/google/url
+### I. AUTH — GET /me
+GET {{host}}/api/auth/me
+Authorization: Bearer {{token}}
 
-### Google OAuth — đổi code lấy JWT (sau khi redirect)
-POST {{PRN232v1_HostAddress}}/api/auth/google/code
+### I. AUTH — PUT /profile
+PUT {{host}}/api/auth/profile
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "fullName": "Ten moi",
+  "bio": "Mangaka"
+}
+
+### (tuỳ chọn) Đồng bộ profile sau Supabase OAuth
+POST {{host}}/api/auth/sync
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "fullName": "Nguyen Van A"
+}
+
+### Google — URL OAuth
+GET {{host}}/api/auth/google/url
+
+### Google — login bằng code
+POST {{host}}/api/auth/google/code
 Content-Type: application/json
 
 {
   "code": "PASTE_AUTHORIZATION_CODE"
 }
-
-### Google — đăng nhập bằng id_token (Google Sign-In)
-POST {{PRN232v1_HostAddress}}/api/auth/google
-Content-Type: application/json
-
-{
-  "idToken": "PASTE_GOOGLE_ID_TOKEN"
-}
-
-### Google qua Supabase (bật Google trong Supabase Auth)
-GET {{PRN232v1_HostAddress}}/api/auth/google/supabase-url
-
-### --- Profiles (Controller → ProfileService → Repository) ---
-
-### Danh sách profile (phân trang)
-GET {{PRN232v1_HostAddress}}/api/profiles?page=1&pageSize=10
-
-### Chi tiết profile
-GET {{PRN232v1_HostAddress}}/api/profiles/00000000-0000-0000-0000-000000000000
-
-### Tạo profile
-POST {{PRN232v1_HostAddress}}/api/profiles
-Authorization: Bearer {{accessToken}}
-Content-Type: application/json
-
-{
-  "id": "00000000-0000-0000-0000-000000000000",
-  "role": "reader",
-  "fullName": "Test User"
-}
-
-### Cập nhật profile
-PUT {{PRN232v1_HostAddress}}/api/profiles/00000000-0000-0000-0000-000000000000
-Authorization: Bearer {{accessToken}}
-Content-Type: application/json
-
-{
-  "fullName": "Updated Name"
-}
-
-### Xóa profile
-DELETE {{PRN232v1_HostAddress}}/api/profiles/00000000-0000-0000-0000-000000000000
-Authorization: Bearer {{accessToken}}

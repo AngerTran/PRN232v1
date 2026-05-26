@@ -7,33 +7,33 @@ public partial class Series
 {
     public Guid Id { get; set; }
 
-    public Guid? OrgId { get; set; }
-
     public string Title { get; set; } = null!;
 
     public string? Description { get; set; }
 
-    public string? CoverUrl { get; set; }
+    public string? Genre { get; set; }
 
-    public List<string>? Tags { get; set; }
+    public string? TargetAudience { get; set; }
 
-    public string? Status { get; set; }
+    public string? CoverImageUrl { get; set; }
 
-    public bool? IsPublic { get; set; }
+    public Guid AuthorId { get; set; }
+
+    public Guid? EditorId { get; set; }
 
     public DateTime? CreatedAt { get; set; }
 
+    public DateTime? UpdatedAt { get; set; }
+
+    public virtual Profile Author { get; set; } = null!;
+
+    public virtual ICollection<BoardVote> BoardVotes { get; set; } = new List<BoardVote>();
+
     public virtual ICollection<Chapter> Chapters { get; set; } = new List<Chapter>();
 
-    public virtual ICollection<Comment> Comments { get; set; } = new List<Comment>();
+    public virtual Profile? Editor { get; set; }
 
-    public virtual ICollection<Donation> Donations { get; set; } = new List<Donation>();
+    public virtual ICollection<PublishingSchedule> PublishingSchedules { get; set; } = new List<PublishingSchedule>();
 
-    public virtual ICollection<EditorialVote> EditorialVotes { get; set; } = new List<EditorialVote>();
-
-    public virtual ICollection<Favorite> Favorites { get; set; } = new List<Favorite>();
-
-    public virtual Organization? Org { get; set; }
-
-    public virtual ICollection<ReaderVotingCycle> ReaderVotingCycles { get; set; } = new List<ReaderVotingCycle>();
+    public virtual ICollection<Ranking> Rankings { get; set; } = new List<Ranking>();
 }

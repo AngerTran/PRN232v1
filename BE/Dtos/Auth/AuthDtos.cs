@@ -22,6 +22,10 @@ public record GoogleIdTokenRequest(
 public record GoogleCodeRequest(
     [Required] string Code);
 
+public record SyncProfileRequest(
+    string? FullName,
+    string? AvatarUrl);
+
 public record AuthTokenResponse(
     string AccessToken,
     string RefreshToken,
@@ -33,12 +37,7 @@ public record UserInfoResponse(
     Guid Id,
     string? Email,
     string? FullName,
-    string Role,
-    string? AvatarUrl);
+    string? AvatarUrl,
+    bool? IsActive);
 
 public record GoogleAuthUrlResponse(string AuthorizationUrl);
-
-public record HomeResponse(
-    string Message,
-    bool IsAuthenticated,
-    UserInfoResponse? User);
