@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using Microsoft.EntityFrameworkCore;
 using PRN232v1.Models;
@@ -318,6 +318,11 @@ public partial class AppDbContext : DbContext
             entity.Property(e => e.FullName)
                 .HasMaxLength(255)
                 .HasColumnName("full_name");
+            entity.Property(e => e.Role)
+                .HasColumnName("role")
+                .HasColumnType("user_role")
+                .HasDefaultValueSql("'assistant'::user_role")
+                .IsRequired();
             entity.Property(e => e.IsActive)
                 .HasDefaultValue(true)
                 .HasColumnName("is_active");

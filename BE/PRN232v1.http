@@ -71,3 +71,33 @@ Content-Type: application/json
 {
   "code": "PASTE_AUTHORIZATION_CODE"
 }
+
+### II. PROFILE — GET / (Admin)
+GET {{host}}/api/profiles
+Authorization: Bearer {{token}}
+
+### II. PROFILE — GET /assistants (Mangaka)
+GET {{host}}/api/profiles/assistants
+Authorization: Bearer {{token}}
+
+### II. PROFILE — GET /editors (Admin)
+GET {{host}}/api/profiles/editors
+Authorization: Bearer {{token}}
+
+### II. PROFILE — GET /{id}
+GET {{host}}/api/profiles/00000000-0000-0000-0000-000000000000
+Authorization: Bearer {{token}}
+
+### II. PROFILE — PUT /{id} (Owner/Admin)
+PUT {{host}}/api/profiles/00000000-0000-0000-0000-000000000000
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "fullName": "Updated Name",
+  "bio": "Bio"
+}
+
+### II. PROFILE — DELETE /{id} (Admin, soft-delete)
+DELETE {{host}}/api/profiles/00000000-0000-0000-0000-000000000000
+Authorization: Bearer {{token}}

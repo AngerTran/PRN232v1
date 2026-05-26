@@ -266,6 +266,7 @@ public class SupabaseAuthService
                 session.User.Email,
                 session.User.UserMetadata?.FullName,
                 session.User.UserMetadata?.AvatarUrl,
+                "assistant",
                 true);
 
         return new AuthTokenResponse(

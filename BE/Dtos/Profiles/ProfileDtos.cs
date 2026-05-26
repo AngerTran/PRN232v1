@@ -6,6 +6,7 @@ public record ProfileResponse(
     Guid Id,
     string Email,
     string FullName,
+    string Role,
     string? AvatarUrl,
     string? Bio,
     bool? IsActive,
@@ -15,4 +16,5 @@ public record ProfileResponse(
 public record UpdateProfileRequest(
     [MaxLength(255)] string? FullName,
     string? AvatarUrl,
-    string? Bio);
+    string? Bio,
+    [MaxLength(50)] string? Role);

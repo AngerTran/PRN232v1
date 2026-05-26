@@ -1,18 +1,12 @@
-# BE — Auth API (Supabase)
+# BE — Supabase Auth + Profile API
 
-REST API module **I. AUTH** — đăng nhập email + Google qua Supabase. Dữ liệu `profiles`: **Controller → Service → Repository**.
-
-## Kiến trúc
-
-```
-AuthController
-    ↓
-SupabaseAuthService (HTTP → Supabase Auth)  |  ProfileService → UnitOfWork → Repository<Profile>
-```
+**Controller → Service → Repository** — không gọi `DbContext` trực tiếp từ Controller/Service.
 
 ## Cấu hình
 
-`appsettings.Development.json` (gitignored): connection string, `Supabase:AnonKey`, `Supabase:JwtSecret`, `Google:*`.
+`appsettings.Development.json`: connection string, `Supabase:AnonKey`, `Supabase:JwtSecret`, `Google:*`.
+
+Role lưu trong cột `profiles.role` (enum `user_role` trên Supabase).
 
 ## Chạy
 
@@ -23,30 +17,30 @@ dotnet run
 
 Swagger: https://localhost:7054/swagger
 
-## I. AUTH APIs — Base URL `/api/auth`
+## I. AUTH — `/api/auth`
 
 | Method | Endpoint | Mô tả |
 |--------|----------|--------|
 | POST | `/register` | Đăng ký |
 | POST | `/login` | Đăng nhập |
 | POST | `/refresh-token` | Refresh token |
-| POST | `/logout` | Logout (Bearer) |
-| GET | `/me` | Current user (profile) |
-| PUT | `/profile` | Cập nhật profile |
+| POST | `/logout` | Logout |
+| GET | `/me` | Current user |
+| PUT | `/profile` | Sửa profile của mình |
 
-### Bổ sung (Google / sync)
+## II. PROFILE — `/api/profiles`
 
-| Method | Endpoint | Mô tả |
-|--------|----------|--------|
-| POST | `/sync` | Đồng bộ profile sau auth |
-| GET | `/google/url` | URL OAuth Google |
-| POST | `/google/code` | Login bằng authorization code |
-| POST | `/google` | Login bằng `id_token` |
+| Method | Endpoint | Role |
+|--------|----------|------|
+| GET | `/` | admin |
+| GET | `/{id}` | all (đã login) |
+| GET | `/assistants` | mangaka |
+| GET | `/editors` | admin |
+| PUT | `/{id}` | owner hoặc admin |
+| DELETE | `/{id}` | admin (soft-delete `is_active=false`) |
 
-## Profiles (đọc user khác)
+Phân quyền đọc `role` từ bảng `profiles` (không dựa JWT claim).
 
-| Method | Endpoint | Mô tả |
-|--------|----------|--------|
-| GET | `/api/profiles/{id}` | Xem profile theo id |
+User mới đăng ký mặc định `role = assistant`. Đổi role admin: cập nhật DB hoặc `PUT` bởi admin (field `role`).
 
 Xem `PRN232v1.http` để test.

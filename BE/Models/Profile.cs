@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using PRN232v1.Common;
 
 namespace PRN232v1.Models;
 
@@ -10,6 +11,8 @@ public partial class Profile
     public string FullName { get; set; } = null!;
 
     public string Email { get; set; } = null!;
+
+    public string Role { get; set; } = ProfileRoles.Assistant;
 
     public string? AvatarUrl { get; set; }
 

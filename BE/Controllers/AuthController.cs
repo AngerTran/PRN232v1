@@ -111,7 +111,7 @@ public class AuthController : ControllerBase
             return Unauthorized();
         }
 
-        var updated = await _profileService.UpdateFromDtoAsync(userId, request, cancellationToken);
+        var updated = await _profileService.UpdateByIdAsync(userId, userId, request, cancellationToken);
         return updated is null ? NotFound() : Ok(updated);
     }
 

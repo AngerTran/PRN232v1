@@ -38,6 +38,7 @@ public record UserInfoResponse(
     string? Email,
     string? FullName,
     string? AvatarUrl,
+    string Role,
     bool? IsActive);
 
 public record GoogleAuthUrlResponse(string AuthorizationUrl);

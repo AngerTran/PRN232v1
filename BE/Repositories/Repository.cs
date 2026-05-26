@@ -39,6 +39,20 @@ public class Repository<TEntity> where TEntity : class
     public async Task<bool> AnyAsync(Expression<Func<TEntity, bool>> predicate, CancellationToken cancellationToken = default)
         => await DbSet.AnyAsync(predicate, cancellationToken);
 
+    public async Task<IReadOnlyList<TEntity>> FindListAsync(
+        Expression<Func<TEntity, bool>>? predicate = null,
+        bool asNoTracking = true,
+        CancellationToken cancellationToken = default)
+    {
+        var query = asNoTracking ? DbSet.AsNoTracking() : DbSet.AsQueryable();
+        if (predicate is not null)
+        {
+            query = query.Where(predicate);
+        }
+
+        return await query.ToListAsync(cancellationToken);
+    }
+
     public Task AddAsync(TEntity entity, CancellationToken cancellationToken = default)
         => DbSet.AddAsync(entity, cancellationToken).AsTask();
 
