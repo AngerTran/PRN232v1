@@ -2,7 +2,7 @@ using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using PRN232v1.Dtos.Auth;
-using PRN232v1.Services.Auth;
+using PRN232v1.Services.Profiles;
 
 namespace PRN232v1.Controllers;
 
@@ -11,11 +11,11 @@ namespace PRN232v1.Controllers;
 [Produces("application/json")]
 public class HomeController : ControllerBase
 {
-    private readonly IAuthService _authService;
+    private readonly ProfileService _profileService;
 
-    public HomeController(IAuthService authService)
+    public HomeController(ProfileService profileService)
     {
-        _authService = authService;
+        _profileService = profileService;
     }
 
     /// <summary>Trang chủ API — công khai; trả thêm thông tin user nếu đã đăng nhập.</summary>
@@ -34,7 +34,7 @@ public class HomeController : ControllerBase
 
             if (sub is not null && Guid.TryParse(sub, out var userId))
             {
-                user = await _authService.GetCurrentUserAsync(userId, cancellationToken);
+                user = await _profileService.GetUserInfoAsync(userId, cancellationToken: cancellationToken);
             }
         }
 

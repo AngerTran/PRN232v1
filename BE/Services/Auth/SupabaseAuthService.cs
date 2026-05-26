@@ -3,16 +3,14 @@ using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Text.Json;
 using System.Text.Json.Serialization;
-using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 using PRN232v1.Configuration;
-using PRN232v1.Data;
 using PRN232v1.Dtos.Auth;
-using PRN232v1.Models;
+using PRN232v1.Services.Profiles;
 
 namespace PRN232v1.Services.Auth;
 
-public class SupabaseAuthService : IAuthService
+public class SupabaseAuthService
 {
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
@@ -22,20 +20,20 @@ public class SupabaseAuthService : IAuthService
     };
 
     private readonly HttpClient _httpClient;
-    private readonly AppDbContext _db;
+    private readonly ProfileService _profileService;
     private readonly SupabaseOptions _supabase;
     private readonly GoogleAuthOptions _google;
     private readonly ILogger<SupabaseAuthService> _logger;
 
     public SupabaseAuthService(
         HttpClient httpClient,
-        AppDbContext db,
+        ProfileService profileService,
         IOptions<SupabaseOptions> supabase,
         IOptions<GoogleAuthOptions> google,
         ILogger<SupabaseAuthService> logger)
     {
         _httpClient = httpClient;
-        _db = db;
+        _profileService = profileService;
         _supabase = supabase.Value;
         _google = google.Value;
         _logger = logger;
@@ -182,12 +180,6 @@ public class SupabaseAuthService : IAuthService
         return await MapSessionAsync(session, cancellationToken);
     }
 
-    public async Task<UserInfoResponse?> GetCurrentUserAsync(Guid userId, CancellationToken cancellationToken = default)
-    {
-        var profile = await _db.Profiles.AsNoTracking().FirstOrDefaultAsync(p => p.Id == userId, cancellationToken);
-        return profile is null ? null : MapProfile(profile, email: null);
-    }
-
     private async Task<HttpResponseMessage> PostAuthAsync(string path, object payload, CancellationToken cancellationToken)
     {
         using var request = new HttpRequestMessage(HttpMethod.Post, BuildAuthUri(path));
@@ -256,24 +248,8 @@ public class SupabaseAuthService : IAuthService
             return;
         }
 
-        var exists = await _db.Profiles.AnyAsync(p => p.Id == userId, cancellationToken);
-        if (exists)
-        {
-            return;
-        }
-
-        var profile = new Profile
-        {
-            Id = userId,
-            Role = "reader",
-            FullName = fullName ?? user.UserMetadata?.FullName ?? user.Email?.Split('@')[0],
-            CreatedAt = DateTime.UtcNow,
-            EmailNotifEnabled = true,
-            PushNotifEnabled = true
-        };
-
-        _db.Profiles.Add(profile);
-        await _db.SaveChangesAsync(cancellationToken);
+        var name = fullName ?? user.UserMetadata?.FullName;
+        await _profileService.EnsureExistsForAuthAsync(userId, name, user.Email, cancellationToken);
     }
 
     private async Task<AuthTokenResponse> MapSessionAsync(SupabaseSession session, CancellationToken cancellationToken)
@@ -283,10 +259,8 @@ public class SupabaseAuthService : IAuthService
             throw new AuthServiceException("Invalid user id in token.", HttpStatusCode.BadGateway);
         }
 
-        var profile = await _db.Profiles.AsNoTracking().FirstOrDefaultAsync(p => p.Id == userId, cancellationToken);
-        var userInfo = profile is not null
-            ? MapProfile(profile, session.User.Email)
-            : new UserInfoResponse(
+        var userInfo = await _profileService.GetUserInfoAsync(userId, session.User.Email, cancellationToken)
+            ?? new UserInfoResponse(
                 userId,
                 session.User.Email,
                 session.User.UserMetadata?.FullName,
@@ -300,14 +274,6 @@ public class SupabaseAuthService : IAuthService
             session.TokenType ?? "bearer",
             userInfo);
     }
-
-    private static UserInfoResponse MapProfile(Profile profile, string? email) =>
-        new(
-            profile.Id,
-            email,
-            profile.FullName,
-            profile.Role,
-            profile.AvatarUrl);
 
     private void EnsureSupabaseConfigured()
     {

@@ -9,6 +9,7 @@ builder.Services.AddDbContext<AppDbContext>(options =>
     options.UseNpgsql(builder.Configuration.GetConnectionString("SupabaseConnection")));
 
 builder.Services.AddControllers();
+builder.Services.AddRepositoriesAndServices();
 builder.Services.AddAppAuthentication(builder.Configuration);
 builder.Services.AddAppSwagger();
 

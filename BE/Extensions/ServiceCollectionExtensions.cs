@@ -2,18 +2,27 @@ using System.Text;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.IdentityModel.Tokens;
 using PRN232v1.Configuration;
+using PRN232v1.Repositories;
 using PRN232v1.Services.Auth;
+using PRN232v1.Services.Profiles;
 
 namespace PRN232v1.Extensions;
 
 public static class ServiceCollectionExtensions
 {
+    public static IServiceCollection AddRepositoriesAndServices(this IServiceCollection services)
+    {
+        services.AddScoped<UnitOfWork>();
+        services.AddScoped<ProfileService>();
+        return services;
+    }
+
     public static IServiceCollection AddAppAuthentication(this IServiceCollection services, IConfiguration configuration)
     {
         services.Configure<SupabaseOptions>(configuration.GetSection(SupabaseOptions.SectionName));
         services.Configure<GoogleAuthOptions>(configuration.GetSection(GoogleAuthOptions.SectionName));
 
-        services.AddHttpClient<IAuthService, SupabaseAuthService>();
+        services.AddHttpClient<SupabaseAuthService>();
 
         var supabase = configuration.GetSection(SupabaseOptions.SectionName).Get<SupabaseOptions>() ?? new SupabaseOptions();
         var jwtSecret = supabase.JwtSecret;

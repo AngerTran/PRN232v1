@@ -70,3 +70,35 @@ Content-Type: application/json
 
 ### Google qua Supabase (bật Google trong Supabase Auth)
 GET {{PRN232v1_HostAddress}}/api/auth/google/supabase-url
+
+### --- Profiles (Controller → ProfileService → Repository) ---
+
+### Danh sách profile (phân trang)
+GET {{PRN232v1_HostAddress}}/api/profiles?page=1&pageSize=10
+
+### Chi tiết profile
+GET {{PRN232v1_HostAddress}}/api/profiles/00000000-0000-0000-0000-000000000000
+
+### Tạo profile
+POST {{PRN232v1_HostAddress}}/api/profiles
+Authorization: Bearer {{accessToken}}
+Content-Type: application/json
+
+{
+  "id": "00000000-0000-0000-0000-000000000000",
+  "role": "reader",
+  "fullName": "Test User"
+}
+
+### Cập nhật profile
+PUT {{PRN232v1_HostAddress}}/api/profiles/00000000-0000-0000-0000-000000000000
+Authorization: Bearer {{accessToken}}
+Content-Type: application/json
+
+{
+  "fullName": "Updated Name"
+}
+
+### Xóa profile
+DELETE {{PRN232v1_HostAddress}}/api/profiles/00000000-0000-0000-0000-000000000000
+Authorization: Bearer {{accessToken}}
