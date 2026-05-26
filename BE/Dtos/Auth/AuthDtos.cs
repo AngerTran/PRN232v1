@@ -16,6 +16,14 @@ public record RefreshTokenRequest(
 
 public record LogoutRequest(string? RefreshToken);
 
+public record ConfirmEmailRequest(
+    string? Token,
+    string? TokenHash,
+    string Type = "signup");
+
+public record ResendConfirmEmailRequest(
+    [Required, EmailAddress] string Email);
+
 public record GoogleIdTokenRequest(
     [Required] string IdToken);
 
@@ -39,6 +47,7 @@ public record UserInfoResponse(
     string? FullName,
     string? AvatarUrl,
     string Role,
+    bool EmailConfirmed,
     bool? IsActive);
 
 public record GoogleAuthUrlResponse(string AuthorizationUrl);

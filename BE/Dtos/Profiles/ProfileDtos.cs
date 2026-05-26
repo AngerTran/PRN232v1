@@ -9,6 +9,7 @@ public record ProfileResponse(
     string Role,
     string? AvatarUrl,
     string? Bio,
+    bool EmailConfirmed,
     bool? IsActive,
     DateTime? CreatedAt,
     DateTime? UpdatedAt);

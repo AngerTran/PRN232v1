@@ -7,4 +7,5 @@ public class SupabaseOptions
     public string Url { get; set; } = string.Empty;
     public string AnonKey { get; set; } = string.Empty;
     public string JwtSecret { get; set; } = string.Empty;
+    public string EmailRedirectTo { get; set; } = string.Empty;
 }

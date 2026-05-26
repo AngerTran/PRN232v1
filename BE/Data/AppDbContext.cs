@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using Microsoft.EntityFrameworkCore;
+using PRN232v1.Common;
 using PRN232v1.Models;
 
 namespace PRN232v1.Data;
@@ -61,7 +62,7 @@ public partial class AppDbContext : DbContext
             .HasPostgresEnum("storage", "buckettype", new[] { "STANDARD", "ANALYTICS", "VECTOR" })
             .HasPostgresEnum("task_status", new[] { "todo", "in_progress", "submitted", "approved", "rejected" })
             .HasPostgresEnum("task_type", new[] { "background", "shading", "cleanup", "speech_bubble", "effects", "lineart", "other" })
-            .HasPostgresEnum("user_role", new[] { "admin", "mangaka", "assistant", "editor", "board" })
+            .HasPostgresEnum<ProfileRole>(name: "user_role")
             .HasPostgresEnum("vote_decision", new[] { "approve", "reject" })
             .HasPostgresExtension("extensions", "pg_stat_statements")
             .HasPostgresExtension("extensions", "pgcrypto")
@@ -315,13 +316,15 @@ public partial class AppDbContext : DbContext
             entity.Property(e => e.Email)
                 .HasMaxLength(255)
                 .HasColumnName("email");
+            entity.Property(e => e.EmailConfirmed)
+                .HasDefaultValue(false)
+                .HasColumnName("email_confirmed");
             entity.Property(e => e.FullName)
                 .HasMaxLength(255)
                 .HasColumnName("full_name");
             entity.Property(e => e.Role)
                 .HasColumnName("role")
                 .HasColumnType("user_role")
-                .HasDefaultValueSql("'assistant'::user_role")
                 .IsRequired();
             entity.Property(e => e.IsActive)
                 .HasDefaultValue(true)

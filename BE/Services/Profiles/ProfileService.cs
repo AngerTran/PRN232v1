@@ -48,7 +48,7 @@ public class ProfileService
     {
         await EnsureRoleAsync(callerId, requiredRole, cancellationToken);
         var profiles = await Repository.FindListAsync(
-            p => p.Role == targetRole && p.IsActive != false,
+            p => p.Role == ParseRoleOrThrow(targetRole) && p.IsActive != false,
             cancellationToken: cancellationToken);
         return profiles.Select(MapToDto).ToList();
     }
@@ -70,10 +70,20 @@ public class ProfileService
         string email,
         string? fullName,
         string? avatarUrl,
+        bool emailConfirmed = false,
         CancellationToken cancellationToken = default)
     {
-        if (await Repository.AnyAsync(p => p.Id == userId, cancellationToken))
+        var existingProfile = await Repository.GetByIdAsync(userId, asNoTracking: false, cancellationToken);
+        if (existingProfile is not null)
         {
+            if (emailConfirmed && !existingProfile.EmailConfirmed)
+            {
+                existingProfile.EmailConfirmed = true;
+                existingProfile.UpdatedAt = DateTime.UtcNow;
+                Repository.Update(existingProfile);
+                await _unitOfWork.SaveChangesAsync(cancellationToken);
+            }
+
             return;
         }
 
@@ -82,8 +92,9 @@ public class ProfileService
             Id = userId,
             Email = email,
             FullName = fullName ?? email.Split('@')[0],
-            Role = ProfileRoles.Assistant,
+            Role = ProfileRole.Assistant,
             AvatarUrl = avatarUrl,
+            EmailConfirmed = emailConfirmed,
             IsActive = true,
             CreatedAt = DateTime.UtcNow,
             UpdatedAt = DateTime.UtcNow
@@ -113,8 +124,9 @@ public class ProfileService
                 Id = userId,
                 Email = email,
                 FullName = request?.FullName ?? email.Split('@')[0],
-                Role = ProfileRoles.Assistant,
+                Role = ProfileRole.Assistant,
                 AvatarUrl = request?.AvatarUrl,
+                EmailConfirmed = false,
                 IsActive = true,
                 CreatedAt = DateTime.UtcNow,
                 UpdatedAt = DateTime.UtcNow
@@ -137,6 +149,23 @@ public class ProfileService
             Repository.Update(profile);
         }
 
+        await _unitOfWork.SaveChangesAsync(cancellationToken);
+        return MapToDto(profile);
+    }
+
+    public async Task<ProfileResponse?> ConfirmEmailAsync(
+        Guid userId,
+        CancellationToken cancellationToken = default)
+    {
+        var profile = await Repository.GetByIdAsync(userId, asNoTracking: false, cancellationToken);
+        if (profile is null)
+        {
+            return null;
+        }
+
+        profile.EmailConfirmed = true;
+        profile.UpdatedAt = DateTime.UtcNow;
+        Repository.Update(profile);
         await _unitOfWork.SaveChangesAsync(cancellationToken);
         return MapToDto(profile);
     }
@@ -213,33 +242,45 @@ public class ProfileService
 
         if (callerIsAdmin && !string.IsNullOrWhiteSpace(request.Role))
         {
-            profile.Role = request.Role;
+            profile.Role = ParseRoleOrThrow(request.Role);
         }
     }
 
     private async Task EnsureRoleAsync(Guid callerId, string requiredRole, CancellationToken cancellationToken)
     {
         var caller = await Repository.GetByIdAsync(callerId, cancellationToken: cancellationToken);
-        if (caller is null || caller.Role != requiredRole)
+        if (caller is null || caller.Role != ParseRoleOrThrow(requiredRole))
         {
             throw new ProfileForbiddenException($"Requires role '{requiredRole}'.");
         }
     }
 
-    private static bool IsAdmin(string role) =>
-        string.Equals(role, ProfileRoles.Admin, StringComparison.OrdinalIgnoreCase);
+    private static bool IsAdmin(ProfileRole role) => role == ProfileRole.Admin;
+
+    private static ProfileRole ParseRoleOrThrow(string role) =>
+        ProfileRoles.TryParse(role, out var profileRole)
+            ? profileRole
+            : throw new ArgumentException($"Invalid profile role '{role}'.");
 
     private static UserInfoResponse MapToUserInfo(Profile profile, string? email) =>
-        new(profile.Id, email ?? profile.Email, profile.FullName, profile.AvatarUrl, profile.Role, profile.IsActive);
+        new(
+            profile.Id,
+            email ?? profile.Email,
+            profile.FullName,
+            profile.AvatarUrl,
+            ProfileRoles.ToDbValue(profile.Role),
+            profile.EmailConfirmed,
+            profile.IsActive);
 
     private static ProfileResponse MapToDto(Profile profile) =>
         new(
             profile.Id,
             profile.Email,
             profile.FullName,
-            profile.Role,
+            ProfileRoles.ToDbValue(profile.Role),
             profile.AvatarUrl,
             profile.Bio,
+            profile.EmailConfirmed,
             profile.IsActive,
             profile.CreatedAt,
             profile.UpdatedAt);

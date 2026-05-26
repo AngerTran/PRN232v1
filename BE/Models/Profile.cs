@@ -12,11 +12,13 @@ public partial class Profile
 
     public string Email { get; set; } = null!;
 
-    public string Role { get; set; } = ProfileRoles.Assistant;
+    public ProfileRole Role { get; set; } = ProfileRole.Assistant;
 
     public string? AvatarUrl { get; set; }
 
     public string? Bio { get; set; }
+
+    public bool EmailConfirmed { get; set; }
 
     public bool? IsActive { get; set; }
 

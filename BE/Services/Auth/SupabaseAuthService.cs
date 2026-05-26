@@ -47,13 +47,45 @@ public class SupabaseAuthService
         {
             email = request.Email,
             password = request.Password,
-            data = new { full_name = request.FullName, avatar_url = (string?)null }
+            data = new { full_name = request.FullName, avatar_url = (string?)null },
+            options = BuildEmailOptions()
         };
 
         using var response = await PostAuthAsync("signup", payload, cancellationToken);
-        var session = await ReadSessionOrThrowAsync(response, cancellationToken);
-        await EnsureProfileAsync(session.User, request.FullName, cancellationToken);
-        return await MapSessionAsync(session, cancellationToken);
+        var signup = await ReadSignupOrThrowAsync(response, cancellationToken);
+        await EnsureProfileAsync(signup.User, request.FullName, syncEmailConfirmed: false, cancellationToken);
+        await TrySendSignupConfirmationEmailAsync(request.Email, cancellationToken);
+        _logger.LogInformation(
+            "Register completed for {Email}. EmailConfirmed: {EmailConfirmed}",
+            request.Email,
+            signup.User?.EmailConfirmedAt is not null || signup.User?.ConfirmedAt is not null);
+
+        if (!string.IsNullOrWhiteSpace(signup.AccessToken))
+        {
+            return await MapSessionAsync(signup, cancellationToken);
+        }
+
+        if (signup.User?.Id is null || !Guid.TryParse(signup.User.Id, out var userId))
+        {
+            throw new AuthServiceException("Invalid signup response from Supabase.", HttpStatusCode.BadGateway);
+        }
+
+        var userInfo = await _profileService.GetUserInfoAsync(userId, signup.User.Email, cancellationToken)
+            ?? new UserInfoResponse(
+                userId,
+                signup.User.Email,
+                signup.User.UserMetadata?.FullName ?? request.FullName,
+                signup.User.UserMetadata?.AvatarUrl,
+                "assistant",
+                false,
+                true);
+
+        return new AuthTokenResponse(
+            string.Empty,
+            string.Empty,
+            0,
+            "bearer",
+            userInfo);
     }
 
     public async Task<AuthTokenResponse> LoginWithEmailAsync(LoginRequest request, CancellationToken cancellationToken = default)
@@ -63,7 +95,7 @@ public class SupabaseAuthService
         var payload = new { email = request.Email, password = request.Password };
         using var response = await PostAuthAsync("token?grant_type=password", payload, cancellationToken);
         var session = await ReadSessionOrThrowAsync(response, cancellationToken);
-        await EnsureProfileAsync(session.User, null, cancellationToken);
+        await EnsureProfileAsync(session.User, null, cancellationToken: cancellationToken);
         return await MapSessionAsync(session, cancellationToken);
     }
 
@@ -74,7 +106,7 @@ public class SupabaseAuthService
         var payload = new { provider = "google", id_token = idToken };
         using var response = await PostAuthAsync("token?grant_type=id_token", payload, cancellationToken);
         var session = await ReadSessionOrThrowAsync(response, cancellationToken);
-        await EnsureProfileAsync(session.User, null, cancellationToken);
+        await EnsureProfileAsync(session.User, null, cancellationToken: cancellationToken);
         return await MapSessionAsync(session, cancellationToken);
     }
 
@@ -171,6 +203,43 @@ public class SupabaseAuthService
         }
     }
 
+    public async Task<AuthTokenResponse> ConfirmEmailAsync(
+        ConfirmEmailRequest request,
+        CancellationToken cancellationToken = default)
+    {
+        EnsureSupabaseConfigured();
+
+        if (string.IsNullOrWhiteSpace(request.Token) && string.IsNullOrWhiteSpace(request.TokenHash))
+        {
+            throw new AuthServiceException("Token or token_hash is required.", HttpStatusCode.BadRequest);
+        }
+
+        var payload = new Dictionary<string, string>
+        {
+            ["type"] = string.IsNullOrWhiteSpace(request.Type) ? "signup" : request.Type
+        };
+
+        if (!string.IsNullOrWhiteSpace(request.TokenHash))
+        {
+            payload["token_hash"] = request.TokenHash;
+        }
+        else
+        {
+            payload["token"] = request.Token!;
+        }
+
+        using var response = await PostAuthAsync("verify", payload, cancellationToken);
+        var session = await ReadSessionOrThrowAsync(response, cancellationToken);
+        await EnsureProfileAsync(session.User, null, cancellationToken: cancellationToken);
+
+        if (Guid.TryParse(session.User?.Id, out var userId))
+        {
+            await _profileService.ConfirmEmailAsync(userId, cancellationToken);
+        }
+
+        return await MapSessionAsync(session, cancellationToken);
+    }
+
     public async Task<AuthTokenResponse> RefreshAsync(string refreshToken, CancellationToken cancellationToken = default)
     {
         EnsureSupabaseConfigured();
@@ -180,6 +249,60 @@ public class SupabaseAuthService
         var session = await ReadSessionOrThrowAsync(response, cancellationToken);
         return await MapSessionAsync(session, cancellationToken);
     }
+
+    public async Task ResendSignupConfirmationEmailAsync(string email, CancellationToken cancellationToken = default)
+    {
+        EnsureSupabaseConfigured();
+
+        using var response = await SendSignupConfirmationEmailAsync(email, cancellationToken);
+        if (response.IsSuccessStatusCode)
+        {
+            return;
+        }
+
+        var body = await response.Content.ReadAsStringAsync(cancellationToken);
+        var message = TryParseSupabaseError(body) ?? "Could not resend confirmation email.";
+        throw new AuthServiceException(message, HttpStatusCode.BadRequest);
+    }
+
+    private async Task TrySendSignupConfirmationEmailAsync(string email, CancellationToken cancellationToken)
+    {
+        _logger.LogInformation("Requesting Supabase signup confirmation email for {Email}.", email);
+
+        using var response = await SendSignupConfirmationEmailAsync(email, cancellationToken);
+        if (response.IsSuccessStatusCode)
+        {
+            _logger.LogInformation(
+                "Supabase accepted signup confirmation email request for {Email}. Status: {Status}",
+                email,
+                response.StatusCode);
+            return;
+        }
+
+        var body = await response.Content.ReadAsStringAsync(cancellationToken);
+        _logger.LogWarning(
+            "Supabase confirmation email resend failed for {Email}. Status: {Status}. Body: {Body}",
+            email,
+            response.StatusCode,
+            body);
+    }
+
+    private Task<HttpResponseMessage> SendSignupConfirmationEmailAsync(string email, CancellationToken cancellationToken)
+    {
+        var payload = new
+        {
+            type = "signup",
+            email,
+            options = BuildEmailOptions()
+        };
+
+        return PostAuthAsync("resend", payload, cancellationToken);
+    }
+
+    private object? BuildEmailOptions() =>
+        string.IsNullOrWhiteSpace(_supabase.EmailRedirectTo)
+            ? null
+            : new { email_redirect_to = _supabase.EmailRedirectTo };
 
     private async Task<HttpResponseMessage> PostAuthAsync(string path, object payload, CancellationToken cancellationToken)
     {
@@ -214,6 +337,38 @@ public class SupabaseAuthService
         return session;
     }
 
+    private async Task<SupabaseSession> ReadSignupOrThrowAsync(HttpResponseMessage response, CancellationToken cancellationToken)
+    {
+        var body = await response.Content.ReadAsStringAsync(cancellationToken);
+
+        if (!response.IsSuccessStatusCode)
+        {
+            var message = TryParseSupabaseError(body) ?? "Authentication failed.";
+            var status = response.StatusCode == HttpStatusCode.Unauthorized
+                ? HttpStatusCode.Unauthorized
+                : HttpStatusCode.BadRequest;
+            throw new AuthServiceException(message, status);
+        }
+
+        var signup = JsonSerializer.Deserialize<SupabaseSession>(body, JsonOptions);
+        if (signup?.User?.Id is not null)
+        {
+            return signup;
+        }
+
+        var user = JsonSerializer.Deserialize<SupabaseUser>(body, JsonOptions);
+        if (user?.Id is not null)
+        {
+            return new SupabaseSession
+            {
+                User = user
+            };
+        }
+
+        _logger.LogWarning("Unexpected Supabase signup response body: {Body}", body);
+        throw new AuthServiceException("Invalid signup response from Supabase.", HttpStatusCode.BadGateway);
+    }
+
     private static string? TryParseSupabaseError(string body)
     {
         try
@@ -241,7 +396,11 @@ public class SupabaseAuthService
         return null;
     }
 
-    private async Task EnsureProfileAsync(SupabaseUser? user, string? fullName, CancellationToken cancellationToken)
+    private async Task EnsureProfileAsync(
+        SupabaseUser? user,
+        string? fullName,
+        bool syncEmailConfirmed = true,
+        CancellationToken cancellationToken = default)
     {
         if (user?.Id is null || !Guid.TryParse(user.Id, out var userId) || string.IsNullOrWhiteSpace(user.Email))
         {
@@ -250,7 +409,16 @@ public class SupabaseAuthService
 
         var name = fullName ?? user.UserMetadata?.FullName;
         var avatar = user.UserMetadata?.AvatarUrl;
-        await _profileService.EnsureExistsForAuthAsync(userId, user.Email, name, avatar, cancellationToken);
+        var emailConfirmed = syncEmailConfirmed
+            && (user.EmailConfirmedAt is not null || user.ConfirmedAt is not null);
+
+        await _profileService.EnsureExistsForAuthAsync(
+            userId,
+            user.Email,
+            name,
+            avatar,
+            emailConfirmed,
+            cancellationToken);
     }
 
     private async Task<AuthTokenResponse> MapSessionAsync(SupabaseSession session, CancellationToken cancellationToken)
@@ -267,6 +435,7 @@ public class SupabaseAuthService
                 session.User.UserMetadata?.FullName,
                 session.User.UserMetadata?.AvatarUrl,
                 "assistant",
+                session.User.EmailConfirmedAt is not null || session.User.ConfirmedAt is not null,
                 true);
 
         return new AuthTokenResponse(
@@ -311,6 +480,8 @@ public class SupabaseAuthService
         public string? Id { get; set; }
         public string? Email { get; set; }
         public SupabaseUserMetadata? UserMetadata { get; set; }
+        public DateTime? EmailConfirmedAt { get; set; }
+        public DateTime? ConfirmedAt { get; set; }
     }
 
     private sealed class SupabaseUserMetadata
@@ -334,3 +505,4 @@ public class AuthServiceException : Exception
         StatusCode = statusCode;
     }
 }
+
