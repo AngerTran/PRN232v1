@@ -13,6 +13,8 @@ public class UnitOfWork : IAsyncDisposable
         _context = context;
     }
 
+    public AppDbContext Context => _context;
+
     public Repository<TEntity> Repository<TEntity>() where TEntity : class
     {
         var type = typeof(TEntity);

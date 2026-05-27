@@ -11,6 +11,8 @@ public partial class BoardVote
 
     public Guid? BoardMemberId { get; set; }
 
+    public string Decision { get; set; } = null!;
+
     public string? Comment { get; set; }
 
     public DateTime? CreatedAt { get; set; }

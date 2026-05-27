@@ -329,12 +329,44 @@ public class SupabaseAuthService
         }
 
         var session = JsonSerializer.Deserialize<SupabaseSession>(body, JsonOptions);
-        if (session?.AccessToken is null || session.User?.Id is null)
+        if (session?.AccessToken is not null && session.User?.Id is not null)
         {
-            throw new AuthServiceException("Invalid authentication response from Supabase.", HttpStatusCode.BadGateway);
+            return session;
         }
 
-        return session;
+        if (TryGetSignupWithoutSessionMessage(body, out var signupMessage))
+        {
+            throw new AuthServiceException(signupMessage, HttpStatusCode.BadRequest);
+        }
+
+        _logger.LogWarning("Unexpected Supabase auth response shape: {Body}", body);
+        throw new AuthServiceException("Invalid authentication response from Supabase.", HttpStatusCode.BadGateway);
+    }
+
+    private static bool TryGetSignupWithoutSessionMessage(string body, out string message)
+    {
+        message = string.Empty;
+        try
+        {
+            using var doc = JsonDocument.Parse(body);
+            var root = doc.RootElement;
+            if (!root.TryGetProperty("id", out _) || root.TryGetProperty("access_token", out _))
+            {
+                return false;
+            }
+
+            if (root.TryGetProperty("confirmation_sent_at", out _) ||
+                root.TryGetProperty("email", out _))
+            {
+                message = "Account created. Confirm your email in Supabase, then use POST /api/auth/login.";
+                return true;
+            }
+        }
+        catch (JsonException)
+        {
+        }
+
+        return false;
     }
 
     private async Task<SupabaseSession> ReadSignupOrThrowAsync(HttpResponseMessage response, CancellationToken cancellationToken)

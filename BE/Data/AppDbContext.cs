@@ -158,6 +158,9 @@ public partial class AppDbContext : DbContext
             entity.Property(e => e.CreatedAt)
                 .HasDefaultValueSql("now()")
                 .HasColumnName("created_at");
+            entity.Property(e => e.AnnotationType)
+                .HasColumnType("annotation_type")
+                .HasColumnName("annotation_type");
             entity.Property(e => e.CreatedBy).HasColumnName("created_by");
             entity.Property(e => e.PageId).HasColumnName("page_id");
             entity.Property(e => e.Shape)
@@ -192,6 +195,9 @@ public partial class AppDbContext : DbContext
             entity.Property(e => e.CreatedAt)
                 .HasDefaultValueSql("now()")
                 .HasColumnName("created_at");
+            entity.Property(e => e.Decision)
+                .HasColumnType("vote_decision")
+                .HasColumnName("decision");
             entity.Property(e => e.SeriesId).HasColumnName("series_id");
 
             entity.HasOne(d => d.BoardMember).WithMany(p => p.BoardVotes)
@@ -224,6 +230,10 @@ public partial class AppDbContext : DbContext
             entity.Property(e => e.Deadline).HasColumnName("deadline");
             entity.Property(e => e.ManuscriptUrl).HasColumnName("manuscript_url");
             entity.Property(e => e.ReleaseDate).HasColumnName("release_date");
+            entity.Property(e => e.Status)
+                .HasColumnType("chapter_status")
+                .HasDefaultValueSql("'draft'::chapter_status")
+                .HasColumnName("status");
             entity.Property(e => e.SeriesId).HasColumnName("series_id");
             entity.Property(e => e.Title)
                 .HasMaxLength(255)
@@ -349,6 +359,9 @@ public partial class AppDbContext : DbContext
             entity.Property(e => e.IssueNumber).HasColumnName("issue_number");
             entity.Property(e => e.Notes).HasColumnName("notes");
             entity.Property(e => e.PublishDate).HasColumnName("publish_date");
+            entity.Property(e => e.Frequency)
+                .HasColumnType("publishing_frequency")
+                .HasColumnName("frequency");
             entity.Property(e => e.SeriesId).HasColumnName("series_id");
 
             entity.HasOne(d => d.Series).WithMany(p => p.PublishingSchedules)
@@ -407,6 +420,14 @@ public partial class AppDbContext : DbContext
                 .HasColumnName("created_at");
             entity.Property(e => e.Description).HasColumnName("description");
             entity.Property(e => e.EditorId).HasColumnName("editor_id");
+            entity.Property(e => e.Status)
+                .HasColumnName("status")
+                .HasColumnType("series_status")
+                .HasDefaultValueSql("'draft'::series_status")
+                .IsRequired();
+            entity.Property(e => e.PublishingFrequency)
+                .HasColumnName("publishing_frequency")
+                .HasColumnType("publishing_frequency");
             entity.Property(e => e.Genre)
                 .HasMaxLength(100)
                 .HasColumnName("genre");
@@ -444,6 +465,10 @@ public partial class AppDbContext : DbContext
             entity.Property(e => e.AssistantId).HasColumnName("assistant_id");
             entity.Property(e => e.FileUrl).HasColumnName("file_url");
             entity.Property(e => e.Note).HasColumnName("note");
+            entity.Property(e => e.Status)
+                .HasColumnType("task_status")
+                .HasDefaultValueSql("'submitted'::task_status")
+                .HasColumnName("status");
             entity.Property(e => e.PreviewImageUrl).HasColumnName("preview_image_url");
             entity.Property(e => e.ReviewedAt).HasColumnName("reviewed_at");
             entity.Property(e => e.ReviewedBy).HasColumnName("reviewed_by");
@@ -499,6 +524,13 @@ public partial class AppDbContext : DbContext
                 .HasColumnType("jsonb")
                 .HasColumnName("region");
             entity.Property(e => e.StartedAt).HasColumnName("started_at");
+            entity.Property(e => e.Status)
+                .HasColumnType("task_status")
+                .HasDefaultValueSql("'todo'::task_status")
+                .HasColumnName("status");
+            entity.Property(e => e.TaskType)
+                .HasColumnType("task_type")
+                .HasColumnName("task_type");
             entity.Property(e => e.Title)
                 .HasMaxLength(255)
                 .HasColumnName("title");

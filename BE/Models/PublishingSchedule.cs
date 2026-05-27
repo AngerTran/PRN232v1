@@ -11,6 +11,8 @@ public partial class PublishingSchedule
 
     public DateOnly PublishDate { get; set; }
 
+    public string Frequency { get; set; } = null!;
+
     public int? IssueNumber { get; set; }
 
     public string? Notes { get; set; }

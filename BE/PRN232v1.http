@@ -72,6 +72,20 @@ Content-Type: application/json
   "code": "PASTE_AUTHORIZATION_CODE"
 }
 
+### II. PROFILE — GET /me
+GET {{host}}/api/profiles/me
+Authorization: Bearer {{token}}
+
+### II. PROFILE — PUT /update
+PUT {{host}}/api/profiles/update
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "fullName": "Ten moi",
+  "bio": "Mangaka"
+}
+
 ### II. PROFILE — GET / (Admin)
 GET {{host}}/api/profiles
 Authorization: Bearer {{token}}
@@ -101,3 +115,183 @@ Content-Type: application/json
 ### II. PROFILE — DELETE /{id} (Admin, soft-delete)
 DELETE {{host}}/api/profiles/00000000-0000-0000-0000-000000000000
 Authorization: Bearer {{token}}
+
+### IIb. NOTIFICATIONS — GET /
+GET {{host}}/api/notifications?unreadOnly=true
+Authorization: Bearer {{token}}
+
+### IIb. NOTIFICATIONS — PATCH /read-all
+PATCH {{host}}/api/notifications/read-all
+Authorization: Bearer {{token}}
+
+### III. SERIES — GET /catalog (Public)
+GET {{host}}/api/series/catalog?genre=action&page=1&limit=10
+
+### III. SERIES — GET / (Logged in)
+GET {{host}}/api/series
+Authorization: Bearer {{token}}
+
+### III. SERIES — GET /my-series (Mangaka)
+GET {{host}}/api/series/my-series
+Authorization: Bearer {{token}}
+
+### III. SERIES — POST / (Create)
+POST {{host}}/api/series
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "title": "Ten truyen",
+  "description": "Mo ta",
+  "genre": "action",
+  "publishingFrequency": "weekly"
+}
+
+### III. SERIES — PUT /{id}/status (Workflow)
+PUT {{host}}/api/series/00000000-0000-0000-0000-000000000000/status
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "status": "pending_review"
+}
+
+### III. SERIES — POST /{seriesId}/chapters
+POST {{host}}/api/series/00000000-0000-0000-0000-000000000000/chapters
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "chapterNumber": 1,
+  "title": "Chuong mo dau"
+}
+
+### III. SERIES — GET /{seriesId}/chapters
+GET {{host}}/api/series/00000000-0000-0000-0000-000000000000/chapters
+Authorization: Bearer {{token}}
+
+### III. SERIES — GET /{id}/stats
+GET {{host}}/api/series/00000000-0000-0000-0000-000000000000/stats
+Authorization: Bearer {{token}}
+
+### III. SERIES — POST /{id}/cover (multipart)
+POST {{host}}/api/series/00000000-0000-0000-0000-000000000000/cover
+Authorization: Bearer {{token}}
+Content-Type: multipart/form-data; boundary=----cover
+
+------cover
+Content-Disposition: form-data; name="file"; filename="cover.jpg"
+Content-Type: image/jpeg
+
+< ./cover.jpg
+------cover--
+
+### IIIb. CHAPTERS — GET /{id}
+GET {{host}}/api/chapters/00000000-0000-0000-0000-000000000000
+Authorization: Bearer {{token}}
+
+### IIIb. CHAPTERS — PUT /{id}/status
+PUT {{host}}/api/chapters/00000000-0000-0000-0000-000000000000/status
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "status": "in_progress"
+}
+
+### IV. KANBAN
+GET {{host}}/api/chapters/00000000-0000-0000-0000-000000000000/kanban
+Authorization: Bearer {{token}}
+
+### IV. TASKS — POST on page
+POST {{host}}/api/pages/00000000-0000-0000-0000-000000000000/tasks
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "taskType": "background",
+  "region": "{\"type\":\"polygon\",\"points\":[[10,10],[100,100]]}",
+  "title": "Ve nen",
+  "assignedTo": "00000000-0000-0000-0000-000000000000"
+}
+
+### IV. TASKS — PATCH status
+PATCH {{host}}/api/tasks/00000000-0000-0000-0000-000000000000/status
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "status": "in_progress"
+}
+
+### V. SUBMISSIONS — POST (multipart)
+POST {{host}}/api/tasks/00000000-0000-0000-0000-000000000000/submissions
+Authorization: Bearer {{token}}
+Content-Type: multipart/form-data; boundary=----sub
+
+------sub
+Content-Disposition: form-data; name="file"; filename="work.png"
+Content-Type: image/png
+
+< ./work.png
+------sub--
+
+### V. SUBMISSIONS — PATCH review
+PATCH {{host}}/api/submissions/00000000-0000-0000-0000-000000000000/review
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "approve": true,
+  "note": "Tot"
+}
+
+### V. ASSISTANT — earnings
+GET {{host}}/api/assistants/me/earnings?year=2026&month=5
+Authorization: Bearer {{token}}
+
+### VI. ANNOTATIONS — POST
+POST {{host}}/api/pages/00000000-0000-0000-0000-000000000000/annotations
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "annotationType": "dialogue",
+  "shape": "{\"x\":10,\"y\":20,\"w\":100,\"h\":50}",
+  "content": "Sua loi thoai"
+}
+
+### VII. BOARD — POST vote
+POST {{host}}/api/board/votes
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "seriesId": "00000000-0000-0000-0000-000000000000",
+  "decision": "approve",
+  "comment": "Cot truyen tot"
+}
+
+### VII. RANKINGS — POST
+POST {{host}}/api/rankings
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "seriesId": "00000000-0000-0000-0000-000000000000",
+  "issueNumber": 1,
+  "rankPosition": 5,
+  "voteCount": 1200,
+  "popularityScore": 88.5
+}
+
+### VIII. SCHEDULES — POST
+POST {{host}}/api/series/00000000-0000-0000-0000-000000000000/schedules
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "publishDate": "2026-06-01",
+  "frequency": "weekly",
+  "issueNumber": 10
+}

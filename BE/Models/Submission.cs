@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using PRN232v1.Common;
 
 namespace PRN232v1.Models;
 
@@ -18,6 +19,8 @@ public partial class Submission
     public string? PreviewImageUrl { get; set; }
 
     public string? Note { get; set; }
+
+    public string Status { get; set; } = TaskStatuses.Submitted;
 
     public Guid? ReviewedBy { get; set; }
 

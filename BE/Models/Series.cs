@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using PRN232v1.Common;
 
 namespace PRN232v1.Models;
 
@@ -20,6 +21,10 @@ public partial class Series
     public Guid AuthorId { get; set; }
 
     public Guid? EditorId { get; set; }
+
+    public string Status { get; set; } = SeriesStatuses.Draft;
+
+    public string? PublishingFrequency { get; set; }
 
     public DateTime? CreatedAt { get; set; }
 

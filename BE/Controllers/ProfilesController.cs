@@ -19,6 +19,38 @@ public class ProfilesController : ControllerBase
         _profileService = profileService;
     }
 
+    /// <summary>Profile của user đang đăng nhập.</summary>
+    [HttpGet("me")]
+    [ProducesResponseType(typeof(ProfileResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<ActionResult<ProfileResponse>> Me(CancellationToken cancellationToken)
+    {
+        if (!this.TryGetUserId(out var userId))
+        {
+            return Unauthorized();
+        }
+
+        var profile = await _profileService.GetDtoByIdAsync(userId, cancellationToken);
+        return profile is null ? NotFound() : Ok(profile);
+    }
+
+    /// <summary>Cập nhật profile của chính mình.</summary>
+    [HttpPut("update")]
+    [ProducesResponseType(typeof(ProfileResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<ActionResult<ProfileResponse>> UpdateSelf(
+        [FromBody] UpdateProfileRequest request,
+        CancellationToken cancellationToken)
+    {
+        if (!this.TryGetUserId(out var userId))
+        {
+            return Unauthorized();
+        }
+
+        var updated = await _profileService.UpdateByIdAsync(userId, userId, request, cancellationToken);
+        return updated is null ? NotFound() : Ok(updated);
+    }
+
     /// <summary>Danh sách profile — Admin.</summary>
     [HttpGet]
     [ProducesResponseType(typeof(IReadOnlyList<ProfileResponse>), StatusCodes.Status200OK)]

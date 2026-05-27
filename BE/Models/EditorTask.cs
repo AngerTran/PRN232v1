@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using PRN232v1.Common;
 
 namespace PRN232v1.Models;
 
@@ -17,7 +18,11 @@ public partial class EditorTask
 
     public string? Description { get; set; }
 
+    public string TaskType { get; set; } = null!;
+
     public string Region { get; set; } = null!;
+
+    public string Status { get; set; } = TaskStatuses.Todo;
 
     public int? Priority { get; set; }
 

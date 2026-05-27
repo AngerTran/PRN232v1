@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using PRN232v1.Common;
 
 namespace PRN232v1.Models;
 
@@ -14,6 +15,8 @@ public partial class Chapter
     public string? Title { get; set; }
 
     public string? ManuscriptUrl { get; set; }
+
+    public string Status { get; set; } = ChapterStatuses.Draft;
 
     public DateTime? Deadline { get; set; }
 

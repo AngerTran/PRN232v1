@@ -11,6 +11,8 @@ public partial class Annotation
 
     public Guid? CreatedBy { get; set; }
 
+    public string? AnnotationType { get; set; }
+
     public string Shape { get; set; } = null!;
 
     public string? Content { get; set; }
