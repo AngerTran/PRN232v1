@@ -52,13 +52,13 @@ public partial class AppDbContext : DbContext
             .HasPostgresEnum("auth", "oauth_registration_type", new[] { "dynamic", "manual" })
             .HasPostgresEnum("auth", "oauth_response_type", new[] { "code" })
             .HasPostgresEnum("auth", "one_time_token_type", new[] { "confirmation_token", "reauthentication_token", "recovery_token", "email_change_token_new", "email_change_token_current", "phone_change_token" })
-            .HasPostgresEnum("chapter_status", new[] { "draft", "in_progress", "reviewing", "completed", "published" })
+            .HasPostgresEnum<ChapterStatus>(name: "chapter_status")
             .HasPostgresEnum("notification_type", new[] { "task_assigned", "submission_received", "submission_approved", "submission_rejected", "annotation_added", "deadline_warning", "ranking_warning", "board_vote" })
-            .HasPostgresEnum("page_status", new[] { "draft", "assigned", "reviewing", "approved", "published" })
-            .HasPostgresEnum("publishing_frequency", new[] { "weekly", "monthly" })
+            .HasPostgresEnum<PageStatus>(name: "page_status")
+            .HasPostgresEnum<PublishingFrequency>(name: "publishing_frequency")
             .HasPostgresEnum("realtime", "action", new[] { "INSERT", "UPDATE", "DELETE", "TRUNCATE", "ERROR" })
             .HasPostgresEnum("realtime", "equality_op", new[] { "eq", "neq", "lt", "lte", "gt", "gte", "in" })
-            .HasPostgresEnum("series_status", new[] { "draft", "pending_review", "approved", "publishing", "hiatus", "cancelled", "completed" })
+            .HasPostgresEnum<SeriesStatus>(name: "series_status")
             .HasPostgresEnum("storage", "buckettype", new[] { "STANDARD", "ANALYTICS", "VECTOR" })
             .HasPostgresEnum("task_status", new[] { "todo", "in_progress", "submitted", "approved", "rejected" })
             .HasPostgresEnum("task_type", new[] { "background", "shading", "cleanup", "speech_bubble", "effects", "lineart", "other" })
@@ -296,6 +296,11 @@ public partial class AppDbContext : DbContext
             entity.Property(e => e.Height).HasColumnName("height");
             entity.Property(e => e.ImageUrl).HasColumnName("image_url");
             entity.Property(e => e.PageNumber).HasColumnName("page_number");
+            entity.Property(e => e.Status)
+                .HasColumnName("status")
+                .HasColumnType("page_status")
+                .HasDefaultValueSql("'draft'::page_status")
+                .IsRequired();
             entity.Property(e => e.ThumbnailUrl).HasColumnName("thumbnail_url");
             entity.Property(e => e.UpdatedAt)
                 .HasDefaultValueSql("now()")

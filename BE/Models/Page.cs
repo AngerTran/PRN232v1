@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using PRN232v1.Common;
 
 namespace PRN232v1.Models;
 
@@ -14,6 +15,8 @@ public partial class Page
     public string? ImageUrl { get; set; }
 
     public string? ThumbnailUrl { get; set; }
+
+    public PageStatus Status { get; set; } = PageStatus.Draft;
 
     public int? Width { get; set; }
 

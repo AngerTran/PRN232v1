@@ -41,7 +41,7 @@ public class SeriesService
     limit = limit is < 1 or > 100 ? 10 : limit;
 
     var query = BuildSeriesQuery()
-      .Where(s => SeriesStatuses.PublicVisible.Contains(s.Status));
+      .Where(s => SeriesStatuses.PublicVisibleValues.Contains(s.Status));
 
     if (!string.IsNullOrWhiteSpace(genre))
     {
@@ -76,7 +76,7 @@ public class SeriesService
     }
 
     return await query
-      .Where(s => SeriesStatuses.PublicVisible.Contains(s.Status) || s.AuthorId == callerId)
+      .Where(s => SeriesStatuses.PublicVisibleValues.Contains(s.Status) || s.AuthorId == callerId)
       .OrderByDescending(s => s.UpdatedAt)
       .Select(MapProjection())
       .ToListAsync(cancellationToken);
@@ -139,7 +139,7 @@ public class SeriesService
     }
 
     if (request.EditorId is not null
-        && !await ProfileRepository.AnyAsync(p => p.Id == request.EditorId && p.Role == ProfileRoles.Editor, cancellationToken))
+        && !await ProfileRepository.AnyAsync(p => p.Id == request.EditorId && p.Role == ProfileRole.Editor, cancellationToken))
     {
       throw new ArgumentException("EditorId must reference a profile with role 'editor'.");
     }
@@ -155,8 +155,8 @@ public class SeriesService
       CoverImageUrl = request.CoverImageUrl,
       AuthorId = callerId,
       EditorId = request.EditorId,
-      Status = SeriesStatuses.Draft,
-      PublishingFrequency = request.PublishingFrequency ?? PublishingFrequencies.Weekly,
+      Status = SeriesStatus.Draft,
+      PublishingFrequency = PublishingFrequencies.ParseOrDefault(request.PublishingFrequency),
       CreatedAt = now,
       UpdatedAt = now
     };
@@ -196,7 +196,7 @@ public class SeriesService
     }
 
     if (request.EditorId is not null
-        && !await ProfileRepository.AnyAsync(p => p.Id == request.EditorId && p.Role == ProfileRoles.Editor, cancellationToken))
+        && !await ProfileRepository.AnyAsync(p => p.Id == request.EditorId && p.Role == ProfileRole.Editor, cancellationToken))
     {
       throw new ArgumentException("EditorId must reference a profile with role 'editor'.");
     }
@@ -228,7 +228,7 @@ public class SeriesService
 
     if (request.PublishingFrequency is not null)
     {
-      series.PublishingFrequency = request.PublishingFrequency;
+      series.PublishingFrequency = PublishingFrequencies.ParseOrDefault(request.PublishingFrequency);
     }
 
     if (request.EditorId is not null)
@@ -253,7 +253,7 @@ public class SeriesService
     }
 
     var isOwner = series.AuthorId == callerId;
-    if (!IsAdmin(caller.Role) && !(isOwner && series.Status == SeriesStatuses.Draft))
+    if (!IsAdmin(caller.Role) && !(isOwner && series.Status == SeriesStatus.Draft))
     {
       throw new SeriesForbiddenException("Only admin can delete any series; mangaka can delete own series in draft status.");
     }
@@ -281,10 +281,10 @@ public class SeriesService
       return null;
     }
 
-    var newStatus = request.Status.Trim();
+    var newStatus = SeriesStatuses.ParseOrThrow(request.Status);
     if (!CanChangeStatus(caller, series, newStatus))
     {
-      throw new SeriesForbiddenException($"Role '{caller.Role}' cannot set status to '{newStatus}' for this series.");
+      throw new SeriesForbiddenException($"Role '{caller.Role}' cannot set status to '{SeriesStatuses.ToDbValue(newStatus)}' for this series.");
     }
 
     series.Status = newStatus;
@@ -312,7 +312,7 @@ public class SeriesService
       .Select(r => new SeriesRankingItemResponse(
         r.SeriesId,
         r.Series.Title,
-        r.Series.Status,
+        SeriesStatuses.ToDbValue(r.Series.Status),
         r.IssueNumber,
         r.RankPosition,
         r.VoteCount,
@@ -355,7 +355,7 @@ public class SeriesService
       .Select(r => new SeriesRankingItemResponse(
         r.SeriesId,
         series.Title,
-        series.Status,
+        SeriesStatuses.ToDbValue(series.Status),
         r.IssueNumber,
         r.RankPosition,
         r.VoteCount,
@@ -374,12 +374,12 @@ public class SeriesService
 
     var inDangerZone = latestRanking is not null
       && latestRanking.RankPosition >= DangerRankPositionThreshold
-      && series.Status == SeriesStatuses.Publishing;
+      && series.Status == SeriesStatus.Publishing;
 
     return new SeriesStatsResponse(
       seriesId,
       series.Title,
-      series.Status,
+      SeriesStatuses.ToDbValue(series.Status),
       chapterCount,
       pageCount,
       latestRanking,
@@ -501,6 +501,47 @@ public class SeriesService
     return MapChapterToDto(chapter);
   }
 
+  public async Task<ChapterResponse?> UploadChapterManuscriptAsync(
+    Guid callerId,
+    Guid chapterId,
+    IFormFile file,
+    CancellationToken cancellationToken = default)
+  {
+    var caller = await RequireCallerAsync(callerId, cancellationToken);
+    var chapter = await _unitOfWork.Context.Chapters
+      .Include(c => c.Series)
+      .FirstOrDefaultAsync(c => c.Id == chapterId, cancellationToken);
+
+    if (chapter is null)
+    {
+      return null;
+    }
+
+    if (!IsAdmin(caller.Role) && !(IsMangaka(caller.Role) && chapter.Series.AuthorId == callerId))
+    {
+      throw new SeriesForbiddenException("Only the series author (mangaka) or admin can upload a chapter manuscript.");
+    }
+
+    var extension = Path.GetExtension(file.FileName);
+    if (string.IsNullOrWhiteSpace(extension))
+    {
+      extension = ".bin";
+    }
+
+    var objectPath = $"chapters/{chapterId}/manuscript{extension.ToLowerInvariant()}";
+    chapter.ManuscriptUrl = await _storage.UploadAsync(
+      _supabaseOptions.ManuscriptsBucket,
+      objectPath,
+      file,
+      cancellationToken);
+    chapter.UpdatedAt = DateTime.UtcNow;
+
+    ChapterRepository.Update(chapter);
+    await _unitOfWork.SaveChangesAsync(cancellationToken);
+
+    return MapChapterToDto(chapter);
+  }
+
   public async Task<ChapterResponse?> UpdateChapterStatusAsync(
     Guid callerId,
     Guid chapterId,
@@ -522,10 +563,10 @@ public class SeriesService
       return null;
     }
 
-    var newStatus = request.Status.Trim();
+    var newStatus = ChapterStatuses.ParseOrThrow(request.Status);
     if (!CanChangeChapterStatus(caller, chapter.Series, newStatus))
     {
-      throw new SeriesForbiddenException($"Role '{caller.Role}' cannot set chapter status to '{newStatus}'.");
+      throw new SeriesForbiddenException($"Role '{caller.Role}' cannot set chapter status to '{ChapterStatuses.ToDbValue(newStatus)}'.");
     }
 
     chapter.Status = newStatus;
@@ -534,6 +575,34 @@ public class SeriesService
     await _unitOfWork.SaveChangesAsync(cancellationToken);
 
     return MapChapterToDto(chapter);
+  }
+
+  public async Task<bool> DeleteChapterAsync(
+    Guid callerId,
+    Guid chapterId,
+    CancellationToken cancellationToken = default)
+  {
+    var caller = await RequireCallerAsync(callerId, cancellationToken);
+    var chapter = await _unitOfWork.Context.Chapters
+      .Include(c => c.Series)
+      .FirstOrDefaultAsync(c => c.Id == chapterId, cancellationToken);
+
+    if (chapter is null)
+    {
+      return false;
+    }
+
+    var isAuthorDraft = IsMangaka(caller.Role)
+      && chapter.Series.AuthorId == callerId
+      && chapter.Status == ChapterStatus.Draft;
+    if (!IsAdmin(caller.Role) && !isAuthorDraft)
+    {
+      throw new SeriesForbiddenException("Only admin can delete any chapter; mangaka can delete own draft chapters.");
+    }
+
+    ChapterRepository.Remove(chapter);
+    await _unitOfWork.SaveChangesAsync(cancellationToken);
+    return true;
   }
 
   public async Task<IReadOnlyList<ChapterResponse>?> ListChaptersAsync(
@@ -595,7 +664,7 @@ public class SeriesService
       ChapterNumber = request.ChapterNumber,
       Title = request.Title?.Trim(),
       ManuscriptUrl = request.ManuscriptUrl,
-      Status = ChapterStatuses.Draft,
+      Status = ChapterStatus.Draft,
       Deadline = request.Deadline,
       ReleaseDate = request.ReleaseDate,
       CreatedAt = now,
@@ -631,7 +700,7 @@ public class SeriesService
       .ToHashSet();
 
     var query = BuildSeriesQuery()
-      .Where(s => s.Status == SeriesStatuses.Publishing && atRiskSeriesIds.Contains(s.Id));
+      .Where(s => s.Status == SeriesStatus.Publishing && atRiskSeriesIds.Contains(s.Id));
 
     if (IsMangaka(caller.Role) && !IsStaff(caller.Role))
     {
@@ -662,8 +731,8 @@ public class SeriesService
       s.Author.FullName,
       s.EditorId,
       s.Editor != null ? s.Editor.FullName : null,
-      s.Status,
-      s.PublishingFrequency,
+      SeriesStatuses.ToDbValue(s.Status),
+      s.PublishingFrequency == null ? null : PublishingFrequencies.ToDbValue(s.PublishingFrequency.Value),
       s.CreatedAt,
       s.UpdatedAt);
 
@@ -674,7 +743,7 @@ public class SeriesService
       c.ChapterNumber,
       c.Title,
       c.ManuscriptUrl,
-      c.Status,
+      ChapterStatuses.ToDbValue(c.Status),
       c.Deadline,
       c.ReleaseDate,
       c.CreatedAt,
@@ -692,8 +761,8 @@ public class SeriesService
       s.Author.FullName,
       s.EditorId,
       s.Editor?.FullName,
-      s.Status,
-      s.PublishingFrequency,
+      SeriesStatuses.ToDbValue(s.Status),
+      s.PublishingFrequency == null ? null : PublishingFrequencies.ToDbValue(s.PublishingFrequency.Value),
       s.CreatedAt,
       s.UpdatedAt);
 
@@ -701,7 +770,7 @@ public class SeriesService
     IsStaff(caller.Role)
     || series.AuthorId == caller.Id
     || series.EditorId == caller.Id
-    || SeriesStatuses.PublicVisible.Contains(series.Status);
+    || SeriesStatuses.PublicVisibleValues.Contains(series.Status);
 
   private static bool CanModifySeries(Profile caller, SeriesEntity series) =>
     IsAdmin(caller.Role)
@@ -710,7 +779,7 @@ public class SeriesService
 
   private static bool CanModifyChapter(Profile caller, SeriesEntity series) => CanModifySeries(caller, series);
 
-  private static bool CanChangeChapterStatus(Profile caller, SeriesEntity series, string newStatus)
+  private static bool CanChangeChapterStatus(Profile caller, SeriesEntity series, ChapterStatus newStatus)
   {
     if (IsAdmin(caller.Role) || IsBoard(caller.Role))
     {
@@ -719,23 +788,23 @@ public class SeriesService
 
     if (IsEditor(caller.Role) && (series.EditorId == caller.Id || series.EditorId is null))
     {
-      return newStatus is ChapterStatuses.Reviewing
-        or ChapterStatuses.Completed
-        or ChapterStatuses.Published
-        or ChapterStatuses.InProgress;
+      return newStatus is ChapterStatus.Reviewing
+        or ChapterStatus.Completed
+        or ChapterStatus.Published
+        or ChapterStatus.InProgress;
     }
 
     if (series.AuthorId == caller.Id && IsMangaka(caller.Role))
     {
-      return newStatus is ChapterStatuses.Draft
-        or ChapterStatuses.InProgress
-        or ChapterStatuses.Reviewing;
+      return newStatus is ChapterStatus.Draft
+        or ChapterStatus.InProgress
+        or ChapterStatus.Reviewing;
     }
 
     return false;
   }
 
-  private static bool CanChangeStatus(Profile caller, SeriesEntity series, string newStatus)
+  private static bool CanChangeStatus(Profile caller, SeriesEntity series, SeriesStatus newStatus)
   {
     if (IsAdmin(caller.Role) || IsBoard(caller.Role))
     {
@@ -744,18 +813,18 @@ public class SeriesService
 
     if (IsEditor(caller.Role) && (series.EditorId == caller.Id || series.EditorId is null))
     {
-      return newStatus is SeriesStatuses.Approved
-        or SeriesStatuses.Publishing
-        or SeriesStatuses.Completed
-        or SeriesStatuses.Hiatus
-        or SeriesStatuses.PendingReview;
+      return newStatus is SeriesStatus.Approved
+        or SeriesStatus.Publishing
+        or SeriesStatus.Completed
+        or SeriesStatus.Hiatus
+        or SeriesStatus.PendingReview;
     }
 
     if (series.AuthorId == caller.Id && IsMangaka(caller.Role))
     {
-      return newStatus is SeriesStatuses.Draft
-        or SeriesStatuses.PendingReview
-        or SeriesStatuses.Hiatus;
+      return newStatus is SeriesStatus.Draft
+        or SeriesStatus.PendingReview
+        or SeriesStatus.Hiatus;
     }
 
     return false;
@@ -768,24 +837,24 @@ public class SeriesService
   private async Task EnsureRoleAsync(Guid callerId, string requiredRole, CancellationToken cancellationToken)
   {
     var caller = await RequireCallerAsync(callerId, cancellationToken);
-    if (caller.Role != requiredRole)
+    if (!ProfileRoles.TryParse(requiredRole, out var role) || caller.Role != role)
     {
       throw new SeriesForbiddenException($"Requires role '{requiredRole}'.");
     }
   }
 
-  private static bool IsAdmin(string role) =>
-    string.Equals(role, ProfileRoles.Admin, StringComparison.OrdinalIgnoreCase);
+  private static bool IsAdmin(ProfileRole role) =>
+    role == ProfileRole.Admin;
 
-  private static bool IsMangaka(string role) =>
-    string.Equals(role, ProfileRoles.Mangaka, StringComparison.OrdinalIgnoreCase);
+  private static bool IsMangaka(ProfileRole role) =>
+    role == ProfileRole.Mangaka;
 
-  private static bool IsEditor(string role) =>
-    string.Equals(role, ProfileRoles.Editor, StringComparison.OrdinalIgnoreCase);
+  private static bool IsEditor(ProfileRole role) =>
+    role == ProfileRole.Editor;
 
-  private static bool IsBoard(string role) =>
-    string.Equals(role, ProfileRoles.Board, StringComparison.OrdinalIgnoreCase);
+  private static bool IsBoard(ProfileRole role) =>
+    role == ProfileRole.Board;
 
-  private static bool IsStaff(string role) =>
+  private static bool IsStaff(ProfileRole role) =>
     IsAdmin(role) || IsEditor(role) || IsBoard(role);
 }

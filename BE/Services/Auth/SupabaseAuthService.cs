@@ -43,9 +43,10 @@ public class SupabaseAuthService
     {
         EnsureSupabaseConfigured();
 
+        var email = request.Email.Trim();
         var payload = new
         {
-            email = request.Email,
+            email,
             password = request.Password,
             data = new { full_name = request.FullName, avatar_url = (string?)null },
             options = BuildEmailOptions()
@@ -54,10 +55,10 @@ public class SupabaseAuthService
         using var response = await PostAuthAsync("signup", payload, cancellationToken);
         var signup = await ReadSignupOrThrowAsync(response, cancellationToken);
         await EnsureProfileAsync(signup.User, request.FullName, syncEmailConfirmed: false, cancellationToken);
-        await TrySendSignupConfirmationEmailAsync(request.Email, cancellationToken);
+        await TrySendSignupConfirmationEmailAsync(email, cancellationToken);
         _logger.LogInformation(
             "Register completed for {Email}. EmailConfirmed: {EmailConfirmed}",
-            request.Email,
+            email,
             signup.User?.EmailConfirmedAt is not null || signup.User?.ConfirmedAt is not null);
 
         if (!string.IsNullOrWhiteSpace(signup.AccessToken))
@@ -92,7 +93,7 @@ public class SupabaseAuthService
     {
         EnsureSupabaseConfigured();
 
-        var payload = new { email = request.Email, password = request.Password };
+        var payload = new { email = request.Email.Trim(), password = request.Password };
         using var response = await PostAuthAsync("token?grant_type=password", payload, cancellationToken);
         var session = await ReadSessionOrThrowAsync(response, cancellationToken);
         await EnsureProfileAsync(session.User, null, cancellationToken: cancellationToken);
@@ -254,7 +255,7 @@ public class SupabaseAuthService
     {
         EnsureSupabaseConfigured();
 
-        using var response = await SendSignupConfirmationEmailAsync(email, cancellationToken);
+        using var response = await SendSignupConfirmationEmailAsync(email.Trim(), cancellationToken);
         if (response.IsSuccessStatusCode)
         {
             return;
@@ -323,6 +324,7 @@ public class SupabaseAuthService
         {
             var message = TryParseSupabaseError(body) ?? "Authentication failed.";
             var status = response.StatusCode == HttpStatusCode.Unauthorized
+                || string.Equals(message, "Invalid login credentials", StringComparison.OrdinalIgnoreCase)
                 ? HttpStatusCode.Unauthorized
                 : HttpStatusCode.BadRequest;
             throw new AuthServiceException(message, status);
@@ -377,6 +379,7 @@ public class SupabaseAuthService
         {
             var message = TryParseSupabaseError(body) ?? "Authentication failed.";
             var status = response.StatusCode == HttpStatusCode.Unauthorized
+                || string.Equals(message, "Invalid login credentials", StringComparison.OrdinalIgnoreCase)
                 ? HttpStatusCode.Unauthorized
                 : HttpStatusCode.BadRequest;
             throw new AuthServiceException(message, status);

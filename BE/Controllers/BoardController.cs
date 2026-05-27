@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Mvc;
 using PRN232v1.Common;
 using PRN232v1.Dtos.Board;
 using PRN232v1.Services.Board;
+using Swashbuckle.AspNetCore.Annotations;
 
 namespace PRN232v1.Controllers;
 
@@ -20,6 +21,7 @@ public class BoardController : ControllerBase
     }
 
     [HttpPost("votes")]
+    [SwaggerOperation(Summary = "Cast board vote", Description = "Creates or updates a board vote for a series decision. Requires board or admin role.")]
     [ProducesResponseType(typeof(BoardVoteResponse), StatusCodes.Status200OK)]
     public async Task<ActionResult<BoardVoteResponse>> Vote(
         [FromBody] CreateBoardVoteRequest request,
@@ -34,6 +36,7 @@ public class BoardController : ControllerBase
     }
 
     [HttpGet("votes")]
+    [SwaggerOperation(Summary = "List board votes", Description = "Lists board votes, optionally filtered by series ID.")]
     [ProducesResponseType(typeof(IReadOnlyList<BoardVoteResponse>), StatusCodes.Status200OK)]
     public async Task<ActionResult<IReadOnlyList<BoardVoteResponse>>> ListVotes(
         [FromQuery] Guid? seriesId,
@@ -48,6 +51,7 @@ public class BoardController : ControllerBase
     }
 
     [HttpGet("pending-series")]
+    [SwaggerOperation(Summary = "List pending series", Description = "Lists series waiting for board review or decision.")]
     [ProducesResponseType(typeof(IReadOnlyList<PendingSeriesItemResponse>), StatusCodes.Status200OK)]
     public async Task<ActionResult<IReadOnlyList<PendingSeriesItemResponse>>> PendingSeries(
         CancellationToken cancellationToken)
@@ -61,6 +65,7 @@ public class BoardController : ControllerBase
     }
 
     [HttpGet("leaderboard")]
+    [SwaggerOperation(Summary = "Get leaderboard", Description = "Returns leaderboard metrics for series performance. The metric query controls which ranking signal is used.")]
     [ProducesResponseType(typeof(IReadOnlyList<LeaderboardItemResponse>), StatusCodes.Status200OK)]
     public async Task<ActionResult<IReadOnlyList<LeaderboardItemResponse>>> Leaderboard(
         [FromQuery] string? metric,

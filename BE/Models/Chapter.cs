@@ -16,7 +16,7 @@ public partial class Chapter
 
     public string? ManuscriptUrl { get; set; }
 
-    public string Status { get; set; } = ChapterStatuses.Draft;
+    public ChapterStatus Status { get; set; } = ChapterStatus.Draft;
 
     public DateTime? Deadline { get; set; }
 

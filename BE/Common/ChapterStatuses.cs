@@ -1,4 +1,24 @@
+using NpgsqlTypes;
+
 namespace PRN232v1.Common;
+
+public enum ChapterStatus
+{
+    [PgName("draft")]
+    Draft,
+
+    [PgName("in_progress")]
+    InProgress,
+
+    [PgName("reviewing")]
+    Reviewing,
+
+    [PgName("completed")]
+    Completed,
+
+    [PgName("published")]
+    Published
+}
 
 public static class ChapterStatuses
 {
@@ -19,4 +39,25 @@ public static class ChapterStatuses
 
     public static bool IsValid(string? status) =>
         !string.IsNullOrWhiteSpace(status) && All.Contains(status.Trim());
+
+    public static ChapterStatus ParseOrThrow(string status) =>
+        status.Trim().ToLowerInvariant() switch
+        {
+            Draft => ChapterStatus.Draft,
+            InProgress => ChapterStatus.InProgress,
+            Reviewing => ChapterStatus.Reviewing,
+            Completed => ChapterStatus.Completed,
+            Published => ChapterStatus.Published,
+            _ => throw new ArgumentException($"Invalid chapter status '{status}'.")
+        };
+
+    public static string ToDbValue(ChapterStatus status) => status switch
+    {
+        ChapterStatus.Draft => Draft,
+        ChapterStatus.InProgress => InProgress,
+        ChapterStatus.Reviewing => Reviewing,
+        ChapterStatus.Completed => Completed,
+        ChapterStatus.Published => Published,
+        _ => Draft
+    };
 }

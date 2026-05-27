@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Mvc;
 using PRN232v1.Common;
 using PRN232v1.Dtos.Submissions;
 using PRN232v1.Services.Submissions;
+using Swashbuckle.AspNetCore.Annotations;
 
 namespace PRN232v1.Controllers;
 
@@ -19,6 +20,7 @@ public class SubmissionsController : ControllerBase
     }
 
     [HttpGet("/api/tasks/{taskId:guid}/submissions")]
+    [SwaggerOperation(Summary = "List task submissions", Description = "Lists submissions for a task. Allowed for the assigned assistant, admin, or users who can manage the related page.")]
     [ProducesResponseType(typeof(IReadOnlyList<SubmissionResponse>), StatusCodes.Status200OK)]
     public async Task<ActionResult<IReadOnlyList<SubmissionResponse>>> ListByTask(
         Guid taskId,
@@ -34,6 +36,7 @@ public class SubmissionsController : ControllerBase
 
     [HttpPost("/api/tasks/{taskId:guid}/submissions")]
     [Consumes("multipart/form-data")]
+    [SwaggerOperation(Summary = "Submit task work", Description = "Uploads a submission file and optional preview/note for an open task. Requires assistant role and assignment to the task.")]
     [ProducesResponseType(typeof(SubmissionResponse), StatusCodes.Status201Created)]
     public async Task<ActionResult<SubmissionResponse>> Create(
         Guid taskId,
@@ -57,6 +60,7 @@ public class SubmissionsController : ControllerBase
     }
 
     [HttpPatch("/api/submissions/{id:guid}/review")]
+    [SwaggerOperation(Summary = "Review submission", Description = "Reviews a submission and updates its review state. Requires mangaka, assigned editor, or admin permission on the related page.")]
     [ProducesResponseType(typeof(SubmissionResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<ActionResult<SubmissionResponse>> Review(
@@ -74,6 +78,7 @@ public class SubmissionsController : ControllerBase
     }
 
     [HttpGet("/api/assistants/me/earnings")]
+    [SwaggerOperation(Summary = "Get my assistant earnings", Description = "Calculates earnings for the authenticated assistant, optionally filtered by year and month.")]
     [ProducesResponseType(typeof(AssistantEarningsResponse), StatusCodes.Status200OK)]
     public async Task<ActionResult<AssistantEarningsResponse>> Earnings(
         [FromQuery] int? year,

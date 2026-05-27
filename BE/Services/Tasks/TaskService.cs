@@ -127,7 +127,7 @@ public class TaskService
         if (request.AssignedTo is not null)
         {
             var assignee = await ProfileRepository.GetByIdAsync(request.AssignedTo.Value, cancellationToken: cancellationToken);
-            if (assignee is null || assignee.Role != ProfileRoles.Assistant)
+            if (assignee is null || assignee.Role != ProfileRole.Assistant)
             {
                 throw new ArgumentException("AssignedTo must reference an active assistant profile.");
             }
@@ -181,7 +181,7 @@ public class TaskService
         if (request.AssignedTo is not null)
         {
             var assignee = await ProfileRepository.GetByIdAsync(request.AssignedTo.Value, cancellationToken: cancellationToken);
-            if (assignee is null || assignee.Role != ProfileRoles.Assistant)
+            if (assignee is null || assignee.Role != ProfileRole.Assistant)
             {
                 throw new ArgumentException("AssignedTo must reference an assistant profile.");
             }

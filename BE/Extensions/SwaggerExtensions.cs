@@ -9,6 +9,8 @@ public static class SwaggerExtensions
         services.AddEndpointsApiExplorer();
         services.AddSwaggerGen(options =>
         {
+            options.EnableAnnotations();
+
             options.SwaggerDoc("v1", new OpenApiInfo
             {
                 Title = "PRN232 API",

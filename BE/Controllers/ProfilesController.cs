@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Mvc;
 using PRN232v1.Common;
 using PRN232v1.Dtos.Profiles;
 using PRN232v1.Services.Profiles;
+using Swashbuckle.AspNetCore.Annotations;
 
 namespace PRN232v1.Controllers;
 
@@ -21,6 +22,7 @@ public class ProfilesController : ControllerBase
 
     /// <summary>Profile của user đang đăng nhập.</summary>
     [HttpGet("me")]
+    [SwaggerOperation(Summary = "Get my profile", Description = "Returns the local profile for the authenticated user.")]
     [ProducesResponseType(typeof(ProfileResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<ActionResult<ProfileResponse>> Me(CancellationToken cancellationToken)
@@ -36,6 +38,7 @@ public class ProfilesController : ControllerBase
 
     /// <summary>Cập nhật profile của chính mình.</summary>
     [HttpPut("update")]
+    [SwaggerOperation(Summary = "Update my profile", Description = "Updates the authenticated user's own profile fields.")]
     [ProducesResponseType(typeof(ProfileResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<ActionResult<ProfileResponse>> UpdateSelf(
@@ -53,6 +56,7 @@ public class ProfilesController : ControllerBase
 
     /// <summary>Danh sách profile — Admin.</summary>
     [HttpGet]
+    [SwaggerOperation(Summary = "List all profiles", Description = "Returns all local profiles. Requires admin role.")]
     [ProducesResponseType(typeof(IReadOnlyList<ProfileResponse>), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
     public async Task<ActionResult<IReadOnlyList<ProfileResponse>>> List(CancellationToken cancellationToken)
@@ -68,6 +72,7 @@ public class ProfilesController : ControllerBase
 
     /// <summary>Danh sách assistant — Mangaka.</summary>
     [HttpGet("assistants")]
+    [SwaggerOperation(Summary = "List assistants", Description = "Returns active assistant profiles. Requires mangaka role.")]
     [ProducesResponseType(typeof(IReadOnlyList<ProfileResponse>), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
     public async Task<ActionResult<IReadOnlyList<ProfileResponse>>> ListAssistants(CancellationToken cancellationToken)
@@ -87,6 +92,7 @@ public class ProfilesController : ControllerBase
 
     /// <summary>Danh sách editor — Admin.</summary>
     [HttpGet("editors")]
+    [SwaggerOperation(Summary = "List editors", Description = "Returns active editor profiles. Requires admin role.")]
     [ProducesResponseType(typeof(IReadOnlyList<ProfileResponse>), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
     public async Task<ActionResult<IReadOnlyList<ProfileResponse>>> ListEditors(CancellationToken cancellationToken)
@@ -106,6 +112,7 @@ public class ProfilesController : ControllerBase
 
     /// <summary>Chi tiết profile — mọi user đã đăng nhập.</summary>
     [HttpGet("{id:guid}")]
+    [SwaggerOperation(Summary = "Get profile by ID", Description = "Returns a profile by ID for an authenticated user.")]
     [ProducesResponseType(typeof(ProfileResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<ActionResult<ProfileResponse>> GetById(Guid id, CancellationToken cancellationToken)
@@ -121,6 +128,7 @@ public class ProfilesController : ControllerBase
 
     /// <summary>Cập nhật profile — Owner hoặc Admin.</summary>
     [HttpPut("{id:guid}")]
+    [SwaggerOperation(Summary = "Update profile by ID", Description = "Updates a profile. The owner can update their own profile; admin can update any profile and change role.")]
     [ProducesResponseType(typeof(ProfileResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
@@ -140,6 +148,7 @@ public class ProfilesController : ControllerBase
 
     /// <summary>Vô hiệu hóa profile — Admin.</summary>
     [HttpDelete("{id:guid}")]
+    [SwaggerOperation(Summary = "Deactivate profile", Description = "Marks a profile inactive instead of physically deleting it. Requires admin role.")]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]

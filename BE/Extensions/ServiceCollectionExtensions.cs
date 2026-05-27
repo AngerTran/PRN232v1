@@ -7,6 +7,7 @@ using PRN232v1.Services.Annotations;
 using PRN232v1.Services.Auth;
 using PRN232v1.Services.Board;
 using PRN232v1.Services.Notifications;
+using PRN232v1.Services.Pages;
 using PRN232v1.Services.Profiles;
 using PRN232v1.Services.Rankings;
 using PRN232v1.Services.Schedules;
@@ -25,6 +26,7 @@ public static class ServiceCollectionExtensions
         services.AddScoped<UnitOfWork>();
         services.AddScoped<ProfileService>();
         services.AddScoped<NotificationService>();
+        services.AddScoped<PageService>();
         services.AddScoped<PageAccessService>();
         services.AddScoped<TaskService>();
         services.AddScoped<SubmissionService>();
@@ -42,9 +44,9 @@ public static class ServiceCollectionExtensions
     {
         services.Configure<SupabaseOptions>(configuration.GetSection(SupabaseOptions.SectionName));
         services.Configure<GoogleAuthOptions>(configuration.GetSection(GoogleAuthOptions.SectionName));
+        services.Configure<CloudinaryOptions>(configuration.GetSection(CloudinaryOptions.SectionName));
 
         var supabase = configuration.GetSection(SupabaseOptions.SectionName).Get<SupabaseOptions>() ?? new SupabaseOptions();
-        var jwtSecret = supabase.JwtSecret;
         var authority = string.IsNullOrWhiteSpace(supabase.Url)
             ? null
             : $"{supabase.Url.TrimEnd('/')}/auth/v1";
@@ -55,22 +57,6 @@ public static class ServiceCollectionExtensions
                 options.RequireHttpsMetadata = true;
                 options.SaveToken = true;
                 options.MapInboundClaims = false;
-
-                if (!string.IsNullOrWhiteSpace(jwtSecret))
-                {
-                    options.TokenValidationParameters = new TokenValidationParameters
-                    {
-                        ValidateIssuer = true,
-                        ValidIssuer = authority,
-                        ValidateAudience = true,
-                        ValidAudience = "authenticated",
-                        ValidateLifetime = true,
-                        IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtSecret)),
-                        NameClaimType = "sub",
-                        RoleClaimType = "role"
-                    };
-                    return;
-                }
 
                 if (!string.IsNullOrWhiteSpace(authority))
                 {
@@ -83,6 +69,22 @@ public static class ServiceCollectionExtensions
                         ValidateAudience = true,
                         ValidAudience = "authenticated",
                         ValidateLifetime = true,
+                        NameClaimType = "sub",
+                        RoleClaimType = "role"
+                    };
+                    return;
+                }
+
+                if (!string.IsNullOrWhiteSpace(supabase.JwtSecret))
+                {
+                    options.TokenValidationParameters = new TokenValidationParameters
+                    {
+                        ValidateIssuer = true,
+                        ValidIssuer = authority,
+                        ValidateAudience = true,
+                        ValidAudience = "authenticated",
+                        ValidateLifetime = true,
+                        IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(supabase.JwtSecret)),
                         NameClaimType = "sub",
                         RoleClaimType = "role"
                     };

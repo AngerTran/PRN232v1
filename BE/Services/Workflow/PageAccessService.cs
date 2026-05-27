@@ -79,21 +79,21 @@ public class PageAccessService
     public bool CanAssignTasks(Profile caller, PageContext ctx) =>
         CanManageStudio(caller, ctx);
 
-    public static bool IsAdmin(string role) =>
-        string.Equals(role, ProfileRoles.Admin, StringComparison.OrdinalIgnoreCase);
+    public static bool IsAdmin(ProfileRole role) =>
+        role == ProfileRole.Admin;
 
-    public static bool IsMangaka(string role) =>
-        string.Equals(role, ProfileRoles.Mangaka, StringComparison.OrdinalIgnoreCase);
+    public static bool IsMangaka(ProfileRole role) =>
+        role == ProfileRole.Mangaka;
 
-    public static bool IsEditor(string role) =>
-        string.Equals(role, ProfileRoles.Editor, StringComparison.OrdinalIgnoreCase);
+    public static bool IsEditor(ProfileRole role) =>
+        role == ProfileRole.Editor;
 
-    public static bool IsAssistant(string role) =>
-        string.Equals(role, ProfileRoles.Assistant, StringComparison.OrdinalIgnoreCase);
+    public static bool IsAssistant(ProfileRole role) =>
+        role == ProfileRole.Assistant;
 
-    public static bool IsBoard(string role) =>
-        string.Equals(role, ProfileRoles.Board, StringComparison.OrdinalIgnoreCase);
+    public static bool IsBoard(ProfileRole role) =>
+        role == ProfileRole.Board;
 
-    public static bool IsStaff(string role) =>
+    public static bool IsStaff(ProfileRole role) =>
         IsAdmin(role) || IsEditor(role) || IsBoard(role);
 }

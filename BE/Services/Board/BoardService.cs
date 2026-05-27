@@ -96,7 +96,7 @@ public class BoardService
         var pending = await _unitOfWork.Context.Series
             .AsNoTracking()
             .Include(s => s.Author)
-            .Where(s => s.Status == SeriesStatuses.PendingReview)
+            .Where(s => s.Status == SeriesStatus.PendingReview)
             .ToListAsync(cancellationToken);
 
         var seriesIds = pending.Select(s => s.Id).ToList();
@@ -111,7 +111,7 @@ public class BoardService
             return new PendingSeriesItemResponse(
                 s.Id,
                 s.Title,
-                s.Status,
+                SeriesStatuses.ToDbValue(s.Status),
                 s.AuthorId,
                 s.Author.FullName,
                 seriesVotes.Count(v => v.Decision == VoteDecisions.Approve),
@@ -177,15 +177,15 @@ public class BoardService
         var approves = votes.Count(v => v.Decision == VoteDecisions.Approve);
         var rejects = votes.Count(v => v.Decision == VoteDecisions.Reject);
 
-        if (approves > rejects && series.Status == SeriesStatuses.PendingReview)
+        if (approves > rejects && series.Status == SeriesStatus.PendingReview)
         {
-            series.Status = SeriesStatuses.Approved;
+            series.Status = SeriesStatus.Approved;
             series.UpdatedAt = DateTime.UtcNow;
             SeriesRepository.Update(series);
         }
-        else if (rejects > approves && series.Status == SeriesStatuses.PendingReview)
+        else if (rejects > approves && series.Status == SeriesStatus.PendingReview)
         {
-            series.Status = SeriesStatuses.Cancelled;
+            series.Status = SeriesStatus.Cancelled;
             series.UpdatedAt = DateTime.UtcNow;
             SeriesRepository.Update(series);
         }

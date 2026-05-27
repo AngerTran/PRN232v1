@@ -1,5 +1,6 @@
 using System.Net;
 using System.Text.Json;
+using Npgsql;
 using PRN232v1.Services.Auth;
 using PRN232v1.Services.Profiles;
 using PRN232v1.Services.Series;
@@ -26,7 +27,15 @@ public class AuthExceptionMiddleware
         }
         catch (AuthServiceException ex)
         {
-            _logger.LogWarning(ex, "Auth error: {Message}", ex.Message);
+            if (ex.StatusCode >= HttpStatusCode.InternalServerError)
+            {
+                _logger.LogWarning(ex, "Auth service error: {Message}", ex.Message);
+            }
+            else
+            {
+                _logger.LogInformation("Auth rejected request with {StatusCode}: {Message}", (int)ex.StatusCode, ex.Message);
+            }
+
             context.Response.StatusCode = (int)ex.StatusCode;
             context.Response.ContentType = "application/json";
             await context.Response.WriteAsync(JsonSerializer.Serialize(new { message = ex.Message }));
@@ -58,6 +67,26 @@ public class AuthExceptionMiddleware
             context.Response.StatusCode = StatusCodes.Status400BadRequest;
             context.Response.ContentType = "application/json";
             await context.Response.WriteAsync(JsonSerializer.Serialize(new { message = ex.Message }));
+        }
+        catch (InvalidOperationException ex) when (ex.Message.StartsWith("Storage upload failed", StringComparison.Ordinal))
+        {
+            _logger.LogWarning(ex, "Storage upload failed: {Message}", ex.Message);
+            context.Response.StatusCode = StatusCodes.Status502BadGateway;
+            context.Response.ContentType = "application/json";
+            await context.Response.WriteAsync(JsonSerializer.Serialize(new
+            {
+                message = ex.Message
+            }));
+        }
+        catch (NpgsqlException ex)
+        {
+            _logger.LogError(ex, "Database error: {Message}", ex.Message);
+            context.Response.StatusCode = StatusCodes.Status503ServiceUnavailable;
+            context.Response.ContentType = "application/json";
+            await context.Response.WriteAsync(JsonSerializer.Serialize(new
+            {
+                message = "Database connection failed. Check ConnectionStrings:SupabaseConnection, especially the database password."
+            }));
         }
     }
 }

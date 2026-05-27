@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Mvc;
 using PRN232v1.Common;
 using PRN232v1.Dtos.Series;
 using PRN232v1.Services.Series;
+using Swashbuckle.AspNetCore.Annotations;
 
 namespace PRN232v1.Controllers;
 
@@ -21,6 +22,7 @@ public class SeriesController : ControllerBase
 
     [HttpGet("catalog")]
     [AllowAnonymous]
+    [SwaggerOperation(Summary = "Browse public catalog", Description = "Lists publicly visible series with optional genre filtering and pagination. Does not require login.")]
     [ProducesResponseType(typeof(SeriesListResponse), StatusCodes.Status200OK)]
     public async Task<ActionResult<SeriesListResponse>> Catalog(
         [FromQuery] string? genre,
@@ -32,6 +34,7 @@ public class SeriesController : ControllerBase
     }
 
     [HttpGet]
+    [SwaggerOperation(Summary = "List visible series", Description = "Lists series visible to the authenticated user. Staff can see all series; other users see public series and their own authored series.")]
     [ProducesResponseType(typeof(IReadOnlyList<SeriesResponse>), StatusCodes.Status200OK)]
     public async Task<ActionResult<IReadOnlyList<SeriesResponse>>> List(CancellationToken cancellationToken)
     {
@@ -44,6 +47,7 @@ public class SeriesController : ControllerBase
     }
 
     [HttpGet("my-series")]
+    [SwaggerOperation(Summary = "List my authored series", Description = "Lists series authored by the authenticated mangaka. Requires mangaka role.")]
     [ProducesResponseType(typeof(IReadOnlyList<SeriesResponse>), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
     public async Task<ActionResult<IReadOnlyList<SeriesResponse>>> MySeries(CancellationToken cancellationToken)
@@ -57,6 +61,7 @@ public class SeriesController : ControllerBase
     }
 
     [HttpGet("ranking")]
+    [SwaggerOperation(Summary = "List latest series rankings", Description = "Returns the latest ranking item for each series, ordered by rank position.")]
     [ProducesResponseType(typeof(IReadOnlyList<SeriesRankingItemResponse>), StatusCodes.Status200OK)]
     public async Task<ActionResult<IReadOnlyList<SeriesRankingItemResponse>>> Ranking(CancellationToken cancellationToken)
     {
@@ -69,6 +74,7 @@ public class SeriesController : ControllerBase
     }
 
     [HttpGet("danger-zone")]
+    [SwaggerOperation(Summary = "List danger-zone series", Description = "Returns publishing series whose latest ranking is in the danger zone. Staff can see all; mangaka see only their own.")]
     [ProducesResponseType(typeof(IReadOnlyList<SeriesResponse>), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
     public async Task<ActionResult<IReadOnlyList<SeriesResponse>>> DangerZone(CancellationToken cancellationToken)
@@ -82,6 +88,7 @@ public class SeriesController : ControllerBase
     }
 
     [HttpGet("{id:guid}/stats")]
+    [SwaggerOperation(Summary = "Get series stats", Description = "Returns chapter count, page count, latest ranking, vote totals, schedule count, and danger-zone state for a visible series.")]
     [ProducesResponseType(typeof(SeriesStatsResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
@@ -98,6 +105,7 @@ public class SeriesController : ControllerBase
 
     [HttpPost("{id:guid}/cover")]
     [Consumes("multipart/form-data")]
+    [SwaggerOperation(Summary = "Upload series cover", Description = "Uploads a cover image to Supabase Storage and updates the series cover URL. Requires permission to modify the series.")]
     [ProducesResponseType(typeof(SeriesResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
@@ -121,6 +129,7 @@ public class SeriesController : ControllerBase
     }
 
     [HttpGet("{id:guid}")]
+    [SwaggerOperation(Summary = "Get series by ID", Description = "Returns series details when the authenticated user can view the series.")]
     [ProducesResponseType(typeof(SeriesResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
@@ -136,6 +145,7 @@ public class SeriesController : ControllerBase
     }
 
     [HttpPost]
+    [SwaggerOperation(Summary = "Create series", Description = "Creates a draft series for the authenticated mangaka or admin. Only admins can assign an editor during creation.")]
     [ProducesResponseType(typeof(SeriesResponse), StatusCodes.Status201Created)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
     public async Task<ActionResult<SeriesResponse>> Create(
@@ -152,6 +162,7 @@ public class SeriesController : ControllerBase
     }
 
     [HttpPut("{id:guid}")]
+    [SwaggerOperation(Summary = "Update series", Description = "Updates series metadata. Allowed for admin, the author, or the assigned editor; editor assignment is admin-only.")]
     [ProducesResponseType(typeof(SeriesResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
@@ -170,6 +181,7 @@ public class SeriesController : ControllerBase
     }
 
     [HttpPut("{id:guid}/status")]
+    [SwaggerOperation(Summary = "Update series status", Description = "Changes series workflow status according to role rules for admin, board, assigned editor, or author.")]
     [ProducesResponseType(typeof(SeriesResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
@@ -188,6 +200,7 @@ public class SeriesController : ControllerBase
     }
 
     [HttpDelete("{id:guid}")]
+    [SwaggerOperation(Summary = "Delete series", Description = "Deletes a series. Admin can delete any series; mangaka can delete their own draft series.")]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
@@ -203,6 +216,7 @@ public class SeriesController : ControllerBase
     }
 
     [HttpGet("{seriesId:guid}/chapters")]
+    [SwaggerOperation(Summary = "List series chapters", Description = "Lists chapters for a series when the authenticated user can view that series.")]
     [ProducesResponseType(typeof(IReadOnlyList<ChapterResponse>), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
@@ -220,6 +234,7 @@ public class SeriesController : ControllerBase
     }
 
     [HttpPost("{seriesId:guid}/chapters")]
+    [SwaggerOperation(Summary = "Create chapter", Description = "Creates a draft chapter in a series. Allowed for admin or the mangaka author of that series.")]
     [ProducesResponseType(typeof(ChapterResponse), StatusCodes.Status201Created)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]

@@ -22,9 +22,9 @@ public partial class Series
 
     public Guid? EditorId { get; set; }
 
-    public string Status { get; set; } = SeriesStatuses.Draft;
+    public SeriesStatus Status { get; set; } = SeriesStatus.Draft;
 
-    public string? PublishingFrequency { get; set; }
+    public PublishingFrequency? PublishingFrequency { get; set; }
 
     public DateTime? CreatedAt { get; set; }
 

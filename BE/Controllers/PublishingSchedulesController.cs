@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Mvc;
 using PRN232v1.Common;
 using PRN232v1.Dtos.Schedules;
 using PRN232v1.Services.Schedules;
+using Swashbuckle.AspNetCore.Annotations;
 
 namespace PRN232v1.Controllers;
 
@@ -19,6 +20,7 @@ public class PublishingSchedulesController : ControllerBase
     }
 
     [HttpGet("/api/series/{seriesId:guid}/schedules")]
+    [SwaggerOperation(Summary = "List series schedules", Description = "Lists publishing schedules for a series. Allowed for admin, board, author, or assigned editor.")]
     [ProducesResponseType(typeof(IReadOnlyList<PublishingScheduleResponse>), StatusCodes.Status200OK)]
     public async Task<ActionResult<IReadOnlyList<PublishingScheduleResponse>>> ListBySeries(
         Guid seriesId,
@@ -33,6 +35,7 @@ public class PublishingSchedulesController : ControllerBase
     }
 
     [HttpPost("/api/series/{seriesId:guid}/schedules")]
+    [SwaggerOperation(Summary = "Create series schedule", Description = "Creates a publishing schedule for a series. Requires board, assigned editor, or admin role.")]
     [ProducesResponseType(typeof(PublishingScheduleResponse), StatusCodes.Status201Created)]
     public async Task<ActionResult<PublishingScheduleResponse>> Create(
         Guid seriesId,
@@ -49,6 +52,7 @@ public class PublishingSchedulesController : ControllerBase
     }
 
     [HttpPut("/api/schedules/{id:guid}")]
+    [SwaggerOperation(Summary = "Update schedule", Description = "Updates a publishing schedule. Requires permission to manage schedules for the related series.")]
     [ProducesResponseType(typeof(PublishingScheduleResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<ActionResult<PublishingScheduleResponse>> Update(
@@ -66,6 +70,7 @@ public class PublishingSchedulesController : ControllerBase
     }
 
     [HttpDelete("/api/schedules/{id:guid}")]
+    [SwaggerOperation(Summary = "Delete schedule", Description = "Deletes a publishing schedule. Requires admin role.")]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> Delete(Guid id, CancellationToken cancellationToken)

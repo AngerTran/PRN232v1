@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Mvc;
 using PRN232v1.Common;
 using PRN232v1.Dtos.Tasks;
 using PRN232v1.Services.Tasks;
+using Swashbuckle.AspNetCore.Annotations;
 
 namespace PRN232v1.Controllers;
 
@@ -19,6 +20,7 @@ public class TasksController : ControllerBase
     }
 
     [HttpGet("/api/chapters/{chapterId:guid}/kanban")]
+    [SwaggerOperation(Summary = "Get chapter kanban", Description = "Returns task columns for a chapter. Access depends on chapter visibility and the caller's role or assignment.")]
     [ProducesResponseType(typeof(KanbanResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
     public async Task<ActionResult<KanbanResponse>> Kanban(Guid chapterId, CancellationToken cancellationToken)
@@ -32,6 +34,7 @@ public class TasksController : ControllerBase
     }
 
     [HttpGet("/api/tasks/my")]
+    [SwaggerOperation(Summary = "List my tasks", Description = "Returns tasks assigned to the authenticated assistant.")]
     [ProducesResponseType(typeof(IReadOnlyList<TaskItemResponse>), StatusCodes.Status200OK)]
     public async Task<ActionResult<IReadOnlyList<TaskItemResponse>>> MyTasks(CancellationToken cancellationToken)
     {
@@ -44,6 +47,7 @@ public class TasksController : ControllerBase
     }
 
     [HttpPost("/api/pages/{pageId:guid}/tasks")]
+    [SwaggerOperation(Summary = "Create page task", Description = "Creates an editor task for a page. Requires mangaka, assigned editor, or admin permission on the page's series.")]
     [ProducesResponseType(typeof(TaskItemResponse), StatusCodes.Status201Created)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
     public async Task<ActionResult<TaskItemResponse>> Create(
@@ -61,6 +65,7 @@ public class TasksController : ControllerBase
     }
 
     [HttpGet("/api/tasks/{id:guid}")]
+    [SwaggerOperation(Summary = "Get task by ID", Description = "Returns a task when the authenticated user can view the task, assigned page, or related chapter.")]
     [ProducesResponseType(typeof(TaskItemResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<ActionResult<TaskItemResponse>> GetById(Guid id, CancellationToken cancellationToken)
@@ -75,6 +80,7 @@ public class TasksController : ControllerBase
     }
 
     [HttpPatch("/api/tasks/{id:guid}/status")]
+    [SwaggerOperation(Summary = "Update task status", Description = "Changes task status according to workflow rules for admin, assigned assistant, mangaka, or editor.")]
     [ProducesResponseType(typeof(TaskItemResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<ActionResult<TaskItemResponse>> UpdateStatus(
@@ -92,6 +98,7 @@ public class TasksController : ControllerBase
     }
 
     [HttpPut("/api/tasks/{id:guid}")]
+    [SwaggerOperation(Summary = "Update task", Description = "Updates task details or assignment. Requires permission to assign tasks for the related page.")]
     [ProducesResponseType(typeof(TaskItemResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<ActionResult<TaskItemResponse>> Update(
@@ -109,6 +116,7 @@ public class TasksController : ControllerBase
     }
 
     [HttpDelete("/api/tasks/{id:guid}")]
+    [SwaggerOperation(Summary = "Delete task", Description = "Deletes a task when the authenticated user is admin or can assign tasks for the related page.")]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> Delete(Guid id, CancellationToken cancellationToken)

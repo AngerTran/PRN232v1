@@ -5,6 +5,7 @@ using PRN232v1.Dtos.Auth;
 using PRN232v1.Dtos.Profiles;
 using PRN232v1.Services.Auth;
 using PRN232v1.Services.Profiles;
+using Swashbuckle.AspNetCore.Annotations;
 
 namespace PRN232v1.Controllers;
 
@@ -24,7 +25,11 @@ public class AuthController : ControllerBase
 
     [HttpPost("register")]
     [AllowAnonymous]
+    [SwaggerOperation(
+        Summary = "Register with email",
+        Description = "Creates a Supabase Auth account, creates or syncs the local assistant profile, and sends an email confirmation request when required.")]
     [ProducesResponseType(typeof(AuthTokenResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(object), StatusCodes.Status400BadRequest)]
     public async Task<ActionResult<AuthTokenResponse>> Register(
         [FromBody] RegisterRequest request,
         CancellationToken cancellationToken)
@@ -35,7 +40,13 @@ public class AuthController : ControllerBase
 
     [HttpPost("login")]
     [AllowAnonymous]
+    [SwaggerOperation(
+        Summary = "Login with email",
+        Description = "Authenticates email and password through Supabase Auth, syncs the local profile, and returns access and refresh tokens.")]
     [ProducesResponseType(typeof(AuthTokenResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(object), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(object), StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(typeof(object), StatusCodes.Status503ServiceUnavailable)]
     public async Task<ActionResult<AuthTokenResponse>> Login(
         [FromBody] LoginRequest request,
         CancellationToken cancellationToken)
@@ -46,6 +57,9 @@ public class AuthController : ControllerBase
 
     [HttpPost("confirm-email")]
     [AllowAnonymous]
+    [SwaggerOperation(
+        Summary = "Confirm email",
+        Description = "Verifies a Supabase email confirmation token or token hash and returns a login session when verification succeeds.")]
     [ProducesResponseType(typeof(AuthTokenResponse), StatusCodes.Status200OK)]
     public async Task<ActionResult<AuthTokenResponse>> ConfirmEmail(
         [FromBody] ConfirmEmailRequest request,
@@ -57,6 +71,9 @@ public class AuthController : ControllerBase
 
     [HttpGet("confirm-email")]
     [AllowAnonymous]
+    [SwaggerOperation(
+        Summary = "Confirm email from link",
+        Description = "Handles confirmation links that pass token, token_hash, and type through query parameters.")]
     [ProducesResponseType(typeof(AuthTokenResponse), StatusCodes.Status200OK)]
     public async Task<ActionResult<AuthTokenResponse>> ConfirmEmailFromLink(
         [FromQuery(Name = "token_hash")] string? tokenHash,
@@ -72,6 +89,9 @@ public class AuthController : ControllerBase
 
     [HttpPost("resend-confirm-email")]
     [AllowAnonymous]
+    [SwaggerOperation(
+        Summary = "Resend confirmation email",
+        Description = "Requests Supabase to send another signup confirmation email to the specified address.")]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     public async Task<IActionResult> ResendConfirmEmail(
         [FromBody] ResendConfirmEmailRequest request,
@@ -83,6 +103,9 @@ public class AuthController : ControllerBase
 
     [HttpPost("logout")]
     [Authorize]
+    [SwaggerOperation(
+        Summary = "Logout",
+        Description = "Invalidates the current Supabase session token. Requires a bearer access token.")]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     public async Task<IActionResult> Logout(
         [FromBody] LogoutRequest? request,
@@ -94,6 +117,9 @@ public class AuthController : ControllerBase
 
     [HttpPost("refresh-token")]
     [AllowAnonymous]
+    [SwaggerOperation(
+        Summary = "Refresh token",
+        Description = "Exchanges a Supabase refresh token for a new access token and refresh token.")]
     [ProducesResponseType(typeof(AuthTokenResponse), StatusCodes.Status200OK)]
     public async Task<ActionResult<AuthTokenResponse>> RefreshToken(
         [FromBody] RefreshTokenRequest request,
@@ -105,6 +131,9 @@ public class AuthController : ControllerBase
 
     [HttpPost("sync")]
     [Authorize]
+    [SwaggerOperation(
+        Summary = "Sync profile",
+        Description = "Creates or updates the local profile for the authenticated Supabase user using JWT claims and optional profile fields.")]
     [ProducesResponseType(typeof(ProfileResponse), StatusCodes.Status200OK)]
     public async Task<ActionResult<ProfileResponse>> Sync(
         [FromBody] SyncProfileRequest? request,
@@ -122,6 +151,9 @@ public class AuthController : ControllerBase
 
     [HttpGet("me")]
     [Authorize]
+    [SwaggerOperation(
+        Summary = "Get my auth profile",
+        Description = "Returns the local profile for the authenticated user identified by the JWT sub claim.")]
     [ProducesResponseType(typeof(ProfileResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<ActionResult<ProfileResponse>> Me(CancellationToken cancellationToken)
@@ -137,6 +169,9 @@ public class AuthController : ControllerBase
 
     [HttpPut("profile")]
     [Authorize]
+    [SwaggerOperation(
+        Summary = "Update my auth profile",
+        Description = "Updates the authenticated user's own profile fields. Role changes are only applied by admin flows.")]
     [ProducesResponseType(typeof(ProfileResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<ActionResult<ProfileResponse>> UpdateProfile(
@@ -154,18 +189,27 @@ public class AuthController : ControllerBase
 
     [HttpGet("google/url")]
     [AllowAnonymous]
+    [SwaggerOperation(
+        Summary = "Get Google OAuth URL",
+        Description = "Builds a Google OAuth authorization URL using the configured Google client and redirect URI.")]
     [ProducesResponseType(typeof(GoogleAuthUrlResponse), StatusCodes.Status200OK)]
     public ActionResult<GoogleAuthUrlResponse> GetGoogleUrl() =>
         Ok(_authService.GetGoogleAuthorizationUrl());
 
     [HttpGet("google/supabase-url")]
     [AllowAnonymous]
+    [SwaggerOperation(
+        Summary = "Get Supabase Google OAuth URL",
+        Description = "Builds the Supabase-hosted Google OAuth authorization URL with the configured redirect URI.")]
     [ProducesResponseType(typeof(GoogleAuthUrlResponse), StatusCodes.Status200OK)]
     public ActionResult<GoogleAuthUrlResponse> GetSupabaseGoogleUrl() =>
         Ok(_authService.GetSupabaseGoogleAuthorizationUrl());
 
     [HttpGet("google/callback")]
     [AllowAnonymous]
+    [SwaggerOperation(
+        Summary = "Google OAuth callback",
+        Description = "Exchanges a Google authorization code from the callback query string for a Supabase session.")]
     [ProducesResponseType(typeof(AuthTokenResponse), StatusCodes.Status200OK)]
     public async Task<ActionResult<AuthTokenResponse>> GoogleCallback(
         [FromQuery] string code,
@@ -177,6 +221,9 @@ public class AuthController : ControllerBase
 
     [HttpPost("google")]
     [AllowAnonymous]
+    [SwaggerOperation(
+        Summary = "Login with Google ID token",
+        Description = "Authenticates a Google ID token through Supabase Auth and returns a Supabase session.")]
     [ProducesResponseType(typeof(AuthTokenResponse), StatusCodes.Status200OK)]
     public async Task<ActionResult<AuthTokenResponse>> LoginWithGoogleIdToken(
         [FromBody] GoogleIdTokenRequest request,
@@ -188,6 +235,9 @@ public class AuthController : ControllerBase
 
     [HttpPost("google/code")]
     [AllowAnonymous]
+    [SwaggerOperation(
+        Summary = "Login with Google code",
+        Description = "Exchanges a Google authorization code for a Google ID token, then signs in through Supabase Auth.")]
     [ProducesResponseType(typeof(AuthTokenResponse), StatusCodes.Status200OK)]
     public async Task<ActionResult<AuthTokenResponse>> LoginWithGoogleCode(
         [FromBody] GoogleCodeRequest request,

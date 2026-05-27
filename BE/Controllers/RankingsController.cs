@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Mvc;
 using PRN232v1.Common;
 using PRN232v1.Dtos.Rankings;
 using PRN232v1.Services.Rankings;
+using Swashbuckle.AspNetCore.Annotations;
 
 namespace PRN232v1.Controllers;
 
@@ -20,6 +21,7 @@ public class RankingsController : ControllerBase
     }
 
     [HttpPost]
+    [SwaggerOperation(Summary = "Create ranking entry", Description = "Creates a ranking snapshot for a series issue. Requires board or admin role.")]
     [ProducesResponseType(typeof(RankingResponse), StatusCodes.Status201Created)]
     public async Task<ActionResult<RankingResponse>> Create(
         [FromBody] CreateRankingRequest request,
@@ -35,6 +37,7 @@ public class RankingsController : ControllerBase
     }
 
     [HttpGet("history")]
+    [SwaggerOperation(Summary = "Get ranking history", Description = "Returns ranking history for a series when the authenticated user can view that ranking data.")]
     [ProducesResponseType(typeof(RankingHistoryResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<ActionResult<RankingHistoryResponse>> History(
