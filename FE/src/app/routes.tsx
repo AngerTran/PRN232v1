@@ -1,0 +1,175 @@
+import { createBrowserRouter, Navigate } from 'react-router';
+
+import MainLayout from '../components/layout/MainLayout';
+import { getLoggedInUser } from '../data/mockData';
+import LandingPage from '../pages/LandingPage';
+
+// Auth pages
+import LoginPage from '../pages/auth/LoginPage';
+import RegisterPage from '../pages/auth/RegisterPage';
+import ForgotPasswordPage from '../pages/auth/ForgotPasswordPage';
+
+// Common pages
+import ProfilePage from '../pages/common/ProfilePage';
+import SettingsPage from '../pages/common/SettingsPage';
+import NotificationsPage from '../pages/common/NotificationsPage';
+import NotFoundPage from '../pages/common/NotFoundPage';
+
+// Mangaka pages
+import DashboardPage from '../pages/mangaka/DashboardPage';
+import SeriesListPage from '../pages/mangaka/SeriesListPage';
+import CreateSeriesPage from '../pages/mangaka/CreateSeriesPage';
+import SeriesDetailPage from '../pages/mangaka/SeriesDetailPage';
+import ChapterListPage from '../pages/mangaka/ChapterListPage';
+import CreateChapterPage from '../pages/mangaka/CreateChapterPage';
+import ChapterDetailPage from '../pages/mangaka/ChapterDetailPage';
+import WorkspacePage from '../pages/mangaka/WorkspacePage';
+import TaskManagementPage from '../pages/mangaka/TaskManagementPage';
+import TaskReviewPage from '../pages/mangaka/TaskReviewPage';
+import SeriesRankingPage from '../pages/mangaka/SeriesRankingPage';
+import SubmissionHistoryPage from '../pages/mangaka/SubmissionHistoryPage';
+import RankingOverviewPage from '../pages/mangaka/RankingOverviewPage';
+import ChaptersOverviewPage from '../pages/mangaka/ChaptersOverviewPage';
+
+// Assistant pages
+import AssistantDashboardPage from '../pages/assistant/AssistantDashboardPage';
+import MyTasksPage from '../pages/assistant/MyTasksPage';
+import TaskDetailPage from '../pages/assistant/TaskDetailPage';
+import SubmitResultPage from '../pages/assistant/SubmitResultPage';
+import RevisionTasksPage from '../pages/assistant/RevisionTasksPage';
+import ApprovedTasksPage from '../pages/assistant/ApprovedTasksPage';
+import IncomePage from '../pages/assistant/IncomePage';
+import WorkCalendarPage from '../pages/assistant/WorkCalendarPage';
+
+// Editor pages
+import EditorDashboardPage from '../pages/editor/EditorDashboardPage';
+import AssignedSeriesPage from '../pages/editor/AssignedSeriesPage';
+import ChapterReviewsPage from '../pages/editor/ChapterReviewsPage';
+import RankingWatchPage from '../pages/editor/RankingWatchPage';
+import SeriesDefensePage from '../pages/editor/SeriesDefensePage';
+
+// Admin pages
+import AdminDashboardPage from '../pages/admin/AdminDashboardPage';
+import UserManagementPage from '../pages/admin/UserManagementPage';
+import CreateUserPage from '../pages/admin/CreateUserPage';
+import UserDetailPage from '../pages/admin/UserDetailPage';
+import EditUserPage from '../pages/admin/EditUserPage';
+import RoleManagementPage from '../pages/admin/RoleManagementPage';
+import SystemActivityPage from '../pages/admin/SystemActivityPage';
+import AdminSettingsPage from '../pages/admin/AdminSettingsPage';
+
+// Board pages
+import BoardDashboardPage from '../pages/board/BoardDashboardPage';
+import BoardSubmissionsPage from '../pages/board/BoardSubmissionsPage';
+import SubmissionDetailPage from '../pages/board/SubmissionDetailPage';
+import BoardApprovedSeriesPage from '../pages/board/BoardApprovedSeriesPage';
+import PublishingSchedulePage from '../pages/board/PublishingSchedulePage';
+import VoteInputPage from '../pages/board/VoteInputPage';
+import BoardRankingPage from '../pages/board/BoardRankingPage';
+import SeriesDecisionPage from '../pages/board/SeriesDecisionPage';
+import SeriesDecisionDetailPage from '../pages/board/SeriesDecisionDetailPage';
+import BoardReportsPage from '../pages/board/BoardReportsPage';
+
+function RootRedirect() {
+  const user = getLoggedInUser();
+  if (!user) return <LandingPage />;
+
+  if (user.role === 'admin') return <Navigate to="/admin/dashboard" replace />;
+  if (user.role === 'assistant') return <Navigate to="/assistant/dashboard" replace />;
+  if (user.role === 'editor') return <Navigate to="/editor/dashboard" replace />;
+  if (user.role === 'board') return <Navigate to="/board/dashboard" replace />;
+  return <Navigate to="/mangaka/dashboard" replace />;
+}
+
+export const router = createBrowserRouter([
+  // Root: landing page for guests, dashboard redirect for logged-in users
+  { path: '/', element: <RootRedirect /> },
+
+  // Auth routes (no layout)
+  { path: '/login', element: <LoginPage /> },
+  { path: '/register', element: <RegisterPage /> },
+  { path: '/forgot-password', element: <ForgotPasswordPage /> },
+
+  // Protected routes with MainLayout
+  {
+    element: <MainLayout />,
+    children: [
+      // Common
+      { path: '/profile', element: <ProfilePage /> },
+      { path: '/settings', element: <SettingsPage /> },
+      { path: '/notifications', element: <NotificationsPage /> },
+
+      // Mangaka
+      { path: '/mangaka/dashboard', element: <DashboardPage /> },
+
+      // Series
+      { path: '/mangaka/series', element: <SeriesListPage /> },
+      { path: '/mangaka/series/create', element: <CreateSeriesPage /> },
+      { path: '/mangaka/series/:seriesId', element: <SeriesDetailPage /> },
+      { path: '/mangaka/series/:seriesId/chapters', element: <ChapterListPage /> },
+      { path: '/mangaka/series/:seriesId/chapters/create', element: <CreateChapterPage /> },
+      { path: '/mangaka/series/:seriesId/ranking', element: <SeriesRankingPage /> },
+
+      // Chapters overview (sidebar link)
+      { path: '/mangaka/chapters', element: <ChaptersOverviewPage /> },
+
+      // Chapter detail
+      { path: '/mangaka/chapters/:chapterId', element: <ChapterDetailPage /> },
+
+      // Workspace
+      { path: '/mangaka/pages/:pageId/workspace', element: <WorkspacePage /> },
+
+      // Tasks
+      { path: '/mangaka/tasks', element: <TaskManagementPage /> },
+      { path: '/mangaka/tasks/:taskId/review', element: <TaskReviewPage /> },
+
+      // Submissions
+      { path: '/mangaka/submissions', element: <SubmissionHistoryPage /> },
+
+      // Ranking overview (sidebar link)
+      { path: '/mangaka/ranking', element: <RankingOverviewPage /> },
+
+      // Assistant
+      { path: '/assistant/dashboard', element: <AssistantDashboardPage /> },
+      { path: '/assistant/tasks', element: <MyTasksPage /> },
+      { path: '/assistant/tasks/:taskId', element: <TaskDetailPage /> },
+      { path: '/assistant/tasks/:taskId/submit', element: <SubmitResultPage /> },
+      { path: '/assistant/revisions', element: <RevisionTasksPage /> },
+      { path: '/assistant/approved', element: <ApprovedTasksPage /> },
+      { path: '/assistant/income', element: <IncomePage /> },
+      { path: '/assistant/calendar', element: <WorkCalendarPage /> },
+
+      // Editor
+      { path: '/editor/dashboard', element: <EditorDashboardPage /> },
+      { path: '/editor/series', element: <AssignedSeriesPage /> },
+      { path: '/editor/reviews', element: <ChapterReviewsPage /> },
+      { path: '/editor/ranking-watch', element: <RankingWatchPage /> },
+      { path: '/editor/series-defense', element: <SeriesDefensePage /> },
+
+      // Admin
+      { path: '/admin/dashboard', element: <AdminDashboardPage /> },
+      { path: '/admin/users', element: <UserManagementPage /> },
+      { path: '/admin/users/create', element: <CreateUserPage /> },
+      { path: '/admin/users/:userId', element: <UserDetailPage /> },
+      { path: '/admin/users/:userId/edit', element: <EditUserPage /> },
+      { path: '/admin/roles', element: <RoleManagementPage /> },
+      { path: '/admin/activity', element: <SystemActivityPage /> },
+      { path: '/admin/settings', element: <AdminSettingsPage /> },
+
+      // Board
+      { path: '/board/dashboard', element: <BoardDashboardPage /> },
+      { path: '/board/submissions', element: <BoardSubmissionsPage /> },
+      { path: '/board/submissions/:submissionId', element: <SubmissionDetailPage /> },
+      { path: '/board/approved-series', element: <BoardApprovedSeriesPage /> },
+      { path: '/board/publishing-schedule', element: <PublishingSchedulePage /> },
+      { path: '/board/vote-input', element: <VoteInputPage /> },
+      { path: '/board/rankings', element: <BoardRankingPage /> },
+      { path: '/board/series-decisions', element: <SeriesDecisionPage /> },
+      { path: '/board/series-decisions/:decisionId', element: <SeriesDecisionDetailPage /> },
+      { path: '/board/reports', element: <BoardReportsPage /> },
+    ],
+  },
+
+  // 404
+  { path: '*', element: <NotFoundPage /> },
+]);

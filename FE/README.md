@@ -1,9 +1,11 @@
-# FE — Frontend
 
-Thư mục dành cho ứng dụng frontend (React, Vue, Angular, v.v.).
+  # Mangaka 2
 
-## Gợi ý
+  This is a code bundle for Mangaka 2. The original project is available at https://www.figma.com/design/vvMjQhtz1rRxFYZKyVaqQ5/Mangaka-2.
 
-- API backend: chạy từ `BE/` — mặc định `https://localhost:7054`
-- Swagger: `https://localhost:7054/swagger`
-- Cấu hình `VITE_API_URL` / `NEXT_PUBLIC_API_URL` trỏ tới URL backend khi tạo project FE
+  ## Running the code
+
+  Run `npm i` to install the dependencies.
+
+  Run `npm run dev` to start the development server.
+  
