@@ -1,3 +1,5 @@
 <Solution>
   <Project Path="BE/PRN232v1.csproj" />
+  <Project Path="BLL/BLL.csproj" Id="cee0e0cd-863b-404d-971b-342c70316053" />
+  <Project Path="DAL/DAL.csproj" Id="211fa353-a47c-42c1-9c66-d4d9d8831559" />
 </Solution>

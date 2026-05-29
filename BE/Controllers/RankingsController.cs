@@ -1,8 +1,8 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using PRN232v1.Common;
-using PRN232v1.Dtos.Rankings;
-using PRN232v1.Services.Rankings;
+using DAL.Common;
+using BLL.Dtos.Rankings;
+using BLL.Services.Rankings;
 using Swashbuckle.AspNetCore.Annotations;
 
 namespace PRN232v1.Controllers;

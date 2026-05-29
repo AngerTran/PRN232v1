@@ -1,8 +1,8 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using PRN232v1.Common;
-using PRN232v1.Dtos.Profiles;
-using PRN232v1.Services.Profiles;
+using DAL.Common;
+using BLL.Dtos.Profiles;
+using BLL.Services.Profiles;
 using Swashbuckle.AspNetCore.Annotations;
 
 namespace PRN232v1.Controllers;

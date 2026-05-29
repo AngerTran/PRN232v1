@@ -1,8 +1,8 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using PRN232v1.Common;
-using PRN232v1.Dtos.Tasks;
-using PRN232v1.Services.Tasks;
+using DAL.Common;
+using BLL.Dtos.Tasks;
+using BLL.Services.Tasks;
 using Swashbuckle.AspNetCore.Annotations;
 
 namespace PRN232v1.Controllers;

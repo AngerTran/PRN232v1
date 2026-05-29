@@ -1,9 +1,9 @@
 using Microsoft.EntityFrameworkCore;
 using Npgsql;
-using PRN232v1.Common;
-using PRN232v1.Data;
-using PRN232v1.Extensions;
-using PRN232v1.Middleware;
+using DAL.Common;
+using DAL.Data;
+using BLL.Extensions;
+using BLL.Middleware;
 
 var builder = WebApplication.CreateBuilder(args);
 

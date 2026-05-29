@@ -1,8 +1,8 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using PRN232v1.Common;
-using PRN232v1.Dtos.Notifications;
-using PRN232v1.Services.Notifications;
+using DAL.Common;
+using BLL.Dtos.Notifications;
+using BLL.Services.Notifications;
 using Swashbuckle.AspNetCore.Annotations;
 
 namespace PRN232v1.Controllers;
