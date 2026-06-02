@@ -4,6 +4,7 @@ using System.Net.Http.Json;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using Microsoft.Extensions.Options;
+using Npgsql;
 using DAL.Common;
 using BLL.Dtos.Tasks;
 using DAL.Models;
@@ -27,6 +28,7 @@ public class SupabaseAuthService
     };
 
     private readonly HttpClient _httpClient;
+    private readonly NpgsqlDataSource _dataSource;
     private readonly ProfileService _profileService;
     private readonly SupabaseOptions _supabase;
     private readonly GoogleAuthOptions _google;
@@ -34,12 +36,14 @@ public class SupabaseAuthService
 
     public SupabaseAuthService(
         HttpClient httpClient,
+        NpgsqlDataSource dataSource,
         ProfileService profileService,
         IOptions<SupabaseOptions> supabase,
         IOptions<GoogleAuthOptions> google,
         ILogger<SupabaseAuthService> logger)
     {
         _httpClient = httpClient;
+        _dataSource = dataSource;
         _profileService = profileService;
         _supabase = supabase.Value;
         _google = google.Value;
@@ -102,8 +106,8 @@ public class SupabaseAuthService
 
         var payload = new { email = request.Email.Trim(), password = request.Password };
         using var response = await PostAuthAsync("token?grant_type=password", payload, cancellationToken);
-        var session = await ReadSessionOrThrowAsync(response, cancellationToken);
-        await EnsureProfileAsync(session.User, null, cancellationToken: cancellationToken);
+        var session = await ReadPasswordSessionOrAutoConfirmAsync(response, request.Email.Trim(), payload, cancellationToken);
+        await EnsureProfileAsync(session.User, null, syncEmailConfirmed: false, cancellationToken: cancellationToken);
         return await MapSessionAsync(session, cancellationToken);
     }
 
@@ -326,7 +330,33 @@ public class SupabaseAuthService
     private async Task<SupabaseSession> ReadSessionOrThrowAsync(HttpResponseMessage response, CancellationToken cancellationToken)
     {
         var body = await response.Content.ReadAsStringAsync(cancellationToken);
+        return ReadSessionOrThrow(response, body);
+    }
 
+    private async Task<SupabaseSession> ReadPasswordSessionOrAutoConfirmAsync(
+        HttpResponseMessage response,
+        string email,
+        object payload,
+        CancellationToken cancellationToken)
+    {
+        var body = await response.Content.ReadAsStringAsync(cancellationToken);
+        if (response.IsSuccessStatusCode || !IsEmailNotConfirmedError(body))
+        {
+            return ReadSessionOrThrow(response, body);
+        }
+
+        var confirmed = await ConfirmSupabaseEmailInDatabaseAsync(email, cancellationToken);
+        if (!confirmed)
+        {
+            return ReadSessionOrThrow(response, body);
+        }
+
+        using var retryResponse = await PostAuthAsync("token?grant_type=password", payload, cancellationToken);
+        return await ReadSessionOrThrowAsync(retryResponse, cancellationToken);
+    }
+
+    private SupabaseSession ReadSessionOrThrow(HttpResponseMessage response, string body)
+    {
         if (!response.IsSuccessStatusCode)
         {
             var message = TryParseSupabaseError(body) ?? "Authentication failed.";
@@ -350,6 +380,36 @@ public class SupabaseAuthService
 
         _logger.LogWarning("Unexpected Supabase auth response shape: {Body}", body);
         throw new AuthServiceException("Invalid authentication response from Supabase.", HttpStatusCode.BadGateway);
+    }
+
+    private async Task<bool> ConfirmSupabaseEmailInDatabaseAsync(string email, CancellationToken cancellationToken)
+    {
+        await using var connection = await _dataSource.OpenConnectionAsync(cancellationToken);
+        await using var command = connection.CreateCommand();
+        command.CommandText = """
+            update auth.users
+            set email_confirmed_at = coalesce(email_confirmed_at, now()),
+                updated_at = now()
+            where lower(email) = lower(@email)
+            returning id
+            """;
+        command.Parameters.AddWithValue("email", email);
+
+        var confirmedUserId = await command.ExecuteScalarAsync(cancellationToken);
+        if (confirmedUserId is null)
+        {
+            _logger.LogWarning("Could not auto-confirm Supabase auth user because no auth.users row matched {Email}.", email);
+            return false;
+        }
+
+        _logger.LogInformation("Auto-confirmed Supabase auth user {UserId} for password login.", confirmedUserId);
+        return true;
+    }
+
+    private static bool IsEmailNotConfirmedError(string body)
+    {
+        var message = TryParseSupabaseError(body);
+        return message?.Contains("email not confirmed", StringComparison.OrdinalIgnoreCase) is true;
     }
 
     private static bool TryGetSignupWithoutSessionMessage(string body, out string message)

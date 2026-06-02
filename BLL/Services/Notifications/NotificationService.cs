@@ -47,6 +47,36 @@ public class NotificationService
             .ToListAsync(cancellationToken);
     }
 
+    public async Task<NotificationResponse> CreateAsync(
+        Guid userId,
+        string title,
+        string message,
+        CancellationToken cancellationToken = default)
+    {
+        await EnsureUserExistsAsync(userId, cancellationToken);
+
+        var now = DateTime.UtcNow;
+        var notification = new Notification
+        {
+            Id = Guid.NewGuid(),
+            UserId = userId,
+            Title = title.Trim(),
+            Message = message.Trim(),
+            IsRead = false,
+            CreatedAt = now
+        };
+
+        await Repository.AddAsync(notification, cancellationToken);
+        await _unitOfWork.SaveChangesAsync(cancellationToken);
+
+        return new NotificationResponse(
+            notification.Id,
+            notification.Title,
+            notification.Message,
+            notification.IsRead == true,
+            notification.CreatedAt);
+    }
+
     public async Task<MarkNotificationReadResponse?> MarkReadAsync(
         Guid userId,
         Guid notificationId,

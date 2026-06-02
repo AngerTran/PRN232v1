@@ -5,6 +5,7 @@ import Button from '../../components/ui/Button';
 import Card, { CardHeader, CardTitle } from '../../components/ui/Card';
 import UploadBox from '../../components/ui/UploadBox';
 import { usePageMeta } from '../../hooks/usePageMeta';
+import { createSeries } from '../../services/seriesApi';
 
 const GENRES = ['Action', 'Adventure', 'Comedy', 'Drama', 'Fantasy', 'Historical', 'Horror', 'Mystery', 'Romance', 'Sci-fi', 'Slice of Life', 'Sports', 'Supernatural', 'Thriller'];
 const AUDIENCES = ['Shōnen (12-18)', 'Shōjo (12-18)', 'Seinen (18-35)', 'Josei (20-40)', 'Kodomomuke (Trẻ em)'];
@@ -29,6 +30,7 @@ export default function CreateSeriesPage() {
   });
   const [submitting, setSubmitting] = useState(false);
   const [saved, setSaved] = useState(false);
+  const [error, setError] = useState('');
 
   useEffect(() => {
     setPageMeta({
@@ -47,15 +49,48 @@ export default function CreateSeriesPage() {
   const update = (k: keyof FormState) => (e: ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) =>
     setForm(f => ({ ...f, [k]: e.target.value }));
 
-  const handleSaveDraft = () => {
-    setSaved(true);
-    setTimeout(() => { setSaved(false); navigate('/mangaka/series'); }, 1500);
+  const submitSeries = async () => {
+    setError('');
+    const created = await createSeries({
+      title: form.title,
+      description: form.synopsis,
+      genre: form.genres.join(', '),
+      targetAudience: form.targetAudience,
+      coverImageUrl: form.coverUrl || undefined,
+      publishingFrequency: form.publishingType,
+    });
+    return created;
   };
 
-  const handleSubmit = (e: FormEvent) => {
+  const handleSaveDraft = async () => {
+    if (!form.title.trim()) {
+      setError('Vui long nhap tieu de series.');
+      return;
+    }
+
+    setSubmitting(true);
+    try {
+      const created = await submitSeries();
+      setSaved(true);
+      navigate(`/mangaka/series/${created.id}`);
+    } catch {
+      setError('Khong the tao series tren backend.');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
     setSubmitting(true);
-    setTimeout(() => { setSubmitting(false); navigate('/mangaka/submissions'); }, 1200);
+    try {
+      const created = await submitSeries();
+      navigate(`/mangaka/series/${created.id}`);
+    } catch {
+      setError('Khong the tao series tren backend.');
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   const inputClass = 'w-full px-4 py-2.5 text-sm bg-input-background border border-border rounded-xl focus:outline-none focus:ring-2 focus:ring-ring/30 focus:border-primary/50 transition-colors';
@@ -71,6 +106,12 @@ export default function CreateSeriesPage() {
           <p className="text-sm text-muted-foreground">Gửi đề xuất series đến ban biên tập.</p>
         </div>
       </div>
+
+      {error && (
+        <div className="mb-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+          {error}
+        </div>
+      )}
 
       <form onSubmit={handleSubmit} className="space-y-5">
         {/* Basic info */}

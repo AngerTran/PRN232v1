@@ -2,7 +2,7 @@ import { useState, type FormEvent } from 'react';
 import { useNavigate, Link } from 'react-router';
 import { Eye, EyeOff, AlertCircle } from 'lucide-react';
 import { ImageWithFallback } from '@/app/components/figma/ImageWithFallback';
-import { loginUser, MOCK_CREDENTIALS } from '../../data/mockData';
+import { loginUserWithApi, MOCK_CREDENTIALS } from '../../data/mockData';
 import inkflowLogo from '@/imports/image-10.png';
 import workspacePhoto from '@/imports/image-4.png';
 
@@ -14,12 +14,12 @@ export default function LoginPage() {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
-  const handleSubmit = (e: FormEvent) => {
+  const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
     setError('');
     setLoading(true);
-    setTimeout(() => {
-      const user = loginUser(email, password);
+    try {
+      const user = await loginUserWithApi(email, password);
       if (user) {
         if (user.role === 'admin') navigate('/admin/dashboard');
         else if (user.role === 'assistant') navigate('/assistant/dashboard');
@@ -29,8 +29,11 @@ export default function LoginPage() {
       } else {
         setError('Email hoặc mật khẩu không đúng.');
       }
+    } catch {
+      setError('Cannot connect to backend. Please try again.');
+    } finally {
       setLoading(false);
-    }, 600);
+    }
   };
 
   const fillMangakaDemo = () => {

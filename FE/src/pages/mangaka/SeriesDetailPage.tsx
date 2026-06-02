@@ -9,20 +9,60 @@ import ChapterCard from '../../components/ui/ChapterCard';
 import RankingTrend from '../../components/ui/RankingTrend';
 import EmptyState from '../../components/ui/EmptyState';
 import { usePageMeta } from '../../hooks/usePageMeta';
-import {
-  getSeriesById, getChaptersBySeriesId, getSubmissionsBySeriesId, getRankingBySeriesId
-} from '../../data/mockData';
+import type { Chapter, Series } from '../../data/mockData';
+import { getSubmissionsBySeriesId, getRankingBySeriesId } from '../../data/mockData';
+import { getSeries, getSeriesChapters } from '../../services/seriesApi';
 
 export default function SeriesDetailPage() {
   const { seriesId } = useParams<{ seriesId: string }>();
   const navigate = useNavigate();
   const { setPageMeta } = usePageMeta();
-  const [tab, setTab] = useState('overview');
+  const [tab, setTab] = useState('chapters');
+  const [series, setSeries] = useState<Series | null>(null);
+  const [chapters, setChapters] = useState<Chapter[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
 
-  const series = getSeriesById(seriesId ?? '');
-  const chapters = getChaptersBySeriesId(seriesId ?? '');
   const submissions = getSubmissionsBySeriesId(seriesId ?? '');
   const ranking = getRankingBySeriesId(seriesId ?? '');
+
+  useEffect(() => {
+    if (!seriesId) return;
+
+    let active = true;
+    async function loadSeriesDetail() {
+      setLoading(true);
+      setError('');
+
+      try {
+        const seriesItem = await getSeries(seriesId);
+        const chapterItems = await getSeriesChapters(seriesId).catch(err => {
+          if (active) {
+            setError(err instanceof Error ? `Không thể tải chapters: ${err.message}` : 'Không thể tải chapters từ backend.');
+          }
+          return [];
+        });
+
+        if (!active) return;
+        setSeries({ ...seriesItem, chaptersCount: chapterItems.length });
+        setChapters(chapterItems);
+      } catch (err) {
+        if (active) {
+          setSeries(null);
+          setChapters([]);
+          setError(err instanceof Error ? err.message : 'Không thể tải series từ backend.');
+        }
+      } finally {
+        if (active) setLoading(false);
+      }
+    }
+
+    loadSeriesDetail();
+
+    return () => {
+      active = false;
+    };
+  }, [seriesId]);
 
   useEffect(() => {
     if (series) {
@@ -32,6 +72,10 @@ export default function SeriesDetailPage() {
       });
     }
   }, [series?.id]);
+
+  if (loading) {
+    return <div className="p-6 text-sm text-muted-foreground">Dang tai series...</div>;
+  }
 
   if (!series) {
     return (

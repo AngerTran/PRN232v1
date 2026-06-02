@@ -1,11 +1,12 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router';
 import { ChevronLeft, Plus } from 'lucide-react';
 import Button from '../../components/ui/Button';
 import ChapterCard from '../../components/ui/ChapterCard';
 import EmptyState from '../../components/ui/EmptyState';
 import { usePageMeta } from '../../hooks/usePageMeta';
-import { getSeriesById, getChaptersBySeriesId } from '../../data/mockData';
+import type { Chapter, Series } from '../../data/mockData';
+import { getSeries, getSeriesChapters } from '../../services/seriesApi';
 import { FileText } from 'lucide-react';
 
 export default function ChapterListPage() {
@@ -13,8 +14,46 @@ export default function ChapterListPage() {
   const navigate = useNavigate();
   const { setPageMeta } = usePageMeta();
 
-  const series = getSeriesById(seriesId ?? '');
-  const chapters = getChaptersBySeriesId(seriesId ?? '').sort((a, b) => a.number - b.number);
+  const [series, setSeries] = useState<Series | null>(null);
+  const [chapters, setChapters] = useState<Chapter[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+
+  useEffect(() => {
+    if (!seriesId) return;
+
+    let active = true;
+
+    async function loadChapters() {
+      setLoading(true);
+      setError('');
+
+      try {
+        const [seriesItem, chapterItems] = await Promise.all([
+          getSeries(seriesId),
+          getSeriesChapters(seriesId),
+        ]);
+
+        if (!active) return;
+        setSeries(seriesItem);
+        setChapters(chapterItems.sort((a, b) => a.number - b.number));
+      } catch (err) {
+        if (active) {
+          setSeries(null);
+          setChapters([]);
+          setError(err instanceof Error ? err.message : 'Không thể tải chương từ backend.');
+        }
+      } finally {
+        if (active) setLoading(false);
+      }
+    }
+
+    loadChapters();
+
+    return () => {
+      active = false;
+    };
+  }, [seriesId]);
 
   useEffect(() => {
     setPageMeta({
@@ -25,7 +64,11 @@ export default function ChapterListPage() {
         { label: 'Chương' },
       ],
     });
-  }, [series?.id]);
+  }, [series?.id, seriesId]);
+
+  if (loading) {
+    return <div className="p-6 text-sm text-muted-foreground">Đang tải chương...</div>;
+  }
 
   return (
     <div className="p-6 space-y-5">
@@ -44,6 +87,12 @@ export default function ChapterListPage() {
           <Plus size={16} /> Chương mới
         </Button>
       </div>
+
+      {error && (
+        <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+          {error}
+        </div>
+      )}
 
       {chapters.length === 0 ? (
         <EmptyState

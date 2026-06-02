@@ -1,4 +1,4 @@
-import { Series, currentUser } from '../../../../data/mockData';
+import type { Series } from '../../../../data/mockData';
 import { Card, CardContent } from '../card';
 import { Badge } from '../badge';
 import { TrendingUp, TrendingDown } from 'lucide-react';
@@ -26,7 +26,7 @@ export function SeriesSummaryCard({ series, onClick }: SeriesSummaryCardProps) {
           />
           <div className="flex-1">
             <h3 className="font-semibold text-lg mb-1">{series.title}</h3>
-            <p className="text-sm text-muted-foreground mb-2">{currentUser.name}</p>
+            <p className="text-sm text-muted-foreground mb-2">{series.status}</p>
 
             <div className="flex items-center gap-2 mb-2">
               <Badge variant="secondary">{series.genre}</Badge>

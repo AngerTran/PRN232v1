@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router';
 import { usePageMeta } from '../../hooks/usePageMeta';
 import { Card } from '../../app/components/ui/card';
@@ -11,18 +12,47 @@ import {
   TableHeader,
   TableRow,
 } from '../../app/components/ui/table';
-import {
-  currentEditor,
-  getSeriesByEditorId,
-  getRankingBySeriesId,
-} from '../../data/mockData';
+import type { Series } from '../../data/mockData';
+import { getVisibleSeries } from '../../services/seriesApi';
 import { TrendingUp, TrendingDown, Minus, Eye, Shield } from 'lucide-react';
 
 export default function RankingWatchPage() {
   usePageMeta({ title: 'Ranking Watch' });
   const navigate = useNavigate();
+  const [series, setSeries] = useState<Series[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
-  const series = getSeriesByEditorId(currentEditor.id);
+  useEffect(() => {
+    let isActive = true;
+
+    async function loadSeries() {
+      setIsLoading(true);
+      setError(null);
+
+      try {
+        const items = await getVisibleSeries();
+        if (isActive) {
+          setSeries(items);
+        }
+      } catch (err) {
+        if (isActive) {
+          setSeries([]);
+          setError(err instanceof Error ? err.message : 'Không thể tải ranking watch từ backend.');
+        }
+      } finally {
+        if (isActive) {
+          setIsLoading(false);
+        }
+      }
+    }
+
+    loadSeries();
+
+    return () => {
+      isActive = false;
+    };
+  }, []);
 
   // Sort by current rank
   const sortedSeries = [...series].sort((a, b) => a.currentRank - b.currentRank);
@@ -52,8 +82,25 @@ export default function RankingWatchPage() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {sortedSeries.map(s => {
-                const ranking = getRankingBySeriesId(s.id);
+              {isLoading ? (
+                <TableRow>
+                  <TableCell colSpan={8} className="text-center py-8 text-muted-foreground">
+                    Đang tải series...
+                  </TableCell>
+                </TableRow>
+              ) : error ? (
+                <TableRow>
+                  <TableCell colSpan={8} className="text-center py-8 text-destructive">
+                    {error}
+                  </TableCell>
+                </TableRow>
+              ) : sortedSeries.length === 0 ? (
+                <TableRow>
+                  <TableCell colSpan={8} className="text-center py-8 text-muted-foreground">
+                    Không có series nào
+                  </TableCell>
+                </TableRow>
+              ) : sortedSeries.map(s => {
                 const rankChange = s.previousRank - s.currentRank;
                 const trend = rankChange > 0 ? 'up' : rankChange < 0 ? 'down' : 'stable';
 

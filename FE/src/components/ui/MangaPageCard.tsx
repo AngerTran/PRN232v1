@@ -2,11 +2,17 @@ import { useNavigate } from 'react-router';
 import { ExternalLink, CheckCircle, Circle } from 'lucide-react';
 import { clsx } from 'clsx';
 import Badge from './Badge';
-import type { MangaPage } from '../../data/mockData';
 import MangaPanelPreview from '../workspace/MangaPanelPreview';
 
 interface MangaPageCardProps {
-  page: MangaPage;
+  page: {
+    id: string;
+    pageNumber: number;
+    status: string;
+    tasksCount?: number;
+    completedTasksCount?: number;
+    panelLayout?: number;
+  };
 }
 
 export default function MangaPageCard({ page }: MangaPageCardProps) {
@@ -15,7 +21,7 @@ export default function MangaPageCard({ page }: MangaPageCardProps) {
   return (
     <div className="bg-card border border-border rounded-xl overflow-hidden hover:shadow-md transition-shadow group">
       <div className="relative bg-[#F0EBE0] aspect-[3/4] overflow-hidden">
-        <MangaPanelPreview layout={page.panelLayout} />
+        <MangaPanelPreview layout={page.panelLayout ?? 0} />
         <div className="absolute top-2 left-2">
           <span className="text-[10px] font-bold bg-foreground/80 text-white px-1.5 py-0.5 rounded">
             P.{page.pageNumber}
@@ -34,9 +40,9 @@ export default function MangaPageCard({ page }: MangaPageCardProps) {
           <span className="text-xs font-semibold text-foreground">Trang {page.pageNumber}</span>
           <Badge status={page.status} />
         </div>
-        {page.tasksCount > 0 && (
+        {(page.tasksCount ?? 0) > 0 && (
           <div className="flex items-center gap-2 text-xs text-muted-foreground">
-            {page.completedTasksCount === page.tasksCount ? (
+            {(page.completedTasksCount ?? 0) === page.tasksCount ? (
               <CheckCircle size={12} className="text-green-500 shrink-0" />
             ) : (
               <Circle size={12} className="text-muted-foreground shrink-0" />

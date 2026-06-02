@@ -8,7 +8,8 @@ import SeriesCard from '../../components/ui/SeriesCard';
 import Button from '../../components/ui/Button';
 import EmptyState from '../../components/ui/EmptyState';
 import { usePageMeta } from '../../hooks/usePageMeta';
-import { series, type SeriesStatus } from '../../data/mockData';
+import type { Series, SeriesStatus } from '../../data/mockData';
+import { getMySeries } from '../../services/seriesApi';
 import { BookOpen } from 'lucide-react';
 
 const STATUS_OPTIONS: SeriesStatus[] = ['Draft', 'Submitted', 'Approved', 'In Progress', 'Revision Required', 'At Risk', 'Published', 'Cancelled'];
@@ -22,8 +23,30 @@ export default function SeriesListPage() {
   const [statusFilter, setStatusFilter] = useState('All');
   const [genreFilter, setGenreFilter] = useState('All');
   const [view, setView] = useState<'grid' | 'list'>('grid');
+  const [series, setSeries] = useState<Series[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
 
   useEffect(() => { setPageMeta({ title: 'Series của tôi' }); }, []);
+
+  useEffect(() => {
+    let active = true;
+    setLoading(true);
+    getMySeries()
+      .then(items => {
+        if (active) setSeries(items);
+      })
+      .catch(() => {
+        if (active) setError('Khong the tai series tu backend.');
+      })
+      .finally(() => {
+        if (active) setLoading(false);
+      });
+
+    return () => {
+      active = false;
+    };
+  }, []);
 
   const filtered = series.filter(s => {
     const matchSearch = s.title.toLowerCase().includes(search.toLowerCase()) || s.genre.toLowerCase().includes(search.toLowerCase());
@@ -59,7 +82,15 @@ export default function SeriesListPage() {
         </div>
       </div>
 
-      {filtered.length === 0 ? (
+      {error && (
+        <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+          {error}
+        </div>
+      )}
+
+      {loading ? (
+        <div className="text-sm text-muted-foreground">Dang tai series...</div>
+      ) : filtered.length === 0 ? (
         <EmptyState
           icon={<BookOpen size={24} />}
           title="Không tìm thấy series"

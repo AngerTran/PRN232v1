@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router';
 import { ChevronLeft, Calendar, FileText, Layers, Plus } from 'lucide-react';
 import Button from '../../components/ui/Button';
@@ -7,7 +7,9 @@ import ProgressBar from '../../components/ui/ProgressBar';
 import MangaPageCard from '../../components/ui/MangaPageCard';
 import EmptyState from '../../components/ui/EmptyState';
 import { usePageMeta } from '../../hooks/usePageMeta';
-import { getChapterById, getPagesByChapterId, getSeriesById } from '../../data/mockData';
+import type { Chapter, Series } from '../../data/mockData';
+import { getChapter, getSeries } from '../../services/seriesApi';
+import { getChapterPages, type WorkspacePageItem } from '../../services/workspaceApi';
 import { format } from 'date-fns';
 
 export default function ChapterDetailPage() {
@@ -15,9 +17,53 @@ export default function ChapterDetailPage() {
   const navigate = useNavigate();
   const { setPageMeta } = usePageMeta();
 
-  const chapter = getChapterById(chapterId ?? '');
-  const pages = getPagesByChapterId(chapterId ?? '');
-  const series = chapter ? getSeriesById(chapter.seriesId) : undefined;
+  const [chapter, setChapter] = useState<Chapter | null>(null);
+  const [pages, setPages] = useState<WorkspacePageItem[]>([]);
+  const [series, setSeries] = useState<Series | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let isActive = true;
+
+    async function loadChapterPages() {
+      if (!chapterId) return;
+
+      setIsLoading(true);
+      setError(null);
+
+      try {
+        const loadedChapter = await getChapter(chapterId);
+        const [loadedPages, loadedSeries] = await Promise.all([
+          getChapterPages(chapterId),
+          getSeries(loadedChapter.seriesId).catch(() => null),
+        ]);
+
+        if (isActive) {
+          setChapter(loadedChapter);
+          setPages(loadedPages);
+          setSeries(loadedSeries);
+        }
+      } catch (err) {
+        if (isActive) {
+          setChapter(null);
+          setPages([]);
+          setSeries(null);
+          setError(err instanceof Error ? err.message : 'Không thể tải page từ backend.');
+        }
+      } finally {
+        if (isActive) {
+          setIsLoading(false);
+        }
+      }
+    }
+
+    loadChapterPages();
+
+    return () => {
+      isActive = false;
+    };
+  }, [chapterId]);
 
   useEffect(() => {
     if (chapter) {
@@ -32,7 +78,14 @@ export default function ChapterDetailPage() {
     }
   }, [chapter?.id]);
 
+  if (isLoading) {
+    return <div className="p-6"><EmptyState title="Đang tải chương..." /></div>;
+  }
+
   if (!chapter) {
+    if (error) {
+      return <div className="p-6"><EmptyState title="Không tải được chương" description={error} /></div>;
+    }
     return <div className="p-6"><EmptyState title="Không tìm thấy chương" /></div>;
   }
 

@@ -35,6 +35,8 @@ public class SubmissionsController : ControllerBase
     }
 
     [HttpPost("/api/tasks/{taskId:guid}/submissions")]
+    [HttpPost("/api/tasks/{taskId:guid}/submission")]
+    [HttpPost("/api/task/{taskId:guid}/submission")]
     [Consumes("multipart/form-data")]
     [SwaggerOperation(Summary = "Submit task work", Description = "Uploads a submission file and optional preview/note for an open task. Requires assistant role and assignment to the task.")]
     [ProducesResponseType(typeof(SubmissionResponse), StatusCodes.Status201Created)]

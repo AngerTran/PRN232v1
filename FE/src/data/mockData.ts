@@ -822,31 +822,88 @@ export const MOCK_CREDENTIALS = {
 };
 
 export function loginUser(email: string, password: string): User | null {
-  if (email === MOCK_CREDENTIALS.mangaka.email && password === MOCK_CREDENTIALS.mangaka.password) {
+  const normalizedEmail = email.trim().toLowerCase();
+
+  if (normalizedEmail === MOCK_CREDENTIALS.mangaka.email.toLowerCase() && password === MOCK_CREDENTIALS.mangaka.password) {
     localStorage.setItem('inkflow_user', JSON.stringify(currentUser));
     return currentUser;
   }
-  if (email === MOCK_CREDENTIALS.assistant.email && password === MOCK_CREDENTIALS.assistant.password) {
+  if (normalizedEmail === MOCK_CREDENTIALS.assistant.email.toLowerCase() && password === MOCK_CREDENTIALS.assistant.password) {
     localStorage.setItem('inkflow_user', JSON.stringify(currentAssistant));
     return currentAssistant;
   }
-  if (email === MOCK_CREDENTIALS.editor.email && password === MOCK_CREDENTIALS.editor.password) {
+  if (normalizedEmail === MOCK_CREDENTIALS.editor.email.toLowerCase() && password === MOCK_CREDENTIALS.editor.password) {
     localStorage.setItem('inkflow_user', JSON.stringify(currentEditor));
     return currentEditor;
   }
-  if (email === MOCK_CREDENTIALS.board.email && password === MOCK_CREDENTIALS.board.password) {
+  if (normalizedEmail === MOCK_CREDENTIALS.board.email.toLowerCase() && password === MOCK_CREDENTIALS.board.password) {
     localStorage.setItem('inkflow_user', JSON.stringify(currentBoard));
     return currentBoard;
   }
-  if (email === MOCK_CREDENTIALS.admin.email && password === MOCK_CREDENTIALS.admin.password) {
+  if (normalizedEmail === MOCK_CREDENTIALS.admin.email.toLowerCase() && password === MOCK_CREDENTIALS.admin.password) {
     localStorage.setItem('inkflow_user', JSON.stringify(currentAdmin));
     return currentAdmin;
   }
   return null;
 }
 
+type ApiAuthResponse = {
+  accessToken: string;
+  refreshToken: string;
+  user: {
+    id: string;
+    email?: string | null;
+    fullName?: string | null;
+    avatarUrl?: string | null;
+    role: User['role'] | string;
+  };
+};
+
+const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:5120').replace(/\/$/, '');
+
+function normalizeRole(role: string): User['role'] {
+  const normalized = role.trim().toLowerCase();
+  if (normalized === 'admin' || normalized === 'assistant' || normalized === 'editor' || normalized === 'board') {
+    return normalized;
+  }
+  return 'mangaka';
+}
+
+function saveAuthSession(response: ApiAuthResponse): User {
+  const user: User = {
+    id: response.user.id,
+    name: response.user.fullName || response.user.email || 'MangaFlow User',
+    email: response.user.email ?? '',
+    role: normalizeRole(response.user.role),
+    avatar: response.user.avatarUrl ?? '',
+    bio: '',
+    joinDate: new Date().toISOString().slice(0, 10),
+  };
+
+  localStorage.setItem('inkflow_user', JSON.stringify(user));
+  localStorage.setItem('inkflow_access_token', response.accessToken);
+  localStorage.setItem('inkflow_refresh_token', response.refreshToken);
+  return user;
+}
+
+export async function loginUserWithApi(email: string, password: string): Promise<User | null> {
+  const response = await fetch(`${API_BASE_URL}/api/auth/login`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email: email.trim(), password }),
+  });
+
+  if (!response.ok) {
+    return null;
+  }
+
+  return saveAuthSession(await response.json());
+}
+
 export function logoutUser(): void {
   localStorage.removeItem('inkflow_user');
+  localStorage.removeItem('inkflow_access_token');
+  localStorage.removeItem('inkflow_refresh_token');
 }
 
 export function getLoggedInUser(): User | null {
@@ -886,6 +943,48 @@ export function getTasksByPageId(pageId: string): Task[] {
 
 export function getTaskById(id: string): Task | undefined {
   return tasks.find(t => t.id === id);
+}
+
+export function createMockTaskForPage(input: {
+  pageId: string;
+  type: TaskType;
+  assistantId: string;
+  description: string;
+  deadline: string;
+  price: number;
+  region: Task['region'];
+}): Task | undefined {
+  const page = getPageById(input.pageId);
+  if (!page) return undefined;
+
+  const chapter = getChapterById(page.chapterId);
+  if (!chapter) return undefined;
+
+  const taskSeries = getSeriesById(chapter.seriesId);
+  if (!taskSeries) return undefined;
+
+  const nextTask: Task = {
+    id: `t${Date.now()}`,
+    pageId: page.id,
+    chapterId: chapter.id,
+    seriesId: taskSeries.id,
+    seriesTitle: taskSeries.title,
+    chapterTitle: chapter.title,
+    pageNumber: page.pageNumber,
+    title: `${input.type}: Page ${page.pageNumber} area`,
+    type: input.type,
+    assistantId: input.assistantId,
+    description: input.description,
+    deadline: input.deadline,
+    price: input.price,
+    status: 'Pending',
+    region: input.region,
+    createdAt: new Date().toISOString().slice(0, 10),
+  };
+
+  tasks.unshift(nextTask);
+  page.tasksCount += 1;
+  return nextTask;
 }
 
 export function getAssistantById(id: string): User | undefined {

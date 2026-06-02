@@ -1,18 +1,61 @@
+import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router';
 import { usePageMeta } from '../../hooks/usePageMeta';
 import { Card } from '../../app/components/ui/card';
 import { ChapterReviewCard } from '../../app/components/ui/editor';
-import {
-  currentEditor,
-  getChaptersNeedingReview,
-  getEditorReviewByChapterId,
-} from '../../data/mockData';
+import type { Chapter, Series } from '../../data/mockData';
+import { getSeriesChapters, getVisibleSeries } from '../../services/seriesApi';
 
 export default function ChapterReviewsPage() {
   usePageMeta({ title: 'Chapter Reviews' });
   const navigate = useNavigate();
+  const [seriesList, setSeriesList] = useState<Series[]>([]);
+  const [chapters, setChapters] = useState<Chapter[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
-  const chaptersToReview = getChaptersNeedingReview(currentEditor.id);
+  useEffect(() => {
+    let isActive = true;
+
+    async function loadReviews() {
+      setIsLoading(true);
+      setError(null);
+
+      try {
+        const series = await getVisibleSeries();
+        const chapterGroups = await Promise.all(
+          series.map(item => getSeriesChapters(item.id).catch(() => []))
+        );
+
+        if (isActive) {
+          setSeriesList(series);
+          setChapters(chapterGroups.flat());
+        }
+      } catch (err) {
+        if (isActive) {
+          setSeriesList([]);
+          setChapters([]);
+          setError(err instanceof Error ? err.message : 'Không thể tải chapter reviews từ backend.');
+        }
+      } finally {
+        if (isActive) {
+          setIsLoading(false);
+        }
+      }
+    }
+
+    loadReviews();
+
+    return () => {
+      isActive = false;
+    };
+  }, []);
+
+  const seriesTitleById = useMemo(
+    () => new Map(seriesList.map(series => [series.id, series.title])),
+    [seriesList]
+  );
+  const chaptersToReview = chapters.filter(chapter => chapter.status === 'Review' || chapter.status === 'In Progress');
 
   return (
     <div className="p-6 space-y-6">
@@ -23,19 +66,28 @@ export default function ChapterReviewsPage() {
         </p>
       </div>
 
-      {chaptersToReview.length > 0 ? (
+      {isLoading ? (
+        <Card>
+          <div className="py-12 text-center text-muted-foreground">
+            Đang tải chapter reviews...
+          </div>
+        </Card>
+      ) : error ? (
+        <Card>
+          <div className="py-12 text-center text-destructive">
+            {error}
+          </div>
+        </Card>
+      ) : chaptersToReview.length > 0 ? (
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-          {chaptersToReview.map(chapter => {
-            const review = getEditorReviewByChapterId(chapter.id);
-            return (
-              <ChapterReviewCard
-                key={chapter.id}
-                chapter={chapter}
-                review={review}
-                onReview={() => navigate(`/editor/chapters/${chapter.id}/review`)}
-              />
-            );
-          })}
+          {chaptersToReview.map(chapter => (
+            <ChapterReviewCard
+              key={chapter.id}
+              chapter={chapter}
+              seriesTitle={seriesTitleById.get(chapter.seriesId)}
+              onReview={() => navigate(`/editor/chapters/${chapter.id}/review`)}
+            />
+          ))}
         </div>
       ) : (
         <Card>

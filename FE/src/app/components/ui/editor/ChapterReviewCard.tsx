@@ -1,4 +1,4 @@
-import { Chapter, EditorReview, getSeriesById } from '../../../../data/mockData';
+import type { Chapter, EditorReview } from '../../../../data/mockData';
 import { Card, CardContent } from '../card';
 import { ReviewStatusBadge } from './ReviewStatusBadge';
 import { Button } from '../button';
@@ -9,11 +9,11 @@ import { vi } from 'date-fns/locale';
 interface ChapterReviewCardProps {
   chapter: Chapter;
   review?: EditorReview;
+  seriesTitle?: string;
   onReview?: () => void;
 }
 
-export function ChapterReviewCard({ chapter, review, onReview }: ChapterReviewCardProps) {
-  const series = getSeriesById(chapter.seriesId);
+export function ChapterReviewCard({ chapter, review, seriesTitle, onReview }: ChapterReviewCardProps) {
   const deadline = new Date(chapter.deadline);
   const daysUntil = Math.ceil((deadline.getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24));
   const isOverdue = daysUntil < 0;
@@ -26,7 +26,7 @@ export function ChapterReviewCard({ chapter, review, onReview }: ChapterReviewCa
           <div className="flex-1">
             <h3 className="font-semibold text-lg">{chapter.title}</h3>
             <p className="text-sm text-muted-foreground">
-              {series?.title} - Chapter {chapter.number}
+              {seriesTitle ?? 'Series'} - Chapter {chapter.number}
             </p>
           </div>
           {review && <ReviewStatusBadge status={review.status} />}

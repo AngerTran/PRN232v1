@@ -1,16 +1,10 @@
+import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router';
 import { usePageMeta } from '../../hooks/usePageMeta';
 import { Card, CardContent, CardHeader, CardTitle } from '../../app/components/ui/card';
 import { SeriesSummaryCard, ChapterReviewCard } from '../../app/components/ui/editor';
-import {
-  currentEditor,
-  getSeriesByEditorId,
-  getChaptersNeedingReview,
-  getEditorReviewByChapterId,
-  getAtRiskSeries,
-  editorReviews,
-  deadlineInfos,
-} from '../../data/mockData';
+import { getLoggedInUser, type Chapter, type Series } from '../../data/mockData';
+import { getSeriesChapters, getVisibleSeries } from '../../services/seriesApi';
 import {
   BookOpen,
   FileText,
@@ -22,18 +16,63 @@ import {
 export default function EditorDashboardPage() {
   usePageMeta({ title: 'Editor Dashboard' });
   const navigate = useNavigate();
+  const editor = getLoggedInUser();
+  const [assignedSeries, setAssignedSeries] = useState<Series[]>([]);
+  const [chapters, setChapters] = useState<Chapter[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
-  const assignedSeries = getSeriesByEditorId(currentEditor.id);
-  const chaptersToReview = getChaptersNeedingReview(currentEditor.id);
-  const atRiskSeries = getAtRiskSeries();
+  useEffect(() => {
+    let isActive = true;
+
+    async function loadDashboard() {
+      setIsLoading(true);
+      setError(null);
+
+      try {
+        const series = await getVisibleSeries();
+        const chapterGroups = await Promise.all(
+          series.map(item => getSeriesChapters(item.id).catch(() => []))
+        );
+
+        if (isActive) {
+          setAssignedSeries(series);
+          setChapters(chapterGroups.flat());
+        }
+      } catch (err) {
+        if (isActive) {
+          setAssignedSeries([]);
+          setChapters([]);
+          setError(err instanceof Error ? err.message : 'Không thể tải editor dashboard từ backend.');
+        }
+      } finally {
+        if (isActive) {
+          setIsLoading(false);
+        }
+      }
+    }
+
+    loadDashboard();
+
+    return () => {
+      isActive = false;
+    };
+  }, []);
+
+  const atRiskSeries = assignedSeries.filter(series => series.isAtRisk);
+  const chaptersToReview = chapters.filter(chapter => chapter.status === 'Review' || chapter.status === 'In Progress');
 
   // Summary stats
-  const pendingReviews = editorReviews.filter(r => r.status === 'Pending' || r.status === 'In Review').length;
-  const revisionRequests = editorReviews.filter(r => r.status === 'Revision Required').length;
-  const upcomingDeadlines = deadlineInfos.filter(d => {
-    const days = Math.ceil((new Date(d.deadline).getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24));
+  const pendingReviews = chaptersToReview.length;
+  const revisionRequests = chapters.filter(chapter => chapter.status === 'Review').length;
+  const upcomingDeadlines = chapters.filter(chapter => {
+    const days = Math.ceil((new Date(chapter.deadline).getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24));
     return days >= 0 && days <= 7;
   }).length;
+  const seriesTitleById = useMemo(
+    () => new Map(assignedSeries.map(series => [series.id, series.title])),
+    [assignedSeries]
+  );
 
   // Get chapters for display
   const chaptersNeedReview = chaptersToReview.slice(0, 3);
@@ -44,7 +83,7 @@ export default function EditorDashboardPage() {
       <Card>
         <CardHeader>
           <CardTitle className="text-2xl">
-            Chào mừng trở lại, {currentEditor.name}
+            Chào mừng trở lại, {editor?.name ?? 'Editor'}
           </CardTitle>
         </CardHeader>
         <CardContent>
@@ -59,6 +98,12 @@ export default function EditorDashboardPage() {
           </p>
         </CardContent>
       </Card>
+
+      {error && (
+        <Card>
+          <CardContent className="py-4 text-destructive">{error}</CardContent>
+        </Card>
+      )}
 
       {/* Summary Cards */}
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-5">
@@ -121,19 +166,22 @@ export default function EditorDashboardPage() {
       {/* Pending Reviews */}
       <div>
         <h2 className="text-lg font-semibold mb-4">Chapters Cần Review</h2>
-        {chaptersNeedReview.length > 0 ? (
+        {isLoading ? (
+          <Card>
+            <CardContent className="py-8 text-center text-muted-foreground">
+              Đang tải chapters...
+            </CardContent>
+          </Card>
+        ) : chaptersNeedReview.length > 0 ? (
           <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-            {chaptersNeedReview.map(chapter => {
-              const review = getEditorReviewByChapterId(chapter.id);
-              return (
-                <ChapterReviewCard
-                  key={chapter.id}
-                  chapter={chapter}
-                  review={review}
-                  onReview={() => navigate(`/editor/chapters/${chapter.id}/review`)}
-                />
-              );
-            })}
+            {chaptersNeedReview.map(chapter => (
+              <ChapterReviewCard
+                key={chapter.id}
+                chapter={chapter}
+                seriesTitle={seriesTitleById.get(chapter.seriesId)}
+                onReview={() => navigate(`/editor/chapters/${chapter.id}/review`)}
+              />
+            ))}
           </div>
         ) : (
           <Card>

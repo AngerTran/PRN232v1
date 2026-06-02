@@ -34,6 +34,7 @@ public class TasksController : ControllerBase
     }
 
     [HttpGet("/api/tasks/my")]
+    [HttpGet("/api/task/my")]
     [SwaggerOperation(Summary = "List my tasks", Description = "Returns tasks assigned to the authenticated assistant.")]
     [ProducesResponseType(typeof(IReadOnlyList<TaskItemResponse>), StatusCodes.Status200OK)]
     public async Task<ActionResult<IReadOnlyList<TaskItemResponse>>> MyTasks(CancellationToken cancellationToken)
@@ -47,6 +48,8 @@ public class TasksController : ControllerBase
     }
 
     [HttpPost("/api/pages/{pageId:guid}/tasks")]
+    [HttpPost("/api/pages/{pageId:guid}/task")]
+    [HttpPost("/api/page/{pageId:guid}/task")]
     [SwaggerOperation(Summary = "Create page task", Description = "Creates an editor task for a page. Requires mangaka, assigned editor, or admin permission on the page's series.")]
     [ProducesResponseType(typeof(TaskItemResponse), StatusCodes.Status201Created)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
@@ -62,6 +65,22 @@ public class TasksController : ControllerBase
 
         var created = await _taskService.CreateAsync(userId, pageId, request, cancellationToken);
         return CreatedAtAction(nameof(GetById), new { id = created.Id }, created);
+    }
+
+    [HttpPatch("/api/tasks/{id:guid}/status_in_progress")]
+    [HttpPatch("/api/task/{id:guid}/status_in_progress")]
+    [SwaggerOperation(Summary = "Mark task in progress", Description = "Marks an assigned assistant task as in progress.")]
+    [ProducesResponseType(typeof(TaskItemResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<ActionResult<TaskItemResponse>> MarkInProgress(Guid id, CancellationToken cancellationToken)
+    {
+        if (!this.TryGetUserId(out var userId))
+        {
+            return Unauthorized();
+        }
+
+        var updated = await _taskService.UpdateStatusAsync(userId, id, new UpdateTaskStatusRequest(TaskStatuses.InProgress), cancellationToken);
+        return updated is null ? NotFound() : Ok(updated);
     }
 
     [HttpGet("/api/tasks/{id:guid}")]

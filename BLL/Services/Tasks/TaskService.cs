@@ -5,6 +5,8 @@ using DAL.Models;
 using DAL.Repositories;
 using DAL.Services.Workflow;
 using BLL.Services.Workflow;
+using BLL.Services.Notifications;
+using System.Text.Json;
 
 namespace BLL.Services.Tasks;
 
@@ -12,13 +14,15 @@ public class TaskService
 {
     private readonly UnitOfWork _unitOfWork;
     private readonly PageAccessService _pageAccess;
+    private readonly NotificationService _notificationService;
     private Repository<EditorTask> TaskRepository => _unitOfWork.Repository<EditorTask>();
     private Repository<Profile> ProfileRepository => _unitOfWork.Repository<Profile>();
 
-    public TaskService(UnitOfWork unitOfWork, PageAccessService pageAccess)
+    public TaskService(UnitOfWork unitOfWork, PageAccessService pageAccess, NotificationService notificationService)
     {
         _unitOfWork = unitOfWork;
         _pageAccess = pageAccess;
+        _notificationService = notificationService;
     }
 
     public async Task<KanbanResponse> GetKanbanByChapterAsync(
@@ -116,6 +120,8 @@ public class TaskService
             throw new ArgumentException($"Invalid task type. Allowed: {string.Join(", ", TaskTypes.All)}.");
         }
 
+        var region = NormalizeRegionJson(request.Region);
+
         var caller = await _pageAccess.RequireProfileAsync(callerId, cancellationToken);
         var ctx = await _pageAccess.GetPageContextAsync(pageId, cancellationToken)
             ?? throw new WorkflowForbiddenException("Page not found.");
@@ -140,7 +146,7 @@ public class TaskService
             Id = Guid.NewGuid(),
             PageId = pageId,
             TaskType = request.TaskType.Trim(),
-            Region = request.Region,
+            Region = region,
             Title = request.Title?.Trim(),
             Description = request.Description,
             AssignedTo = request.AssignedTo,
@@ -154,6 +160,15 @@ public class TaskService
 
         await TaskRepository.AddAsync(task, cancellationToken);
         await _unitOfWork.SaveChangesAsync(cancellationToken);
+
+        if (task.AssignedTo is not null)
+        {
+            await _notificationService.CreateAsync(
+                task.AssignedTo.Value,
+                "Task mới được giao",
+                $"{ctx.Series.Title} - Trang {ctx.Page.PageNumber}: {task.Title ?? task.TaskType} đã được giao cho bạn.",
+                cancellationToken);
+        }
 
         return (await GetByIdAsync(callerId, task.Id, cancellationToken))!;
     }
@@ -170,6 +185,8 @@ public class TaskService
         {
             return null;
         }
+
+        var previousAssigneeId = task.AssignedTo;
 
         var ctx = await _pageAccess.GetPageContextAsync(task.PageId, cancellationToken)
             ?? throw new WorkflowForbiddenException("Page not found.");
@@ -202,7 +219,7 @@ public class TaskService
 
         if (request.Region is not null)
         {
-            task.Region = request.Region;
+            task.Region = NormalizeRegionJson(request.Region);
         }
 
         if (request.Priority is not null)
@@ -218,6 +235,15 @@ public class TaskService
         task.UpdatedAt = DateTime.UtcNow;
         TaskRepository.Update(task);
         await _unitOfWork.SaveChangesAsync(cancellationToken);
+
+        if (request.AssignedTo is not null && request.AssignedTo != previousAssigneeId)
+        {
+            await _notificationService.CreateAsync(
+                request.AssignedTo.Value,
+                "Task mới được giao",
+                $"{ctx.Series.Title} - Trang {ctx.Page.PageNumber}: {task.Title ?? task.TaskType} đã được giao cho bạn.",
+                cancellationToken);
+        }
 
         return await GetByIdAsync(callerId, taskId, cancellationToken);
     }
@@ -365,4 +391,22 @@ public class TaskService
             t.StartedAt,
             t.CompletedAt,
             t.CreatedAt);
+
+    private static string NormalizeRegionJson(string region)
+    {
+        if (string.IsNullOrWhiteSpace(region))
+        {
+            throw new ArgumentException("Region is required.");
+        }
+
+        try
+        {
+            using var document = JsonDocument.Parse(region);
+            return document.RootElement.GetRawText();
+        }
+        catch (JsonException ex)
+        {
+            throw new ArgumentException("Region must be valid JSON.", ex);
+        }
+    }
 }

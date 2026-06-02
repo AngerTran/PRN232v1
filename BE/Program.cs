@@ -28,6 +28,14 @@ builder.Services.AddDbContext<AppDbContext>((serviceProvider, options) =>
             .MapEnum<PageStatus>("page_status")));
 
 builder.Services.AddControllers();
+builder.Services.AddCors(options =>
+{
+    options.AddPolicy("Frontend", policy =>
+        policy
+            .AllowAnyOrigin()
+            .AllowAnyHeader()
+            .AllowAnyMethod());
+});
 builder.Services.AddRepositoriesAndServices();
 builder.Services.AddAppAuthentication(builder.Configuration);
 builder.Services.AddAppSwagger();
@@ -40,7 +48,11 @@ if (app.Environment.IsDevelopment())
 }
 
 app.UseMiddleware<AuthExceptionMiddleware>();
-app.UseHttpsRedirection();
+if (!app.Environment.IsDevelopment())
+{
+    app.UseHttpsRedirection();
+}
+app.UseCors("Frontend");
 app.UseAuthentication();
 app.UseAuthorization();
 app.MapControllers();

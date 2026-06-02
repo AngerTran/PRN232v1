@@ -1,16 +1,17 @@
-import { useState, useRef, useCallback, useEffect, type MouseEvent } from 'react';
+import { useState, useRef, useCallback, useEffect, type PointerEvent } from 'react';
 import { useParams, useNavigate } from 'react-router';
-import { ChevronLeft, Maximize2, ZoomIn, ZoomOut, RotateCcw, Target, X } from 'lucide-react';
+import { ChevronLeft, ZoomIn, ZoomOut, RotateCcw, Target, X } from 'lucide-react';
 import { clsx } from 'clsx';
-import TaskPanel from '../../components/workspace/TaskPanel';
+import TaskPanel, { type TaskFormData } from '../../components/workspace/TaskPanel';
 import TaskList from '../../components/workspace/TaskList';
 import MangaPanelPreview from '../../components/workspace/MangaPanelPreview';
 import Badge from '../../components/ui/Badge';
-import { getPageById, getPagesByChapterId, getTasksByPageId, getChapterById } from '../../data/mockData';
-
-interface Region {
-  x: number; y: number; width: number; height: number;
-}
+import {
+  createWorkspaceTask,
+  getWorkspace,
+  type Region,
+  type WorkspacePayload,
+} from '../../services/workspaceApi';
 
 export default function WorkspacePage() {
   const { pageId } = useParams<{ pageId: string }>();
@@ -23,14 +24,59 @@ export default function WorkspacePage() {
   const [dragStart, setDragStart] = useState<{ x: number; y: number } | null>(null);
   const [currentDrag, setCurrentDrag] = useState<Region | null>(null);
   const [zoom, setZoom] = useState(100);
+  const [workspace, setWorkspace] = useState<WorkspacePayload | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const canvasRef = useRef<HTMLDivElement>(null);
 
-  const page = getPageById(selectedPageId);
-  const chapter = page ? getChapterById(page.chapterId) : undefined;
-  const allPages = chapter ? getPagesByChapterId(chapter.id) : [];
-  const pageTasks = getTasksByPageId(selectedPageId);
+  const page = workspace?.page;
+  const allPages = workspace?.pages ?? [];
+  const pageTasks = workspace?.tasks ?? [];
+  const assistants = workspace?.assistants ?? [];
 
-  const getRelativePos = useCallback((e: MouseEvent<HTMLDivElement>): { x: number; y: number } => {
+  useEffect(() => {
+    setIsSelecting(false);
+    setRegion(null);
+    setHoverRegion(null);
+    setDragStart(null);
+    setCurrentDrag(null);
+  }, [selectedPageId]);
+
+  useEffect(() => {
+    let isActive = true;
+
+    async function loadWorkspace() {
+      setIsLoading(true);
+      setError(null);
+
+      try {
+        const payload = await getWorkspace(selectedPageId);
+        if (isActive) {
+          setWorkspace(payload);
+        }
+      } catch (err) {
+        if (isActive) {
+          setWorkspace(null);
+          setError(err instanceof Error ? err.message : 'Không thể tải workspace từ backend.');
+        }
+      } finally {
+        if (isActive) {
+          setIsLoading(false);
+        }
+      }
+    }
+
+    if (selectedPageId) {
+      loadWorkspace();
+    }
+
+    return () => {
+      isActive = false;
+    };
+  }, [selectedPageId]);
+
+  const getRelativePos = useCallback((e: PointerEvent<HTMLDivElement>): { x: number; y: number } => {
     const rect = canvasRef.current!.getBoundingClientRect();
     return {
       x: Math.max(0, Math.min(100, ((e.clientX - rect.left) / rect.width) * 100)),
@@ -38,15 +84,16 @@ export default function WorkspacePage() {
     };
   }, []);
 
-  const handleMouseDown = (e: MouseEvent<HTMLDivElement>) => {
+  const handlePointerDown = (e: PointerEvent<HTMLDivElement>) => {
     if (!isSelecting) return;
     const pos = getRelativePos(e);
+    e.currentTarget.setPointerCapture(e.pointerId);
     setDragStart(pos);
     setCurrentDrag(null);
     e.preventDefault();
   };
 
-  const handleMouseMove = (e: MouseEvent<HTMLDivElement>) => {
+  const handlePointerMove = (e: PointerEvent<HTMLDivElement>) => {
     if (!isSelecting || !dragStart) return;
     const pos = getRelativePos(e);
     setCurrentDrag({
@@ -57,8 +104,11 @@ export default function WorkspacePage() {
     });
   };
 
-  const handleMouseUp = (e: MouseEvent<HTMLDivElement>) => {
+  const handlePointerUp = (e: PointerEvent<HTMLDivElement>) => {
     if (!isSelecting || !dragStart) return;
+    if (e.currentTarget.hasPointerCapture(e.pointerId)) {
+      e.currentTarget.releasePointerCapture(e.pointerId);
+    }
     const pos = getRelativePos(e);
     const r = {
       x: Math.min(dragStart.x, pos.x),
@@ -74,11 +124,57 @@ export default function WorkspacePage() {
     setIsSelecting(false);
   };
 
+  const handlePointerCancel = (e: PointerEvent<HTMLDivElement>) => {
+    if (e.currentTarget.hasPointerCapture(e.pointerId)) {
+      e.currentTarget.releasePointerCapture(e.pointerId);
+    }
+    setDragStart(null);
+    setCurrentDrag(null);
+  };
+
+  const handleAssignTask = async (data: TaskFormData & { region: string }) => {
+    if (!region) return;
+
+    setIsSubmitting(true);
+    setError(null);
+
+    try {
+      const created = await createWorkspaceTask({
+        pageId: selectedPageId,
+        type: data.type,
+        assistantId: data.assistantId,
+        description: data.description,
+        deadline: data.deadline,
+        price: Number(data.price) || 0,
+        region,
+      });
+
+      setWorkspace(current => current
+        ? {
+            ...current,
+            page: {
+              ...current.page,
+              tasksCount: (current.page.tasksCount ?? current.tasks.length) + 1,
+            },
+            pages: current.pages.map(p => p.id === selectedPageId
+              ? { ...p, tasksCount: (p.tasksCount ?? current.tasks.length) + 1 }
+              : p),
+            tasks: [created, ...current.tasks],
+          }
+        : current
+      );
+      setRegion(null);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Không thể giao nhiệm vụ qua backend.');
+      throw err;
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
   const regionLabel = region
     ? `Region: ${Math.round(region.x)}%,${Math.round(region.y)}% — ${Math.round(region.width)}×${Math.round(region.height)}`
     : undefined;
-
-  const displayRegion = hoverRegion || region || currentDrag;
 
   return (
     <div className="flex h-full overflow-hidden" style={{ background: '#1C1C1C' }}>
@@ -97,7 +193,7 @@ export default function WorkspacePage() {
             )}
           >
             <div className="w-full h-full bg-[#F0EBE0]">
-              <MangaPanelPreview layout={p.panelLayout} />
+              <MangaPanelPreview layout={p.panelLayout ?? 0} />
             </div>
           </button>
         ))}
@@ -129,7 +225,11 @@ export default function WorkspacePage() {
             </button>
           </div>
           <button
-            onClick={() => { setIsSelecting(s => !s); if (isSelecting) { setRegion(null); setCurrentDrag(null); } }}
+            onClick={() => {
+              setIsSelecting(s => !s);
+              setDragStart(null);
+              setCurrentDrag(null);
+            }}
             className={clsx(
               'flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all duration-150',
               isSelecting ? 'bg-primary text-white' : 'bg-[#333] text-gray-300 hover:bg-[#444] hover:text-white'
@@ -149,21 +249,22 @@ export default function WorkspacePage() {
         <div className="flex-1 overflow-auto flex items-center justify-center p-8" style={{ background: '#2B2B2B' }}>
           <div
             ref={canvasRef}
-            onMouseDown={handleMouseDown}
-            onMouseMove={handleMouseMove}
-            onMouseUp={handleMouseUp}
-            onMouseLeave={() => { setDragStart(null); setCurrentDrag(null); }}
+            onPointerDown={handlePointerDown}
+            onPointerMove={handlePointerMove}
+            onPointerUp={handlePointerUp}
+            onPointerCancel={handlePointerCancel}
             className="relative shadow-2xl"
             style={{
               width: `${(zoom / 100) * 420}px`,
               aspectRatio: '3/4',
               cursor: isSelecting ? 'crosshair' : 'default',
               userSelect: 'none',
+              touchAction: isSelecting ? 'none' : 'auto',
             }}
           >
             {/* Manga page */}
             <div className="w-full h-full bg-[#F2EDE0] overflow-hidden">
-              {page && <MangaPanelPreview layout={page.panelLayout} />}
+              {page && <MangaPanelPreview layout={page.panelLayout ?? 0} />}
             </div>
 
             {/* Existing task regions */}
@@ -224,11 +325,20 @@ export default function WorkspacePage() {
       <div className="w-[300px] flex flex-col bg-[#1E1E1E] border-l border-[#2E2E2E] shrink-0 overflow-hidden">
         {/* Task panel (form) */}
         <div className="flex-1 overflow-hidden min-h-0 border-b border-[#2E2E2E]">
+          {error && (
+            <div className="mx-4 mt-3 rounded-lg border border-red-900/60 bg-red-950/40 px-3 py-2 text-xs text-red-200">
+              {error}
+            </div>
+          )}
           <TaskPanel
             hasRegion={!!region}
+            region={region}
             onSelectRegion={() => { setIsSelecting(true); setRegion(null); }}
             isSelectingRegion={isSelecting}
             regionLabel={regionLabel}
+            onAssignTask={handleAssignTask}
+            assistants={assistants}
+            isSubmitting={isSubmitting}
           />
         </div>
 
@@ -238,7 +348,11 @@ export default function WorkspacePage() {
             <h3 className="text-xs font-semibold text-gray-300 uppercase tracking-wide">Nhiệm vụ Trang ({pageTasks.length})</h3>
           </div>
           <div className="flex-1 overflow-y-auto">
-            <TaskList tasks={pageTasks} onHoverTask={setHoverRegion} />
+            {isLoading ? (
+              <div className="p-4 text-center text-gray-500 text-sm">Đang tải task...</div>
+            ) : (
+              <TaskList tasks={pageTasks} assistants={assistants} onHoverTask={setHoverRegion} />
+            )}
           </div>
         </div>
       </div>

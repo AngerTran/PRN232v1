@@ -1,9 +1,8 @@
 import { useState } from 'react';
-import { ChevronDown, ChevronUp, User, Calendar, DollarSign } from 'lucide-react';
+import { ChevronDown, ChevronUp, Calendar, DollarSign } from 'lucide-react';
 import { clsx } from 'clsx';
-import { getAssistantById, type Task } from '../../data/mockData';
+import type { WorkspaceAssistant, WorkspaceTask } from '../../services/workspaceApi';
 import { TypeBadge } from '../ui/Badge';
-import Badge from '../ui/Badge';
 import { format } from 'date-fns';
 
 const STATUS_DOT: Record<string, string> = {
@@ -15,12 +14,14 @@ const STATUS_DOT: Record<string, string> = {
 };
 
 interface TaskListProps {
-  tasks: Task[];
-  onHoverTask?: (region: Task['region'] | null) => void;
+  tasks: WorkspaceTask[];
+  assistants: WorkspaceAssistant[];
+  onHoverTask?: (region: WorkspaceTask['region'] | null) => void;
 }
 
-export default function TaskList({ tasks, onHoverTask }: TaskListProps) {
+export default function TaskList({ tasks, assistants, onHoverTask }: TaskListProps) {
   const [expanded, setExpanded] = useState<string | null>(null);
+  const assistantNames = new Map(assistants.map(assistant => [assistant.id, assistant.name]));
 
   if (tasks.length === 0) {
     return (
@@ -33,7 +34,7 @@ export default function TaskList({ tasks, onHoverTask }: TaskListProps) {
   return (
     <div className="divide-y divide-[#3A3A3A]">
       {tasks.map(task => {
-        const assistant = getAssistantById(task.assistantId);
+        const assistantName = task.assistantName ?? assistantNames.get(task.assistantId) ?? 'Unknown assistant';
         const isExpanded = expanded === task.id;
 
         return (
@@ -52,7 +53,7 @@ export default function TaskList({ tasks, onHoverTask }: TaskListProps) {
                 <p className="text-sm font-semibold text-white truncate">{task.title}</p>
                 <div className="flex items-center gap-2 mt-0.5">
                   <TypeBadge type={task.type} className="text-[9px]" />
-                  <span className="text-xs text-gray-400 truncate">{assistant?.name}</span>
+                  <span className="text-xs text-gray-400 truncate">{assistantName}</span>
                 </div>
               </div>
               {isExpanded ? (

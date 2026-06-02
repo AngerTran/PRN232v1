@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router';
 import { usePageMeta } from '../../hooks/usePageMeta';
 import { Card } from '../../app/components/ui/card';
@@ -11,7 +11,8 @@ import {
   SelectValue,
 } from '../../app/components/ui/select';
 import { SeriesSummaryCard } from '../../app/components/ui/editor';
-import { currentEditor, getSeriesByEditorId } from '../../data/mockData';
+import type { Series } from '../../data/mockData';
+import { getVisibleSeries } from '../../services/seriesApi';
 import { Search } from 'lucide-react';
 
 export default function AssignedSeriesPage() {
@@ -20,8 +21,40 @@ export default function AssignedSeriesPage() {
 
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
+  const [allSeries, setAllSeries] = useState<Series[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
-  const allSeries = getSeriesByEditorId(currentEditor.id);
+  useEffect(() => {
+    let isActive = true;
+
+    async function loadSeries() {
+      setIsLoading(true);
+      setError(null);
+
+      try {
+        const series = await getVisibleSeries();
+        if (isActive) {
+          setAllSeries(series);
+        }
+      } catch (err) {
+        if (isActive) {
+          setAllSeries([]);
+          setError(err instanceof Error ? err.message : 'Không thể tải series từ backend.');
+        }
+      } finally {
+        if (isActive) {
+          setIsLoading(false);
+        }
+      }
+    }
+
+    loadSeries();
+
+    return () => {
+      isActive = false;
+    };
+  }, []);
 
   // Filter
   const filteredSeries = allSeries.filter(series => {
@@ -67,7 +100,19 @@ export default function AssignedSeriesPage() {
       </div>
 
       {/* Series Grid */}
-      {filteredSeries.length > 0 ? (
+      {isLoading ? (
+        <Card>
+          <div className="py-12 text-center text-muted-foreground">
+            Đang tải series...
+          </div>
+        </Card>
+      ) : error ? (
+        <Card>
+          <div className="py-12 text-center text-destructive">
+            {error}
+          </div>
+        </Card>
+      ) : filteredSeries.length > 0 ? (
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
           {filteredSeries.map(series => (
             <SeriesSummaryCard

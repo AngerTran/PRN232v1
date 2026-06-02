@@ -142,6 +142,7 @@ export const router = createBrowserRouter([
       // Editor
       { path: '/editor/dashboard', element: <EditorDashboardPage /> },
       { path: '/editor/series', element: <AssignedSeriesPage /> },
+      { path: '/editor/series/:seriesId', element: <SeriesDetailPage /> },
       { path: '/editor/reviews', element: <ChapterReviewsPage /> },
       { path: '/editor/ranking-watch', element: <RankingWatchPage /> },
       { path: '/editor/series-defense', element: <SeriesDefensePage /> },
