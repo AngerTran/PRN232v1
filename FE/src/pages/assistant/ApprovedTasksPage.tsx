@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router';
 import { usePageMeta } from '../../hooks/usePageMeta';
 import { Card } from '../../app/components/ui/card';
@@ -11,7 +12,8 @@ import {
   TableHeader,
   TableRow,
 } from '../../app/components/ui/table';
-import { currentAssistant, getTasksByStatus, assistantIncome } from '../../data/mockData';
+import { assistantIncome, type Task } from '../../data/mockData';
+import { getMyTasks } from '../../services/tasksApi';
 import { Eye, CheckCircle } from 'lucide-react';
 import { format } from 'date-fns';
 import { vi } from 'date-fns/locale';
@@ -20,9 +22,27 @@ export default function ApprovedTasksPage() {
   usePageMeta({ title: 'Task Đã Duyệt' });
   const navigate = useNavigate();
 
-  const approvedTasks = getTasksByStatus(currentAssistant.id, 'Approved');
+  const [approvedTasks, setApprovedTasks] = useState<Task[]>([]);
+  const [loading, setLoading] = useState(true);
 
-  // Get payment status for each task
+  useEffect(() => {
+    let isActive = true;
+    getMyTasks()
+      .then(tasks => {
+        if (isActive) setApprovedTasks(tasks.filter(t => t.status === 'Approved'));
+      })
+      .catch(() => {
+        if (isActive) setApprovedTasks([]);
+      })
+      .finally(() => {
+        if (isActive) setLoading(false);
+      });
+    return () => {
+      isActive = false;
+    };
+  }, []);
+
+  // Trạng thái thanh toán chưa có ở BE → tạm suy ra từ dữ liệu mock (mặc định chờ thanh toán).
   const getPaymentStatus = (taskId: string) => {
     const income = assistantIncome.find(i => i.taskId === taskId);
     return income?.paymentStatus || 'Pending';
@@ -40,7 +60,11 @@ export default function ApprovedTasksPage() {
         <h1 className="text-2xl font-bold">Task Đã Duyệt</h1>
       </div>
 
-      {approvedTasks.length === 0 ? (
+      {loading ? (
+        <Card>
+          <div className="py-12 text-center text-muted-foreground">Đang tải…</div>
+        </Card>
+      ) : approvedTasks.length === 0 ? (
         <Card>
           <div className="py-12 text-center text-muted-foreground">
             <CheckCircle className="h-12 w-12 mx-auto mb-4 text-muted-foreground/50" />

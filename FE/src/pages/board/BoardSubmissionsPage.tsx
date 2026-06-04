@@ -1,27 +1,62 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router';
 import { usePageMeta } from '../../hooks/usePageMeta';
-import { Card, CardContent } from '../../app/components/ui/card';
+import { Card } from '../../app/components/ui/card';
 import { Button } from '../../app/components/ui/button';
 import { Input } from '../../app/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../../app/components/ui/select';
-import { Badge } from '../../app/components/ui/badge';
-import { getBoardSubmissions, type BoardSubmissionStatus } from '../../data/mockData';
 import { SubmissionStatusBadge } from '../../app/components/ui/board';
+import type { BoardSubmissionStatus } from '../../data/mockData';
+import { getPendingSeries, type PendingSeriesItem } from '../../services/boardApi';
 import { Search, Eye } from 'lucide-react';
+
+function mapStatus(status: string): BoardSubmissionStatus {
+  switch (status?.toLowerCase()) {
+    case 'approved':
+    case 'publishing':
+    case 'completed':
+      return 'Approved';
+    case 'cancelled':
+      return 'Rejected';
+    case 'pending_review':
+    default:
+      return 'Pending Review';
+  }
+}
 
 export default function BoardSubmissionsPage() {
   usePageMeta({ title: 'Duyệt Series' });
   const navigate = useNavigate();
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
+  const [items, setItems] = useState<PendingSeriesItem[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
 
-  const all = getBoardSubmissions();
-  const filtered = all.filter((s) => {
+  useEffect(() => {
+    let isActive = true;
+    setLoading(true);
+    getPendingSeries()
+      .then(list => {
+        if (isActive) setItems(list);
+      })
+      .catch(err => {
+        if (isActive) setError(err instanceof Error ? err.message : 'Không thể tải danh sách từ backend.');
+      })
+      .finally(() => {
+        if (isActive) setLoading(false);
+      });
+    return () => {
+      isActive = false;
+    };
+  }, []);
+
+  const filtered = items.filter(s => {
+    const status = mapStatus(s.status);
     const matchSearch =
-      s.seriesTitle.toLowerCase().includes(search.toLowerCase()) ||
-      s.mangakaName.toLowerCase().includes(search.toLowerCase());
-    const matchStatus = statusFilter === 'all' || s.status === statusFilter;
+      s.title.toLowerCase().includes(search.toLowerCase()) ||
+      (s.authorName ?? '').toLowerCase().includes(search.toLowerCase());
+    const matchStatus = statusFilter === 'all' || status === statusFilter;
     return matchSearch && matchStatus;
   });
 
@@ -30,7 +65,7 @@ export default function BoardSubmissionsPage() {
       <div>
         <h1 className="text-2xl font-bold">Danh Sách Duyệt Series</h1>
         <p className="text-muted-foreground mt-1">
-          Hội đồng xem xét và biểu quyết {all.length} series đã nộp
+          Hội đồng xem xét và biểu quyết {items.length} series
         </p>
       </div>
 
@@ -42,7 +77,7 @@ export default function BoardSubmissionsPage() {
             placeholder="Tìm theo tên series hoặc mangaka..."
             className="pl-9"
             value={search}
-            onChange={(e) => setSearch(e.target.value)}
+            onChange={e => setSearch(e.target.value)}
           />
         </div>
         <Select value={statusFilter} onValueChange={setStatusFilter}>
@@ -54,7 +89,6 @@ export default function BoardSubmissionsPage() {
             <SelectItem value="Pending Review">Chờ Duyệt</SelectItem>
             <SelectItem value="Approved">Đã Duyệt</SelectItem>
             <SelectItem value="Rejected">Từ Chối</SelectItem>
-            <SelectItem value="More Info Required">Cần Thêm Thông Tin</SelectItem>
           </SelectContent>
         </Select>
       </div>
@@ -67,42 +101,42 @@ export default function BoardSubmissionsPage() {
               <tr>
                 <th className="text-left px-4 py-3 font-medium text-muted-foreground">Series</th>
                 <th className="text-left px-4 py-3 font-medium text-muted-foreground">Mangaka</th>
-                <th className="text-left px-4 py-3 font-medium text-muted-foreground">Thể Loại</th>
-                <th className="text-left px-4 py-3 font-medium text-muted-foreground">Ngày Nộp</th>
                 <th className="text-left px-4 py-3 font-medium text-muted-foreground">Trạng Thái</th>
                 <th className="text-left px-4 py-3 font-medium text-muted-foreground">Kết Quả Vote</th>
                 <th className="px-4 py-3"></th>
               </tr>
             </thead>
             <tbody className="divide-y">
-              {filtered.length === 0 ? (
+              {loading ? (
                 <tr>
-                  <td colSpan={7} className="px-4 py-12 text-center text-muted-foreground">
+                  <td colSpan={5} className="px-4 py-12 text-center text-muted-foreground">
+                    Đang tải...
+                  </td>
+                </tr>
+              ) : error ? (
+                <tr>
+                  <td colSpan={5} className="px-4 py-12 text-center text-destructive">
+                    {error}
+                  </td>
+                </tr>
+              ) : filtered.length === 0 ? (
+                <tr>
+                  <td colSpan={5} className="px-4 py-12 text-center text-muted-foreground">
                     Không tìm thấy series nào phù hợp
                   </td>
                 </tr>
               ) : (
-                filtered.map((sub) => (
+                filtered.map(sub => (
                   <tr key={sub.id} className="hover:bg-muted/30 transition-colors">
+                    <td className="px-4 py-3 font-medium">{sub.title}</td>
+                    <td className="px-4 py-3 text-muted-foreground">{sub.authorName ?? '—'}</td>
                     <td className="px-4 py-3">
-                      <div className="flex items-center gap-3">
-                        <img src={sub.coverUrl} alt={sub.seriesTitle} className="w-10 h-14 object-cover rounded" />
-                        <span className="font-medium">{sub.seriesTitle}</span>
-                      </div>
-                    </td>
-                    <td className="px-4 py-3 text-muted-foreground">{sub.mangakaName}</td>
-                    <td className="px-4 py-3">
-                      <Badge variant="outline">{sub.genre}</Badge>
-                    </td>
-                    <td className="px-4 py-3 text-muted-foreground whitespace-nowrap">{sub.submittedDate}</td>
-                    <td className="px-4 py-3">
-                      <SubmissionStatusBadge status={sub.status} />
+                      <SubmissionStatusBadge status={mapStatus(sub.status)} />
                     </td>
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-2 text-xs">
-                        <span className="text-green-600 font-semibold">✓{sub.voteResult.approve}</span>
-                        <span className="text-red-600 font-semibold">✗{sub.voteResult.reject}</span>
-                        <span className="text-amber-600 font-semibold">?{sub.voteResult.moreInfo}</span>
+                        <span className="text-green-600 font-semibold">✓{sub.approveVotes}</span>
+                        <span className="text-red-600 font-semibold">✗{sub.rejectVotes}</span>
                       </div>
                     </td>
                     <td className="px-4 py-3">
@@ -120,7 +154,7 @@ export default function BoardSubmissionsPage() {
       </Card>
 
       <p className="text-xs text-muted-foreground">
-        Hiển thị {filtered.length} / {all.length} submissions
+        Hiển thị {filtered.length} / {items.length} series
       </p>
     </div>
   );

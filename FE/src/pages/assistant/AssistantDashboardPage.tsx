@@ -1,20 +1,17 @@
+import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router';
 import { Card, CardContent, CardHeader, CardTitle } from '../../app/components/ui/card';
 import { IncomeSummaryCard, DeadlineCard, TaskCard } from '../../app/components/ui/assistant';
-import {
-  currentAssistant,
-  getTasksByAssistantId,
-  getTasksByStatus,
-  getCalendarEventsByAssistantId,
-  getMonthlyIncome,
-  getPendingPaymentAmount,
-} from '../../data/mockData';
+import type { AssistantCalendarEvent, Task } from '../../data/mockData';
+import { getMyTasks } from '../../services/tasksApi';
+import { getMyEarnings, type AssistantEarnings } from '../../services/submissionsApi';
+import { getStoredUser } from '../../services/authApi';
 import {
   Briefcase,
   Clock,
   AlertTriangle,
   CheckCircle,
-  Wallet,
+  FileCheck,
 } from 'lucide-react';
 import { usePageMeta } from '../../hooks/usePageMeta';
 
@@ -22,27 +19,48 @@ export default function AssistantDashboardPage() {
   usePageMeta({ title: 'Dashboard' });
   const navigate = useNavigate();
 
-  // Get tasks data
-  const allTasks = getTasksByAssistantId(currentAssistant.id);
-  const pendingTasks = getTasksByStatus(currentAssistant.id, 'Pending');
-  const inProgressTasks = getTasksByStatus(currentAssistant.id, 'In Progress');
-  const revisionTasks = getTasksByStatus(currentAssistant.id, 'Revision Required');
-  const approvedTasks = getTasksByStatus(currentAssistant.id, 'Approved');
+  const [tasks, setTasks] = useState<Task[]>([]);
+  const [earnings, setEarnings] = useState<AssistantEarnings | null>(null);
+  const userName = getStoredUser()?.name ?? 'bạn';
 
-  // Get calendar events (today's deadlines)
-  const allDeadlines = getCalendarEventsByAssistantId(currentAssistant.id);
-  const today = new Date();
-  const todayDeadlines = allDeadlines.filter(event => {
-    const deadline = new Date(event.deadline);
-    return deadline.toDateString() === today.toDateString();
-  });
+  useEffect(() => {
+    let isActive = true;
+    Promise.all([getMyTasks(), getMyEarnings().catch(() => null)])
+      .then(([taskList, earn]) => {
+        if (!isActive) return;
+        setTasks(taskList);
+        setEarnings(earn);
+      })
+      .catch(() => {
+        if (isActive) {
+          setTasks([]);
+          setEarnings(null);
+        }
+      });
+    return () => {
+      isActive = false;
+    };
+  }, []);
 
-  // Calculate income
-  const currentMonth = new Date().toISOString().slice(0, 7);
-  const monthlyIncome = getMonthlyIncome(currentAssistant.id, currentMonth);
-  const pendingPayment = getPendingPaymentAmount(currentAssistant.id);
+  const pendingTasks = tasks.filter(t => t.status === 'Pending');
+  const inProgressTasks = tasks.filter(t => t.status === 'In Progress');
+  const revisionTasks = tasks.filter(t => t.status === 'Revision Required');
+  const approvedTasks = tasks.filter(t => t.status === 'Approved');
 
-  // Recent approved tasks for display
+  // Deadline hôm nay suy ra trực tiếp từ danh sách task có hạn nộp.
+  const todayStr = new Date().toDateString();
+  const todayDeadlines: AssistantCalendarEvent[] = tasks
+    .filter(t => t.deadline && new Date(t.deadline).toDateString() === todayStr)
+    .map(t => ({
+      id: t.id,
+      taskId: t.id,
+      taskTitle: t.title,
+      seriesTitle: t.seriesTitle,
+      chapterTitle: t.chapterTitle,
+      deadline: t.deadline,
+      isOverdue: new Date(t.deadline).getTime() < Date.now(),
+    }));
+
   const recentApproved = approvedTasks.slice(0, 3);
 
   return (
@@ -51,7 +69,7 @@ export default function AssistantDashboardPage() {
       <Card>
         <CardHeader>
           <CardTitle className="text-2xl">
-            Chào mừng trở lại, {currentAssistant.name}
+            Chào mừng trở lại, {userName}
           </CardTitle>
         </CardHeader>
         <CardContent>
@@ -88,16 +106,16 @@ export default function AssistantDashboardPage() {
           description="Task yêu cầu sửa"
         />
         <IncomeSummaryCard
-          title="Đã Duyệt Tháng Này"
+          title="Đã Duyệt"
           value={approvedTasks.length}
           icon={CheckCircle}
           description="Task hoàn thành"
         />
         <IncomeSummaryCard
-          title="Thu Nhập Tháng"
-          value={`${monthlyIncome.toLocaleString('vi-VN')} ¥`}
-          icon={Wallet}
-          description={`Chờ thanh toán: ${pendingPayment.toLocaleString('vi-VN')} ¥`}
+          title="Trang Đã Duyệt"
+          value={earnings?.approvedPages ?? 0}
+          icon={FileCheck}
+          description={`${earnings?.approvedSubmissions ?? 0} bài được duyệt`}
         />
       </div>
 

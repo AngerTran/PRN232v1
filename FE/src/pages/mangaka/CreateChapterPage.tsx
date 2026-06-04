@@ -5,43 +5,73 @@ import Button from '../../components/ui/Button';
 import Card, { CardHeader, CardTitle } from '../../components/ui/Card';
 import { MultiUploadBox } from '../../components/ui/UploadBox';
 import { usePageMeta } from '../../hooks/usePageMeta';
-import { getSeriesById, getChaptersBySeriesId } from '../../data/mockData';
+import { createChapter, getSeries, getSeriesChapters } from '../../services/seriesApi';
 
 export default function CreateChapterPage() {
   const { seriesId } = useParams<{ seriesId: string }>();
   const navigate = useNavigate();
   const { setPageMeta } = usePageMeta();
 
-  const series = getSeriesById(seriesId ?? '');
-  const existingChapters = getChaptersBySeriesId(seriesId ?? '');
-  const nextNumber = Math.max(0, ...existingChapters.map(c => c.number)) + 1;
-
+  const [seriesTitle, setSeriesTitle] = useState('');
   const [form, setForm] = useState({
-    number: String(nextNumber),
+    number: '1',
     title: '',
     description: '',
     deadline: '',
   });
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     setPageMeta({
       title: 'Tạo Chương',
       breadcrumb: [
         { label: 'Series của tôi', href: '/mangaka/series' },
-        { label: series?.title ?? 'Series', href: `/mangaka/series/${seriesId}` },
+        { label: seriesTitle || 'Series', href: `/mangaka/series/${seriesId}` },
         { label: 'Tạo Chương' },
       ],
     });
-  }, []);
+  }, [seriesTitle]);
+
+  useEffect(() => {
+    if (!seriesId) return;
+    let isActive = true;
+    getSeries(seriesId)
+      .then(s => {
+        if (isActive) setSeriesTitle(s.title);
+      })
+      .catch(() => undefined);
+    getSeriesChapters(seriesId)
+      .then(chapters => {
+        const next = Math.max(0, ...chapters.map(c => c.number)) + 1;
+        if (isActive) setForm(f => ({ ...f, number: String(next) }));
+      })
+      .catch(() => undefined);
+    return () => {
+      isActive = false;
+    };
+  }, [seriesId]);
 
   const update = (k: keyof typeof form) => (e: ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) =>
     setForm(f => ({ ...f, [k]: e.target.value }));
 
-  const handleSubmit = (e: FormEvent) => {
+  const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
+    if (!seriesId) return;
+    setError(null);
     setLoading(true);
-    setTimeout(() => { setLoading(false); navigate(`/mangaka/series/${seriesId}/chapters`); }, 900);
+    try {
+      await createChapter({
+        seriesId,
+        chapterNumber: Number(form.number) || 1,
+        title: form.title || undefined,
+        deadline: form.deadline || undefined,
+      });
+      navigate(`/mangaka/series/${seriesId}/chapters`);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Tạo chương thất bại.');
+      setLoading(false);
+    }
   };
 
   const inputClass = 'w-full px-4 py-2.5 text-sm bg-input-background border border-border rounded-xl focus:outline-none focus:ring-2 focus:ring-ring/30 focus:border-primary/50 transition-colors';
@@ -55,7 +85,7 @@ export default function CreateChapterPage() {
         </button>
         <div>
           <h1 className="text-xl font-bold">Tạo Chương Mới</h1>
-          <p className="text-sm text-muted-foreground">{series?.title}</p>
+          <p className="text-sm text-muted-foreground">{seriesTitle}</p>
         </div>
       </div>
 
@@ -91,6 +121,10 @@ export default function CreateChapterPage() {
           <MultiUploadBox label="Tải lên trang Manga" />
           <p className="text-xs text-muted-foreground mt-3">Tải lên trang nháp của bạn. Trợ lý sẽ làm việc từ các file này.</p>
         </Card>
+
+        {error && (
+          <p className="text-sm text-red-600 bg-red-50 border border-red-200 rounded-xl px-3 py-2">{error}</p>
+        )}
 
         <div className="flex gap-3 justify-end">
           <Button type="button" variant="outline" onClick={() => navigate(`/mangaka/series/${seriesId}/chapters`)}>Hủy</Button>

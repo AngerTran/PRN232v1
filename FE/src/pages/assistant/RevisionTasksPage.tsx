@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router';
 import { usePageMeta } from '../../hooks/usePageMeta';
 import { Card } from '../../app/components/ui/card';
@@ -10,7 +11,8 @@ import {
   TableHeader,
   TableRow,
 } from '../../app/components/ui/table';
-import { currentAssistant, getTasksByStatus } from '../../data/mockData';
+import type { Task } from '../../data/mockData';
+import { getMyTasks } from '../../services/tasksApi';
 import { Eye, AlertCircle } from 'lucide-react';
 import { format } from 'date-fns';
 import { vi } from 'date-fns/locale';
@@ -19,7 +21,25 @@ export default function RevisionTasksPage() {
   usePageMeta({ title: 'Task Cần Chỉnh Sửa' });
   const navigate = useNavigate();
 
-  const revisionTasks = getTasksByStatus(currentAssistant.id, 'Revision Required');
+  const [revisionTasks, setRevisionTasks] = useState<Task[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    let isActive = true;
+    getMyTasks()
+      .then(tasks => {
+        if (isActive) setRevisionTasks(tasks.filter(t => t.status === 'Revision Required'));
+      })
+      .catch(() => {
+        if (isActive) setRevisionTasks([]);
+      })
+      .finally(() => {
+        if (isActive) setLoading(false);
+      });
+    return () => {
+      isActive = false;
+    };
+  }, []);
 
   return (
     <div className="p-6 space-y-6">
@@ -28,7 +48,11 @@ export default function RevisionTasksPage() {
         <h1 className="text-2xl font-bold">Task Cần Chỉnh Sửa</h1>
       </div>
 
-      {revisionTasks.length === 0 ? (
+      {loading ? (
+        <Card>
+          <div className="py-12 text-center text-muted-foreground">Đang tải…</div>
+        </Card>
+      ) : revisionTasks.length === 0 ? (
         <Card>
           <div className="py-12 text-center text-muted-foreground">
             <AlertCircle className="h-12 w-12 mx-auto mb-4 text-muted-foreground/50" />

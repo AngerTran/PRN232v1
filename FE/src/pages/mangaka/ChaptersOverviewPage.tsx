@@ -5,7 +5,8 @@ import FilterDropdown from '../../components/ui/FilterDropdown';
 import ChapterCard from '../../components/ui/ChapterCard';
 import EmptyState from '../../components/ui/EmptyState';
 import { usePageMeta } from '../../hooks/usePageMeta';
-import { chapters, series, type ChapterStatus } from '../../data/mockData';
+import type { Chapter, ChapterStatus, Series } from '../../data/mockData';
+import { getMySeries, getSeriesChapters } from '../../services/seriesApi';
 
 const STATUS_OPTIONS: ChapterStatus[] = ['Draft', 'In Progress', 'Review', 'Approved', 'Published'];
 
@@ -13,20 +14,48 @@ export default function ChaptersOverviewPage() {
   const navigate = useNavigate();
   const { setPageMeta } = usePageMeta();
   const [statusFilter, setStatusFilter] = useState('All');
+  const [seriesList, setSeriesList] = useState<Series[]>([]);
+  const [allChapters, setAllChapters] = useState<Chapter[]>([]);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => { setPageMeta({ title: 'Chương' }); }, []);
 
-  const filtered = chapters.filter(c =>
+  useEffect(() => {
+    let isActive = true;
+    getMySeries()
+      .then(async list => {
+        const chapterLists = await Promise.all(
+          list.map(s => getSeriesChapters(s.id).catch(() => [] as Chapter[]))
+        );
+        if (!isActive) return;
+        setSeriesList(list);
+        setAllChapters(chapterLists.flat());
+      })
+      .catch(() => {
+        if (isActive) {
+          setSeriesList([]);
+          setAllChapters([]);
+        }
+      })
+      .finally(() => {
+        if (isActive) setLoading(false);
+      });
+    return () => {
+      isActive = false;
+    };
+  }, []);
+
+  const filtered = allChapters.filter(c =>
     statusFilter === 'All' || c.status === statusFilter
   ).sort((a, b) => {
     // Sort by series name then chapter number
-    const sa = series.find(s => s.id === a.seriesId)?.title ?? '';
-    const sb = series.find(s => s.id === b.seriesId)?.title ?? '';
+    const sa = seriesList.find(s => s.id === a.seriesId)?.title ?? '';
+    const sb = seriesList.find(s => s.id === b.seriesId)?.title ?? '';
     if (sa !== sb) return sa.localeCompare(sb);
     return a.number - b.number;
   });
 
-  const groupedBySeries = filtered.reduce<Record<string, typeof chapters>>((acc, ch) => {
+  const groupedBySeries = filtered.reduce<Record<string, Chapter[]>>((acc, ch) => {
     if (!acc[ch.seriesId]) acc[ch.seriesId] = [];
     acc[ch.seriesId].push(ch);
     return acc;
@@ -37,16 +66,18 @@ export default function ChaptersOverviewPage() {
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div>
           <h1 className="text-xl font-bold">Tất cả chương</h1>
-          <p className="text-sm text-muted-foreground">{chapters.length} chương trong {series.length} series</p>
+          <p className="text-sm text-muted-foreground">{allChapters.length} chương trong {seriesList.length} series</p>
         </div>
         <FilterDropdown label="Trạng thái" options={STATUS_OPTIONS} value={statusFilter} onChange={setStatusFilter} />
       </div>
 
-      {Object.entries(groupedBySeries).length === 0 ? (
+      {loading ? (
+        <EmptyState icon={<FileText size={24} />} title="Đang tải chương…" />
+      ) : Object.entries(groupedBySeries).length === 0 ? (
         <EmptyState icon={<FileText size={24} />} title="Không tìm thấy chương" />
       ) : (
         Object.entries(groupedBySeries).map(([seriesId, seriesChapters]) => {
-          const s = series.find(s => s.id === seriesId);
+          const s = seriesList.find(s => s.id === seriesId);
           return (
             <div key={seriesId}>
               <div className="flex items-center gap-3 mb-3">

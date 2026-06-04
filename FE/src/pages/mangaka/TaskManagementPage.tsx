@@ -9,7 +9,9 @@ import SearchInput from '../../components/ui/SearchInput';
 import FilterDropdown from '../../components/ui/FilterDropdown';
 import EmptyState from '../../components/ui/EmptyState';
 import { usePageMeta } from '../../hooks/usePageMeta';
-import { tasks, getAssistantById, type TaskStatus, type TaskType } from '../../data/mockData';
+import type { Task, TaskStatus, TaskType } from '../../data/mockData';
+import { getMangakaTasks } from '../../services/tasksApi';
+import { getAssistants, type ProfileSummary } from '../../services/profilesApi';
 import { format } from 'date-fns';
 
 const STATUS_OPTIONS: TaskStatus[] = ['Pending', 'In Progress', 'Submitted', 'Approved', 'Revision Required'];
@@ -22,8 +24,34 @@ export default function TaskManagementPage() {
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('All');
   const [typeFilter, setTypeFilter] = useState('All');
+  const [tasks, setTasks] = useState<Task[]>([]);
+  const [assistants, setAssistants] = useState<Record<string, ProfileSummary>>({});
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => { setPageMeta({ title: 'Nhiệm vụ' }); }, []);
+
+  useEffect(() => {
+    let isActive = true;
+    setLoading(true);
+    Promise.all([getMangakaTasks(), getAssistants().catch(() => [])])
+      .then(([taskList, assistantList]) => {
+        if (!isActive) return;
+        setTasks(taskList);
+        setAssistants(Object.fromEntries(assistantList.map(a => [a.id, a])));
+      })
+      .catch(() => {
+        if (isActive) {
+          setTasks([]);
+          setAssistants({});
+        }
+      })
+      .finally(() => {
+        if (isActive) setLoading(false);
+      });
+    return () => {
+      isActive = false;
+    };
+  }, []);
 
   const filtered = tasks.filter(t => {
     const matchSearch = t.title.toLowerCase().includes(search.toLowerCase()) || t.seriesTitle.toLowerCase().includes(search.toLowerCase());
@@ -37,7 +65,7 @@ export default function TaskManagementPage() {
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div>
           <h1 className="text-xl font-bold">Quản lý Nhiệm vụ</h1>
-          <p className="text-sm text-muted-foreground">{tasks.length} nhiệm vụ đã giao</p>
+          <p className="text-sm text-muted-foreground">{loading ? 'Đang tải…' : `${tasks.length} nhiệm vụ đã giao`}</p>
         </div>
       </div>
 
@@ -47,7 +75,9 @@ export default function TaskManagementPage() {
         <FilterDropdown label="Loại" options={TYPE_OPTIONS} value={typeFilter} onChange={setTypeFilter} />
       </div>
 
-      {filtered.length === 0 ? (
+      {loading ? (
+        <div className="text-sm text-muted-foreground">Đang tải nhiệm vụ...</div>
+      ) : filtered.length === 0 ? (
         <EmptyState icon={<ClipboardList size={24} />} title="Không tìm thấy nhiệm vụ" description="Thử điều chỉnh bộ lọc." />
       ) : (
         <Card padding="none">
@@ -64,7 +94,7 @@ export default function TaskManagementPage() {
               </thead>
               <tbody className="divide-y divide-border">
                 {filtered.map(task => {
-                  const assistant = getAssistantById(task.assistantId);
+                  const assistant = assistants[task.assistantId];
                   return (
                     <tr key={task.id} className="hover:bg-muted/20 transition-colors">
                       <td className="px-4 py-3 font-semibold max-w-[200px] truncate">{task.title}</td>
@@ -85,7 +115,7 @@ export default function TaskManagementPage() {
                         </div>
                       </td>
                       <td className="px-4 py-3"><TypeBadge type={task.type} /></td>
-                      <td className="px-4 py-3 text-muted-foreground text-xs whitespace-nowrap">{format(new Date(task.deadline), 'MMM d')}</td>
+                      <td className="px-4 py-3 text-muted-foreground text-xs whitespace-nowrap">{task.deadline ? format(new Date(task.deadline), 'MMM d') : '—'}</td>
                       <td className="px-4 py-3"><Badge status={task.status} /></td>
                       <td className="px-4 py-3">
                         {(task.status === 'Submitted' || task.status === 'Revision Required') && (

@@ -60,6 +60,14 @@ public static class SeriesStatuses
         SeriesStatus.Completed
     };
 
+    // Dạng mảng để EF Core/Npgsql dịch được `.Contains` trong truy vấn (thành SQL `= ANY`).
+    public static readonly SeriesStatus[] PublicVisibleArray =
+    {
+        SeriesStatus.Approved,
+        SeriesStatus.Publishing,
+        SeriesStatus.Completed
+    };
+
     public static bool IsValid(string? status) =>
         !string.IsNullOrWhiteSpace(status) && All.Contains(status.Trim());
 

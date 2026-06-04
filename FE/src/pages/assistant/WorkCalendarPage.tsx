@@ -1,15 +1,43 @@
+import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router';
 import { usePageMeta } from '../../hooks/usePageMeta';
 import { Card, CardContent, CardHeader, CardTitle } from '../../app/components/ui/card';
 import { DeadlineCard } from '../../app/components/ui/assistant';
-import { currentAssistant, getCalendarEventsByAssistantId } from '../../data/mockData';
+import type { AssistantCalendarEvent } from '../../data/mockData';
+import { getMyTasks } from '../../services/tasksApi';
 import { Calendar } from 'lucide-react';
 
 export default function WorkCalendarPage() {
   usePageMeta({ title: 'Lịch Làm Việc' });
   const navigate = useNavigate();
 
-  const allEvents = getCalendarEventsByAssistantId(currentAssistant.id);
+  const [allEvents, setAllEvents] = useState<AssistantCalendarEvent[]>([]);
+
+  useEffect(() => {
+    let isActive = true;
+    getMyTasks()
+      .then(tasks => {
+        if (!isActive) return;
+        const events: AssistantCalendarEvent[] = tasks
+          .filter(t => t.deadline && t.status !== 'Approved')
+          .map(t => ({
+            id: t.id,
+            taskId: t.id,
+            taskTitle: t.title,
+            seriesTitle: t.seriesTitle,
+            chapterTitle: t.chapterTitle,
+            deadline: t.deadline,
+            isOverdue: new Date(t.deadline).getTime() < Date.now(),
+          }));
+        setAllEvents(events);
+      })
+      .catch(() => {
+        if (isActive) setAllEvents([]);
+      });
+    return () => {
+      isActive = false;
+    };
+  }, []);
 
   // Group events by date
   const groupedEvents = allEvents.reduce((groups, event) => {

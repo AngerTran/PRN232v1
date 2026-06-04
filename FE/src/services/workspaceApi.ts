@@ -77,6 +77,58 @@ export interface CreateWorkspaceTaskInput {
   region: Region;
 }
 
+export interface UpdateWorkspaceTaskInput {
+  title?: string;
+  description?: string;
+  assistantId?: string;
+  deadline?: string;
+  priority?: number;
+  region?: Region;
+}
+
+// BE chấp nhận đúng các giá trị (phân biệt hoa thường): background, shading,
+// cleanup, speech_bubble, effects, lineart, other. UI lại hiển thị nhãn riêng,
+// nên cần map hai chiều để tránh lỗi 400 khi tạo task.
+const TASK_TYPE_TO_API: Record<TaskType, string> = {
+  'Background': 'background',
+  'Shading': 'shading',
+  'Effect': 'effects',
+  'Screentone': 'other',
+  'Clean Line': 'cleanup',
+  'Dialogue Edit': 'speech_bubble',
+};
+
+const TASK_TYPE_FROM_API: Record<string, TaskType> = {
+  background: 'Background',
+  shading: 'Shading',
+  effects: 'Effect',
+  other: 'Screentone',
+  cleanup: 'Clean Line',
+  lineart: 'Clean Line',
+  speech_bubble: 'Dialogue Edit',
+};
+
+export function toApiTaskType(type: TaskType): string {
+  return TASK_TYPE_TO_API[type] ?? 'other';
+}
+
+export function fromApiTaskType(value: string): TaskType {
+  return TASK_TYPE_FROM_API[value?.toLowerCase()] ?? 'Background';
+}
+
+// BE cũng kiểm tra status theo giá trị: todo, in_progress, submitted, approved, rejected.
+const TASK_STATUS_TO_API: Record<string, string> = {
+  'Pending': 'todo',
+  'In Progress': 'in_progress',
+  'Submitted': 'submitted',
+  'Approved': 'approved',
+  'Revision Required': 'rejected',
+};
+
+export function toApiTaskStatus(status: TaskStatus): string {
+  return TASK_STATUS_TO_API[status] ?? String(status).toLowerCase();
+}
+
 type ApiEnvelope<T> = T | { data: T };
 
 interface ApiPage {
@@ -215,7 +267,7 @@ function mapTask(
   chapter?: WorkspaceChapter,
   series?: ApiSeries
 ): WorkspaceTask {
-  const type = task.taskType as TaskType;
+  const type = fromApiTaskType(task.taskType);
   return {
     id: task.id,
     pageId: task.pageId,
@@ -301,8 +353,8 @@ export async function createWorkspaceTask(input: CreateWorkspaceTaskInput): Prom
   const task = unwrap(await apiRequest<ApiEnvelope<ApiTask>>(`/api/pages/${input.pageId}/tasks`, {
     method: 'POST',
     body: JSON.stringify({
-      taskType: input.type,
-      assignedTo: input.assistantId,
+      taskType: toApiTaskType(input.type),
+      assignedTo: input.assistantId || undefined,
       title: `${input.type}: Page area`,
       description: input.description,
       deadline: input.deadline,
@@ -311,6 +363,35 @@ export async function createWorkspaceTask(input: CreateWorkspaceTaskInput): Prom
   }));
 
   return normalizeTask(mapTask(task));
+}
+
+export async function updateWorkspaceTask(taskId: string, input: UpdateWorkspaceTaskInput): Promise<WorkspaceTask> {
+  const task = unwrap(await apiRequest<ApiEnvelope<ApiTask>>(`/api/tasks/${taskId}`, {
+    method: 'PUT',
+    body: JSON.stringify({
+      title: input.title,
+      description: input.description,
+      assignedTo: input.assistantId,
+      deadline: input.deadline,
+      priority: input.priority,
+      region: input.region ? JSON.stringify(input.region) : undefined,
+    }),
+  }));
+
+  return normalizeTask(mapTask(task));
+}
+
+export async function updateWorkspaceTaskStatus(taskId: string, status: TaskStatus): Promise<WorkspaceTask> {
+  const task = unwrap(await apiRequest<ApiEnvelope<ApiTask>>(`/api/tasks/${taskId}/status`, {
+    method: 'PATCH',
+    body: JSON.stringify({ status: toApiTaskStatus(status) }),
+  }));
+
+  return normalizeTask(mapTask(task));
+}
+
+export async function deleteWorkspaceTask(taskId: string): Promise<void> {
+  await apiRequest<void>(`/api/tasks/${taskId}`, { method: 'DELETE' });
 }
 
 export async function getChapterPages(chapterId: string): Promise<WorkspacePageItem[]> {

@@ -9,7 +9,7 @@ export type PageStatus = 'Draft' | 'In Progress' | 'Completed' | 'Approved';
 export type TaskType = 'Background' | 'Shading' | 'Effect' | 'Screentone' | 'Clean Line' | 'Dialogue Edit';
 export type TaskStatus = 'Pending' | 'In Progress' | 'Submitted' | 'Approved' | 'Revision Required';
 export type SubmissionStatus = 'Pending' | 'Approved' | 'Revision Required' | 'Rejected';
-export type NotifType = 'task_submitted' | 'task_approved' | 'revision_required' | 'deadline_warning' | 'ranking_alert' | 'submission_update';
+export type NotifType = 'task_submitted' | 'task_approved' | 'revision_required' | 'deadline_warning' | 'ranking_alert' | 'submission_update' | 'system';
 export type PaymentStatus = 'Pending' | 'Paid';
 export type ReviewStatus = 'Pending' | 'In Review' | 'Approved' | 'Revision Required';
 export type AnnotationType = 'Story' | 'Dialogue' | 'Panel Layout' | 'Character' | 'Pacing' | 'Art Correction';
@@ -43,6 +43,7 @@ export interface Series {
   chaptersCount: number;
   coverUrl: string;
   mangakaId: string;
+  mangakaName?: string;
   createdAt: string;
   updatedAt: string;
   isAtRisk: boolean;

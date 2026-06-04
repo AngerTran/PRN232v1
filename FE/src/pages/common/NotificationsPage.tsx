@@ -1,10 +1,11 @@
-import { useState, type ReactNode } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import { useNavigate } from 'react-router';
 import { Bell, BellOff, ExternalLink, AlertTriangle, CheckCircle, Clock, TrendingDown, Send } from 'lucide-react';
 import { clsx } from 'clsx';
-import Card, { CardHeader, CardTitle } from '../../components/ui/Card';
+import Card from '../../components/ui/Card';
 import Button from '../../components/ui/Button';
-import { notifications, type NotifType } from '../../data/mockData';
+import type { Notification, NotifType } from '../../data/mockData';
+import { getNotifications, markAllNotificationsRead, markNotificationRead } from '../../services/notificationsApi';
 import { formatDistanceToNow } from 'date-fns';
 
 const NOTIF_ICON: Record<NotifType, ReactNode> = {
@@ -14,18 +15,52 @@ const NOTIF_ICON: Record<NotifType, ReactNode> = {
   deadline_warning: <Clock size={16} className="text-orange-500" />,
   ranking_alert: <TrendingDown size={16} className="text-red-500" />,
   submission_update: <Send size={16} className="text-purple-500" />,
+  system: <Bell size={16} className="text-gray-500" />,
 };
 
 export default function NotificationsPage() {
   const navigate = useNavigate();
-  const [notifs, setNotifs] = useState(notifications);
+  const [notifs, setNotifs] = useState<Notification[]>([]);
+  const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<'all' | 'unread'>('all');
+
+  useEffect(() => {
+    let isActive = true;
+    getNotifications()
+      .then(data => {
+        if (isActive) setNotifs(data);
+      })
+      .catch(() => {
+        if (isActive) setNotifs([]);
+      })
+      .finally(() => {
+        if (isActive) setLoading(false);
+      });
+    return () => {
+      isActive = false;
+    };
+  }, []);
 
   const displayed = filter === 'unread' ? notifs.filter(n => !n.read) : notifs;
   const unreadCount = notifs.filter(n => !n.read).length;
 
-  const markAllRead = () => setNotifs(prev => prev.map(n => ({ ...n, read: true })));
-  const markRead = (id: string) => setNotifs(prev => prev.map(n => n.id === id ? { ...n, read: true } : n));
+  const markAllRead = async () => {
+    setNotifs(prev => prev.map(n => ({ ...n, read: true })));
+    try {
+      await markAllNotificationsRead();
+    } catch {
+      // Giữ trạng thái lạc quan; lần tải sau sẽ đồng bộ lại.
+    }
+  };
+
+  const markRead = async (id: string) => {
+    setNotifs(prev => prev.map(n => (n.id === id ? { ...n, read: true } : n)));
+    try {
+      await markNotificationRead(id);
+    } catch {
+      // Bỏ qua lỗi đánh dấu đã đọc.
+    }
+  };
 
   return (
     <div className="p-6 max-w-2xl">
@@ -50,7 +85,12 @@ export default function NotificationsPage() {
       </div>
 
       <Card padding="none">
-        {displayed.length === 0 ? (
+        {loading ? (
+          <div className="flex flex-col items-center justify-center py-16">
+            <Bell size={28} className="text-muted-foreground mb-3 animate-pulse" />
+            <p className="text-sm text-muted-foreground">Đang tải thông báo…</p>
+          </div>
+        ) : displayed.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-16">
             <BellOff size={28} className="text-muted-foreground mb-3" />
             <p className="font-semibold text-foreground">Tất cả đã đọc</p>

@@ -10,7 +10,6 @@ import RankingTrend from '../../components/ui/RankingTrend';
 import EmptyState from '../../components/ui/EmptyState';
 import { usePageMeta } from '../../hooks/usePageMeta';
 import type { Chapter, Series } from '../../data/mockData';
-import { getSubmissionsBySeriesId, getRankingBySeriesId } from '../../data/mockData';
 import { getSeries, getSeriesChapters } from '../../services/seriesApi';
 
 export default function SeriesDetailPage() {
@@ -23,8 +22,10 @@ export default function SeriesDetailPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
-  const submissions = getSubmissionsBySeriesId(seriesId ?? '');
-  const ranking = getRankingBySeriesId(seriesId ?? '');
+  // Series-level editorial submissions and ranking history are not yet exposed
+  // by the backend, so these sections render their empty states for now.
+  const submissions: never[] = [];
+  const ranking = null;
 
   useEffect(() => {
     if (!seriesId) return;

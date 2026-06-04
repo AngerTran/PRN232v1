@@ -1,12 +1,13 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router';
 import { usePageMeta } from '../../hooks/usePageMeta';
 import { Card, CardContent, CardHeader, CardTitle } from '../../app/components/ui/card';
 import { Button } from '../../app/components/ui/button';
 import { Textarea } from '../../app/components/ui/textarea';
-import { Separator } from '../../app/components/ui/separator';
 import { UploadResultBox } from '../../app/components/ui/assistant';
-import { getTaskById } from '../../data/mockData';
+import type { Task } from '../../data/mockData';
+import { getTask } from '../../services/tasksApi';
+import { submitTaskWork } from '../../services/submissionsApi';
 import { ArrowLeft, Send, Save } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -14,12 +15,42 @@ export default function SubmitResultPage() {
   const { taskId } = useParams<{ taskId: string }>();
   const navigate = useNavigate();
 
-  const task = taskId ? getTaskById(taskId) : undefined;
+  const [task, setTask] = useState<Task | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [submitting, setSubmitting] = useState(false);
 
   usePageMeta({ title: 'Nộp Kết Quả' });
 
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [comment, setComment] = useState('');
+
+  useEffect(() => {
+    if (!taskId) return;
+    let isActive = true;
+    getTask(taskId)
+      .then(data => {
+        if (isActive) setTask(data);
+      })
+      .catch(() => {
+        if (isActive) setTask(null);
+      })
+      .finally(() => {
+        if (isActive) setLoading(false);
+      });
+    return () => {
+      isActive = false;
+    };
+  }, [taskId]);
+
+  if (loading) {
+    return (
+      <Card>
+        <CardContent className="py-12 text-center">
+          <p className="text-muted-foreground">Đang tải task…</p>
+        </CardContent>
+      </Card>
+    );
+  }
 
   if (!task) {
     return (
@@ -38,17 +69,24 @@ export default function SubmitResultPage() {
     );
   }
 
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
     if (!selectedFile) {
       toast.error('Vui lòng upload file kết quả');
       return;
     }
 
-    // Mock submit
-    toast.success('Đã nộp kết quả thành công!');
-    setTimeout(() => {
-      navigate(`/assistant/tasks/${task.id}`);
-    }, 1000);
+    setSubmitting(true);
+    try {
+      await submitTaskWork(task.id, { file: selectedFile, note: comment || undefined });
+      toast.success('Đã nộp kết quả thành công!');
+      setTimeout(() => {
+        navigate(`/assistant/tasks/${task.id}`);
+      }, 800);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Nộp kết quả thất bại');
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   const handleSaveDraft = () => {
@@ -165,9 +203,10 @@ export default function SubmitResultPage() {
               size="lg"
               className="flex-1"
               onClick={handleSubmit}
+              disabled={submitting}
             >
               <Send className="h-5 w-5 mr-2" />
-              Nộp Cho Mangaka
+              {submitting ? 'Đang nộp…' : 'Nộp Cho Mangaka'}
             </Button>
           </div>
         </CardContent>

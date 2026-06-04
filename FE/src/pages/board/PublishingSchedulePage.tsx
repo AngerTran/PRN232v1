@@ -1,30 +1,91 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { usePageMeta } from '../../hooks/usePageMeta';
 import { Card, CardContent, CardHeader, CardTitle } from '../../app/components/ui/card';
 import { Button } from '../../app/components/ui/button';
 import { Input } from '../../app/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../../app/components/ui/select';
 import { Textarea } from '../../app/components/ui/textarea';
-import { getPublishingSchedules, type PublishingSchedule } from '../../data/mockData';
-import { ScheduleStatusBadge, PublishingTypeBadge } from '../../app/components/ui/board';
-import { Plus, X, CalendarDays } from 'lucide-react';
+import { PublishingTypeBadge } from '../../app/components/ui/board';
+import type { Series } from '../../data/mockData';
+import {
+  getVisibleSeries,
+  getSeriesSchedules,
+  createSchedule,
+  deleteSchedule,
+  type PublishingScheduleItem,
+} from '../../services/seriesApi';
+import { Plus, X, CalendarDays, Trash2 } from 'lucide-react';
+
+type ScheduleRow = PublishingScheduleItem & { seriesTitle: string; mangakaName?: string };
+
+const emptyForm = { seriesId: '', frequency: 'weekly', publishDate: '', issueNumber: '', notes: '' };
 
 export default function PublishingSchedulePage() {
   usePageMeta({ title: 'Lịch Xuất Bản' });
-  const [schedules] = useState<PublishingSchedule[]>(getPublishingSchedules());
-  const [showForm, setShowForm] = useState(false);
-  const [form, setForm] = useState({
-    series: '',
-    publishingType: 'Weekly',
-    startDate: '',
-    releaseDay: '',
-    note: '',
-  });
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const [series, setSeries] = useState<Series[]>([]);
+  const [rows, setRows] = useState<ScheduleRow[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+  const [showForm, setShowForm] = useState(false);
+  const [form, setForm] = useState(emptyForm);
+  const [saving, setSaving] = useState(false);
+
+  async function loadAll() {
+    setLoading(true);
+    setError('');
+    try {
+      const list = await getVisibleSeries();
+      const groups = await Promise.all(
+        list.map(async s => {
+          const schedules = await getSeriesSchedules(s.id).catch(() => []);
+          return schedules.map<ScheduleRow>(sc => ({ ...sc, seriesTitle: s.title, mangakaName: s.mangakaName }));
+        })
+      );
+      setSeries(list);
+      setRows(groups.flat());
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Không thể tải lịch xuất bản.');
+      setSeries([]);
+      setRows([]);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    loadAll();
+  }, []);
+
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setShowForm(false);
-    setForm({ series: '', publishingType: 'Weekly', startDate: '', releaseDay: '', note: '' });
+    if (!form.seriesId || !form.publishDate) return;
+    setSaving(true);
+    setError('');
+    try {
+      await createSchedule(form.seriesId, {
+        publishDate: form.publishDate,
+        frequency: form.frequency,
+        issueNumber: form.issueNumber ? Number(form.issueNumber) : undefined,
+        notes: form.notes || undefined,
+      });
+      setShowForm(false);
+      setForm(emptyForm);
+      await loadAll();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Không thể tạo lịch.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleDelete = async (id: string) => {
+    try {
+      await deleteSchedule(id);
+      setRows(prev => prev.filter(r => r.id !== id));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Không thể xóa lịch.');
+    }
   };
 
   return (
@@ -32,7 +93,7 @@ export default function PublishingSchedulePage() {
       <div className="flex items-start justify-between">
         <div>
           <h1 className="text-2xl font-bold">Lịch Xuất Bản</h1>
-          <p className="text-muted-foreground mt-1">Quản lý lịch phát hành của {schedules.length} series đang hoạt động</p>
+          <p className="text-muted-foreground mt-1">{rows.length} lịch phát hành</p>
         </div>
         <Button onClick={() => setShowForm(!showForm)}>
           {showForm ? <X className="h-4 w-4 mr-1" /> : <Plus className="h-4 w-4 mr-1" />}
@@ -40,7 +101,11 @@ export default function PublishingSchedulePage() {
         </Button>
       </div>
 
-      {/* Create/Edit Form */}
+      {error && (
+        <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{error}</div>
+      )}
+
+      {/* Create Form */}
       {showForm && (
         <Card className="shadow-sm border-primary/20">
           <CardHeader className="pb-4">
@@ -53,38 +118,45 @@ export default function PublishingSchedulePage() {
             <form onSubmit={handleSubmit} className="grid gap-4 md:grid-cols-2">
               <div className="space-y-1.5">
                 <label className="text-sm font-medium">Series</label>
-                <Input
-                  placeholder="Tên series..."
-                  value={form.series}
-                  onChange={(e) => setForm({ ...form, series: e.target.value })}
-                />
-              </div>
-              <div className="space-y-1.5">
-                <label className="text-sm font-medium">Loại Xuất Bản</label>
-                <Select value={form.publishingType} onValueChange={(v) => setForm({ ...form, publishingType: v })}>
+                <Select value={form.seriesId} onValueChange={v => setForm({ ...form, seriesId: v })}>
                   <SelectTrigger>
-                    <SelectValue />
+                    <SelectValue placeholder="Chọn series..." />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="Weekly">Hàng Tuần (Weekly)</SelectItem>
-                    <SelectItem value="Monthly">Hàng Tháng (Monthly)</SelectItem>
+                    {series.map(s => (
+                      <SelectItem key={s.id} value={s.id}>{s.title}</SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
               </div>
               <div className="space-y-1.5">
-                <label className="text-sm font-medium">Ngày Bắt Đầu</label>
-                <Input
-                  type="date"
-                  value={form.startDate}
-                  onChange={(e) => setForm({ ...form, startDate: e.target.value })}
-                />
+                <label className="text-sm font-medium">Loại Xuất Bản</label>
+                <Select value={form.frequency} onValueChange={v => setForm({ ...form, frequency: v })}>
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="weekly">Hàng Tuần (Weekly)</SelectItem>
+                    <SelectItem value="monthly">Hàng Tháng (Monthly)</SelectItem>
+                  </SelectContent>
+                </Select>
               </div>
               <div className="space-y-1.5">
                 <label className="text-sm font-medium">Ngày Phát Hành</label>
                 <Input
-                  placeholder="VD: Thứ Hai, 15 hàng tháng..."
-                  value={form.releaseDay}
-                  onChange={(e) => setForm({ ...form, releaseDay: e.target.value })}
+                  type="date"
+                  value={form.publishDate}
+                  onChange={e => setForm({ ...form, publishDate: e.target.value })}
+                />
+              </div>
+              <div className="space-y-1.5">
+                <label className="text-sm font-medium">Kỳ (Issue)</label>
+                <Input
+                  type="number"
+                  min={1}
+                  placeholder="VD: 1"
+                  value={form.issueNumber}
+                  onChange={e => setForm({ ...form, issueNumber: e.target.value })}
                 />
               </div>
               <div className="md:col-span-2 space-y-1.5">
@@ -92,14 +164,14 @@ export default function PublishingSchedulePage() {
                 <Textarea
                   placeholder="Ghi chú thêm (tùy chọn)..."
                   rows={2}
-                  value={form.note}
-                  onChange={(e) => setForm({ ...form, note: e.target.value })}
+                  value={form.notes}
+                  onChange={e => setForm({ ...form, notes: e.target.value })}
                   className="resize-none"
                 />
               </div>
               <div className="md:col-span-2 flex gap-3">
-                <Button type="submit" disabled={!form.series || !form.startDate}>
-                  Tạo Lịch
+                <Button type="submit" disabled={!form.seriesId || !form.publishDate || saving}>
+                  {saving ? 'Đang tạo…' : 'Tạo Lịch'}
                 </Button>
                 <Button type="button" variant="outline" onClick={() => setShowForm(false)}>
                   Hủy
@@ -120,45 +192,38 @@ export default function PublishingSchedulePage() {
                 <th className="text-left px-4 py-3 font-medium text-muted-foreground">Mangaka</th>
                 <th className="text-left px-4 py-3 font-medium text-muted-foreground">Loại XB</th>
                 <th className="text-left px-4 py-3 font-medium text-muted-foreground">Ngày Phát Hành</th>
-                <th className="text-left px-4 py-3 font-medium text-muted-foreground">Bắt Đầu</th>
-                <th className="text-left px-4 py-3 font-medium text-muted-foreground">Kỳ Tiếp Theo</th>
-                <th className="text-left px-4 py-3 font-medium text-muted-foreground">Trạng Thái</th>
+                <th className="text-left px-4 py-3 font-medium text-muted-foreground">Kỳ</th>
+                <th className="text-left px-4 py-3 font-medium text-muted-foreground">Ghi Chú</th>
                 <th className="px-4 py-3"></th>
               </tr>
             </thead>
             <tbody className="divide-y">
-              {schedules.map((s) => (
-                <tr key={s.id} className="hover:bg-muted/30 transition-colors">
-                  <td className="px-4 py-3 font-medium">{s.seriesTitle}</td>
-                  <td className="px-4 py-3 text-muted-foreground">{s.mangakaName}</td>
-                  <td className="px-4 py-3">
-                    <PublishingTypeBadge type={s.publishingType} />
-                  </td>
-                  <td className="px-4 py-3 text-muted-foreground">{s.releaseDay}</td>
-                  <td className="px-4 py-3 text-muted-foreground whitespace-nowrap">{s.startDate}</td>
-                  <td className="px-4 py-3 text-muted-foreground whitespace-nowrap">{s.nextReleaseDate}</td>
-                  <td className="px-4 py-3">
-                    <ScheduleStatusBadge status={s.status} />
-                  </td>
-                  <td className="px-4 py-3">
-                    <Button size="sm" variant="ghost" className="text-xs">
-                      Sửa
-                    </Button>
-                  </td>
-                </tr>
-              ))}
+              {loading ? (
+                <tr><td colSpan={7} className="px-4 py-12 text-center text-muted-foreground">Đang tải...</td></tr>
+              ) : rows.length === 0 ? (
+                <tr><td colSpan={7} className="px-4 py-12 text-center text-muted-foreground">Chưa có lịch xuất bản nào</td></tr>
+              ) : (
+                rows.map(s => (
+                  <tr key={s.id} className="hover:bg-muted/30 transition-colors">
+                    <td className="px-4 py-3 font-medium">{s.seriesTitle}</td>
+                    <td className="px-4 py-3 text-muted-foreground">{s.mangakaName ?? '—'}</td>
+                    <td className="px-4 py-3">
+                      <PublishingTypeBadge type={s.frequency?.toLowerCase() === 'monthly' ? 'Monthly' : 'Weekly'} />
+                    </td>
+                    <td className="px-4 py-3 text-muted-foreground whitespace-nowrap">{s.publishDate}</td>
+                    <td className="px-4 py-3 text-muted-foreground">{s.issueNumber ?? '—'}</td>
+                    <td className="px-4 py-3 text-muted-foreground max-w-xs truncate">{s.notes ?? '—'}</td>
+                    <td className="px-4 py-3">
+                      <Button size="sm" variant="ghost" className="text-xs text-destructive" onClick={() => handleDelete(s.id)}>
+                        <Trash2 className="h-3.5 w-3.5 mr-1" /> Xóa
+                      </Button>
+                    </td>
+                  </tr>
+                ))
+              )}
             </tbody>
           </table>
         </div>
-        {schedules.some(s => s.note) && (
-          <div className="border-t px-4 py-3 space-y-2">
-            {schedules.filter(s => s.note).map(s => (
-              <p key={s.id} className="text-xs text-muted-foreground">
-                <span className="font-medium text-foreground">{s.seriesTitle}:</span> {s.note}
-              </p>
-            ))}
-          </div>
-        )}
       </Card>
     </div>
   );

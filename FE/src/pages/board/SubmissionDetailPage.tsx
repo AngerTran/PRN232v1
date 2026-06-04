@@ -1,99 +1,149 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router';
 import { usePageMeta } from '../../hooks/usePageMeta';
 import { Card, CardContent, CardHeader, CardTitle } from '../../app/components/ui/card';
 import { Button } from '../../app/components/ui/button';
 import { Badge } from '../../app/components/ui/badge';
 import { Textarea } from '../../app/components/ui/textarea';
-import { getBoardSubmissionById, getBoardVotesBySubmissionId } from '../../data/mockData';
 import { SubmissionStatusBadge } from '../../app/components/ui/board';
+import type { BoardSubmissionStatus, Series } from '../../data/mockData';
+import { getSeries } from '../../services/seriesApi';
+import { listBoardVotes, castBoardVote, type BoardDecision, type BoardVote } from '../../services/boardApi';
 import {
-  ArrowLeft, CheckCircle, XCircle, HelpCircle, User,
-  BookOpen, Target, FileText, Star, Users,
+  ArrowLeft, CheckCircle, XCircle, User, BookOpen, Target, FileText,
 } from 'lucide-react';
 import { clsx } from 'clsx';
 
+function mapStatus(status: string): BoardSubmissionStatus {
+  switch (status) {
+    case 'Approved':
+    case 'In Progress':
+    case 'Published':
+      return 'Approved';
+    case 'Cancelled':
+      return 'Rejected';
+    default:
+      return 'Pending Review';
+  }
+}
+
 export default function SubmissionDetailPage() {
   usePageMeta({ title: 'Chi Tiết Submission' });
-  const { submissionId } = useParams();
+  const { submissionId } = useParams<{ submissionId: string }>();
   const navigate = useNavigate();
-  const [decision, setDecision] = useState<'Approve' | 'Reject' | 'More Info' | null>(null);
+
+  const [series, setSeries] = useState<Series | null>(null);
+  const [votes, setVotes] = useState<BoardVote[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [decision, setDecision] = useState<BoardDecision | null>(null);
   const [reason, setReason] = useState('');
+  const [submitting, setSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
+  const [error, setError] = useState('');
 
-  const sub = getBoardSubmissionById(submissionId ?? '');
-  const votes = getBoardVotesBySubmissionId(submissionId ?? '');
+  const seriesId = submissionId ?? '';
 
-  if (!sub) {
+  useEffect(() => {
+    if (!seriesId) return;
+    let isActive = true;
+    setLoading(true);
+    Promise.all([getSeries(seriesId), listBoardVotes(seriesId).catch(() => [])])
+      .then(([s, v]) => {
+        if (!isActive) return;
+        setSeries(s);
+        setVotes(v);
+      })
+      .catch(err => {
+        if (isActive) setError(err instanceof Error ? err.message : 'Không thể tải submission.');
+      })
+      .finally(() => {
+        if (isActive) setLoading(false);
+      });
+    return () => {
+      isActive = false;
+    };
+  }, [seriesId]);
+
+  const approveVotes = votes.filter(v => v.decision === 'approve').length;
+  const rejectVotes = votes.filter(v => v.decision === 'reject').length;
+  const totalVotes = approveVotes + rejectVotes;
+
+  const handleSubmitVote = async () => {
+    if (!decision || !seriesId) return;
+    setSubmitting(true);
+    setError('');
+    try {
+      await castBoardVote(seriesId, decision, reason.trim() || undefined);
+      const refreshed = await listBoardVotes(seriesId).catch(() => votes);
+      setVotes(refreshed);
+      setSubmitted(true);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Không thể ghi nhận phiếu bầu.');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  if (loading) {
+    return <div className="p-6 text-sm text-muted-foreground">Đang tải submission...</div>;
+  }
+
+  if (!series) {
     return (
       <div className="p-6">
         <Card>
           <CardContent className="py-12 text-center text-muted-foreground">
-            Không tìm thấy submission này.
+            {error || 'Không tìm thấy submission này.'}
           </CardContent>
         </Card>
       </div>
     );
   }
 
-  const totalVotes = sub.voteResult.approve + sub.voteResult.reject + sub.voteResult.moreInfo;
-
-  const handleSubmitVote = () => {
-    if (!decision) return;
-    setSubmitted(true);
-  };
-
   return (
     <div className="p-6 space-y-6">
-      {/* Back */}
       <Button variant="ghost" size="sm" onClick={() => navigate('/board/submissions')} className="text-muted-foreground">
         <ArrowLeft className="h-4 w-4 mr-1" /> Quay lại
       </Button>
+
+      {error && (
+        <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{error}</div>
+      )}
 
       {/* Header */}
       <Card className="shadow-sm overflow-hidden">
         <CardContent className="p-0">
           <div className="flex flex-col md:flex-row gap-0">
-            <img src={sub.coverUrl} alt={sub.seriesTitle} className="w-full md:w-48 h-64 md:h-auto object-cover" />
+            <img src={series.coverUrl} alt={series.title} className="w-full md:w-48 h-64 md:h-auto object-cover" />
             <div className="p-6 flex-1">
               <div className="flex items-start justify-between gap-4 mb-4">
                 <div>
-                  <h1 className="text-2xl font-bold mb-1">{sub.seriesTitle}</h1>
+                  <h1 className="text-2xl font-bold mb-1">{series.title}</h1>
                   <div className="flex items-center gap-2 text-sm text-muted-foreground mb-3">
                     <User className="h-4 w-4" />
-                    <span>{sub.mangakaName}</span>
+                    <span>{series.mangakaName ?? '—'}</span>
                   </div>
                   <div className="flex flex-wrap gap-2">
-                    <Badge variant="outline">{sub.genre}</Badge>
-                    <SubmissionStatusBadge status={sub.status} />
+                    <Badge variant="outline">{series.genre}</Badge>
+                    <SubmissionStatusBadge status={mapStatus(series.status)} />
                   </div>
                 </div>
-                <p className="text-sm text-muted-foreground whitespace-nowrap">
-                  Nộp: {sub.submittedDate}
-                </p>
               </div>
 
               {/* Vote summary */}
-              <div className="grid grid-cols-3 gap-4 pt-4 border-t">
+              <div className="grid grid-cols-2 gap-4 pt-4 border-t">
                 <div className="text-center">
-                  <p className="text-2xl font-bold text-green-600">{sub.voteResult.approve}</p>
+                  <p className="text-2xl font-bold text-green-600">{approveVotes}</p>
                   <p className="text-xs text-muted-foreground mt-1">Phê Duyệt</p>
                   <div className="h-1.5 bg-gray-100 rounded-full mt-2">
-                    <div className="h-full bg-green-500 rounded-full" style={{ width: totalVotes ? `${(sub.voteResult.approve / totalVotes) * 100}%` : '0%' }} />
+                    <div className="h-full bg-green-500 rounded-full" style={{ width: totalVotes ? `${(approveVotes / totalVotes) * 100}%` : '0%' }} />
                   </div>
                 </div>
                 <div className="text-center">
-                  <p className="text-2xl font-bold text-red-600">{sub.voteResult.reject}</p>
+                  <p className="text-2xl font-bold text-red-600">{rejectVotes}</p>
                   <p className="text-xs text-muted-foreground mt-1">Từ Chối</p>
                   <div className="h-1.5 bg-gray-100 rounded-full mt-2">
-                    <div className="h-full bg-red-500 rounded-full" style={{ width: totalVotes ? `${(sub.voteResult.reject / totalVotes) * 100}%` : '0%' }} />
-                  </div>
-                </div>
-                <div className="text-center">
-                  <p className="text-2xl font-bold text-amber-600">{sub.voteResult.moreInfo}</p>
-                  <p className="text-xs text-muted-foreground mt-1">Cần Thêm TT</p>
-                  <div className="h-1.5 bg-gray-100 rounded-full mt-2">
-                    <div className="h-full bg-amber-500 rounded-full" style={{ width: totalVotes ? `${(sub.voteResult.moreInfo / totalVotes) * 100}%` : '0%' }} />
+                    <div className="h-full bg-red-500 rounded-full" style={{ width: totalVotes ? `${(rejectVotes / totalVotes) * 100}%` : '0%' }} />
                   </div>
                 </div>
               </div>
@@ -112,7 +162,7 @@ export default function SubmissionDetailPage() {
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <p className="text-sm leading-relaxed text-muted-foreground">{sub.synopsis}</p>
+              <p className="text-sm leading-relaxed text-muted-foreground">{series.synopsis || 'Chưa có tóm tắt.'}</p>
             </CardContent>
           </Card>
 
@@ -124,43 +174,9 @@ export default function SubmissionDetailPage() {
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <Badge className="bg-secondary/10 text-secondary border-secondary/20 text-sm">{sub.targetAudience}</Badge>
-            </CardContent>
-          </Card>
-
-          {/* Characters */}
-          <Card className="shadow-sm">
-            <CardHeader className="pb-3">
-              <CardTitle className="text-base flex items-center gap-2">
-                <Users className="h-4 w-4 text-primary" /> Nhân Vật Chính
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              {sub.characters.map((char, i) => (
-                <div key={i} className="flex gap-3 p-3 rounded-xl bg-muted/40">
-                  <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center text-primary font-bold text-sm shrink-0">
-                    {char.name[0]}
-                  </div>
-                  <div>
-                    <p className="font-medium text-sm">{char.name}</p>
-                    <p className="text-xs text-primary mb-1">{char.role}</p>
-                    <p className="text-xs text-muted-foreground">{char.description}</p>
-                  </div>
-                </div>
-              ))}
-            </CardContent>
-          </Card>
-
-          {/* Editor Recommendation */}
-          <Card className="shadow-sm border-blue-200">
-            <CardHeader className="pb-3">
-              <CardTitle className="text-base flex items-center gap-2">
-                <Star className="h-4 w-4 text-blue-600" /> Đề Xuất Của Editor
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <p className="text-sm text-muted-foreground mb-2">{sub.editorRecommendation}</p>
-              <p className="text-xs text-blue-600 font-medium">— {sub.editorName}</p>
+              <Badge className="bg-secondary/10 text-secondary border-secondary/20 text-sm">
+                {series.targetAudience || '—'}
+              </Badge>
             </CardContent>
           </Card>
 
@@ -175,22 +191,24 @@ export default function SubmissionDetailPage() {
               {votes.length === 0 ? (
                 <p className="text-sm text-muted-foreground">Chưa có thành viên nào bỏ phiếu.</p>
               ) : (
-                votes.map((v) => (
+                votes.map(v => (
                   <div key={v.id} className="flex gap-3">
-                    <img src={v.memberAvatar} alt={v.memberName} className="w-8 h-8 rounded-full object-cover shrink-0" />
+                    <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center text-primary font-bold text-sm shrink-0">
+                      {(v.boardMemberName ?? '?').slice(0, 1).toUpperCase()}
+                    </div>
                     <div className="flex-1">
                       <div className="flex items-center gap-2 mb-1">
-                        <span className="font-medium text-sm">{v.memberName}</span>
+                        <span className="font-medium text-sm">{v.boardMemberName ?? 'Thành viên'}</span>
                         <span className={clsx('text-xs font-semibold px-2 py-0.5 rounded-full',
-                          v.decision === 'Approve' ? 'bg-green-100 text-green-700' :
-                          v.decision === 'Reject' ? 'bg-red-100 text-red-700' :
-                          'bg-amber-100 text-amber-700'
+                          v.decision === 'approve' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'
                         )}>
-                          {v.decision === 'Approve' ? '✓ Phê Duyệt' : v.decision === 'Reject' ? '✗ Từ Chối' : '? Cần Thêm TT'}
+                          {v.decision === 'approve' ? '✓ Phê Duyệt' : '✗ Từ Chối'}
                         </span>
                       </div>
-                      <p className="text-xs text-muted-foreground">{v.reason}</p>
-                      <p className="text-xs text-muted-foreground/60 mt-1">{new Date(v.votedAt).toLocaleString('vi-VN')}</p>
+                      {v.comment && <p className="text-xs text-muted-foreground">{v.comment}</p>}
+                      {v.createdAt && (
+                        <p className="text-xs text-muted-foreground/60 mt-1">{new Date(v.createdAt).toLocaleString('vi-VN')}</p>
+                      )}
                     </div>
                   </div>
                 ))
@@ -211,7 +229,7 @@ export default function SubmissionDetailPage() {
                   <CheckCircle className="h-10 w-10 text-green-500 mx-auto mb-3" />
                   <p className="font-medium">Đã ghi nhận phiếu bầu!</p>
                   <p className="text-xs text-muted-foreground mt-1">
-                    Quyết định: <span className="font-semibold">{decision}</span>
+                    Quyết định: <span className="font-semibold">{decision === 'approve' ? 'Phê Duyệt' : 'Từ Chối'}</span>
                   </p>
                 </div>
               ) : (
@@ -219,11 +237,10 @@ export default function SubmissionDetailPage() {
                   <div className="space-y-2">
                     {(
                       [
-                        { val: 'Approve' as const, label: 'Phê Duyệt', icon: <CheckCircle className="h-4 w-4" />, color: 'border-green-500 bg-green-50 text-green-700' },
-                        { val: 'Reject' as const, label: 'Từ Chối', icon: <XCircle className="h-4 w-4" />, color: 'border-red-500 bg-red-50 text-red-700' },
-                        { val: 'More Info' as const, label: 'Yêu Cầu Thêm Thông Tin', icon: <HelpCircle className="h-4 w-4" />, color: 'border-amber-500 bg-amber-50 text-amber-700' },
+                        { val: 'approve' as const, label: 'Phê Duyệt', icon: <CheckCircle className="h-4 w-4" />, color: 'border-green-500 bg-green-50 text-green-700' },
+                        { val: 'reject' as const, label: 'Từ Chối', icon: <XCircle className="h-4 w-4" />, color: 'border-red-500 bg-red-50 text-red-700' },
                       ]
-                    ).map((opt) => (
+                    ).map(opt => (
                       <button
                         key={opt.val}
                         onClick={() => setDecision(opt.val)}
@@ -239,23 +256,23 @@ export default function SubmissionDetailPage() {
                   </div>
 
                   <Textarea
-                    placeholder="Lý do / nhận xét (bắt buộc nếu từ chối hoặc yêu cầu thêm TT)..."
+                    placeholder="Lý do / nhận xét (khuyến nghị nếu từ chối)..."
                     rows={4}
                     value={reason}
-                    onChange={(e) => setReason(e.target.value)}
+                    onChange={e => setReason(e.target.value)}
                     className="text-sm resize-none"
                   />
 
                   <Button
                     className="w-full"
-                    disabled={!decision || !reason.trim()}
+                    disabled={!decision || submitting}
                     onClick={handleSubmitVote}
                   >
-                    Xác Nhận Phiếu Bầu
+                    {submitting ? 'Đang gửi…' : 'Xác Nhận Phiếu Bầu'}
                   </Button>
 
                   {!decision && (
-                    <p className="text-xs text-muted-foreground text-center">Chọn quyết định và nhập lý do để bỏ phiếu</p>
+                    <p className="text-xs text-muted-foreground text-center">Chọn quyết định để bỏ phiếu</p>
                   )}
                 </>
               )}

@@ -13,7 +13,7 @@ import {
   TableRow,
 } from '../../app/components/ui/table';
 import type { Series } from '../../data/mockData';
-import { getVisibleSeries } from '../../services/seriesApi';
+import { getVisibleSeries, getSeriesRanking } from '../../services/seriesApi';
 import { TrendingUp, TrendingDown, Minus, Eye, Shield } from 'lucide-react';
 
 export default function RankingWatchPage() {
@@ -31,9 +31,19 @@ export default function RankingWatchPage() {
       setError(null);
 
       try {
-        const items = await getVisibleSeries();
+        const [items, rankings] = await Promise.all([
+          getVisibleSeries(),
+          getSeriesRanking().catch(() => []),
+        ]);
+        const rankById = new Map(rankings.map(r => [r.seriesId, r]));
+        const merged = items.map(s => {
+          const r = rankById.get(s.id);
+          return r
+            ? { ...s, currentRank: r.rankPosition, previousRank: r.rankPosition, voteScore: r.voteCount }
+            : s;
+        });
         if (isActive) {
-          setSeries(items);
+          setSeries(merged);
         }
       } catch (err) {
         if (isActive) {
@@ -54,8 +64,12 @@ export default function RankingWatchPage() {
     };
   }, []);
 
-  // Sort by current rank
-  const sortedSeries = [...series].sort((a, b) => a.currentRank - b.currentRank);
+  // Sort by current rank; series chưa có xếp hạng (rank 0) xuống cuối.
+  const sortedSeries = [...series].sort((a, b) => {
+    const ra = a.currentRank > 0 ? a.currentRank : Number.MAX_SAFE_INTEGER;
+    const rb = b.currentRank > 0 ? b.currentRank : Number.MAX_SAFE_INTEGER;
+    return ra - rb;
+  });
 
   return (
     <div className="p-6 space-y-6">
@@ -107,10 +121,10 @@ export default function RankingWatchPage() {
                 return (
                   <TableRow key={s.id} className={s.isAtRisk ? 'bg-orange-50/50' : ''}>
                     <TableCell className="font-bold text-lg">
-                      #{s.currentRank}
+                      {s.currentRank > 0 ? `#${s.currentRank}` : '—'}
                     </TableCell>
                     <TableCell className="text-muted-foreground">
-                      #{s.previousRank}
+                      {s.previousRank > 0 ? `#${s.previousRank}` : '—'}
                     </TableCell>
                     <TableCell>
                       <div>
@@ -118,7 +132,7 @@ export default function RankingWatchPage() {
                         <p className="text-xs text-muted-foreground">{s.genre}</p>
                       </div>
                     </TableCell>
-                    <TableCell className="text-sm">Tanaka Hiroshi</TableCell>
+                    <TableCell className="text-sm">{s.mangakaName ?? '—'}</TableCell>
                     <TableCell className="font-medium">
                       {s.voteScore.toLocaleString('vi-VN')}
                     </TableCell>

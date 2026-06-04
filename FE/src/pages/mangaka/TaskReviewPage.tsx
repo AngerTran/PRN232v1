@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router';
-import { ChevronLeft, CheckCircle, RotateCcw, AlertCircle, User, Calendar, DollarSign, ExternalLink } from 'lucide-react';
+import { ChevronLeft, CheckCircle, RotateCcw, AlertCircle, User, Calendar, ExternalLink } from 'lucide-react';
 import Button from '../../components/ui/Button';
 import Badge from '../../components/ui/Badge';
 import { TypeBadge } from '../../components/ui/Badge';
@@ -8,7 +8,9 @@ import Card, { CardHeader, CardTitle } from '../../components/ui/Card';
 import EmptyState from '../../components/ui/EmptyState';
 import MangaPanelPreview from '../../components/workspace/MangaPanelPreview';
 import { usePageMeta } from '../../hooks/usePageMeta';
-import { getTaskById, getAssistantById, getPageById } from '../../data/mockData';
+import type { Task } from '../../data/mockData';
+import { getTask } from '../../services/tasksApi';
+import { getTaskSubmissions, reviewSubmission, type SubmissionItem } from '../../services/submissionsApi';
 import { format } from 'date-fns';
 
 export default function TaskReviewPage() {
@@ -16,12 +18,11 @@ export default function TaskReviewPage() {
   const navigate = useNavigate();
   const { setPageMeta } = usePageMeta();
 
-  const task = getTaskById(taskId ?? '');
-  const assistant = task ? getAssistantById(task.assistantId) : undefined;
-  const page = task ? getPageById(task.pageId) : undefined;
-
+  const [task, setTask] = useState<Task | null>(null);
+  const [submissions, setSubmissions] = useState<SubmissionItem[]>([]);
+  const [loading, setLoading] = useState(true);
   const [status, setStatus] = useState<'idle' | 'approving' | 'revising' | 'approved' | 'revised'>('idle');
-  const [revisionComment, setRevisionComment] = useState(task?.mangakaFeedback ?? '');
+  const [revisionComment, setRevisionComment] = useState('');
 
   useEffect(() => {
     setPageMeta({
@@ -33,19 +34,57 @@ export default function TaskReviewPage() {
     });
   }, []);
 
+  const loadData = () => {
+    if (!taskId) return;
+    setLoading(true);
+    Promise.all([
+      getTask(taskId).catch(() => null),
+      getTaskSubmissions(taskId).catch(() => [] as SubmissionItem[]),
+    ])
+      .then(([t, subs]) => {
+        setTask(t);
+        setSubmissions(subs);
+      })
+      .finally(() => setLoading(false));
+  };
+
+  useEffect(loadData, [taskId]);
+
+  if (loading) {
+    return <div className="p-6"><EmptyState title="Đang tải nhiệm vụ…" /></div>;
+  }
+
   if (!task) {
     return <div className="p-6"><EmptyState title="Không tìm thấy nhiệm vụ" /></div>;
   }
 
-  const handleApprove = () => {
+  // Bản nộp mới nhất (version cao nhất) là bản cần duyệt.
+  const latest = [...submissions].sort((a, b) => b.versionNumber - a.versionNumber)[0];
+  const submittedResult = latest?.previewImageUrl ?? latest?.fileUrl;
+  const assistantName = latest?.assistantName;
+
+  const handleApprove = async () => {
+    if (!latest) return;
     setStatus('approving');
-    setTimeout(() => setStatus('approved'), 1000);
+    try {
+      await reviewSubmission(latest.id, true);
+      setStatus('approved');
+      loadData();
+    } catch {
+      setStatus('idle');
+    }
   };
 
-  const handleRevise = () => {
-    if (!revisionComment) return;
+  const handleRevise = async () => {
+    if (!revisionComment || !latest) return;
     setStatus('revising');
-    setTimeout(() => setStatus('revised'), 1000);
+    try {
+      await reviewSubmission(latest.id, false, revisionComment);
+      setStatus('revised');
+      loadData();
+    } catch {
+      setStatus('idle');
+    }
   };
 
   return (
@@ -90,25 +129,22 @@ export default function TaskReviewPage() {
             </div>
             <div className="flex items-center gap-2">
               <User size={14} className="text-muted-foreground shrink-0" />
-              <div className="flex items-center gap-2">
-                {assistant?.avatar && (
-                  <img src={assistant.avatar} alt="" className="w-6 h-6 rounded-full object-cover" />
-                )}
-                <span className="font-medium">{assistant?.name}</span>
-              </div>
+              <span className="font-medium">{assistantName ?? 'Chưa rõ trợ lý'}</span>
             </div>
             <div className="flex items-center gap-2 text-muted-foreground">
               <Calendar size={14} className="shrink-0" />
-              <span>Hạn {format(new Date(task.deadline), 'dd/MM/yyyy')}</span>
-            </div>
-            <div className="flex items-center gap-2 text-muted-foreground">
-              <DollarSign size={14} className="shrink-0" />
-              <span>¥{task.price.toLocaleString()}</span>
+              <span>Hạn {task.deadline ? format(new Date(task.deadline), 'dd/MM/yyyy') : '—'}</span>
             </div>
             <div className="pt-2 border-t border-border">
               <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-1">Hướng dẫn</p>
               <p className="text-sm text-foreground/80 leading-relaxed">{task.description}</p>
             </div>
+            {latest?.note && (
+              <div className="pt-2 border-t border-border">
+                <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-1">Ghi chú của trợ lý</p>
+                <p className="text-sm text-foreground/80 leading-relaxed">{latest.note}</p>
+              </div>
+            )}
           </div>
         </Card>
 
@@ -120,7 +156,7 @@ export default function TaskReviewPage() {
                 <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Trang gốc</p>
               </div>
               <div className="relative bg-[#F0EBE0] aspect-[3/4]">
-                {page && <MangaPanelPreview layout={page.panelLayout} />}
+                <MangaPanelPreview layout={(task.pageNumber - 1) % 4} />
                 {/* Highlight assigned region */}
                 <div
                   className="absolute border-2 border-primary bg-primary/15"
@@ -130,7 +166,7 @@ export default function TaskReviewPage() {
                   }}
                 >
                   <span className="absolute top-0 left-0 text-[8px] font-bold bg-primary text-white px-1">
-                    {task.type.slice(0,2).toUpperCase()}
+                    {task.type.slice(0, 2).toUpperCase()}
                   </span>
                 </div>
               </div>
@@ -139,19 +175,19 @@ export default function TaskReviewPage() {
             <Card padding="none">
               <div className="p-3 border-b border-border flex items-center justify-between">
                 <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Kết quả đã nộp</p>
-                {task.submittedResult && (
-                  <a href={task.submittedResult} target="_blank" rel="noopener noreferrer"
+                {latest?.fileUrl && (
+                  <a href={latest.fileUrl} target="_blank" rel="noopener noreferrer"
                     className="text-primary text-xs flex items-center gap-1 hover:underline">
                     <ExternalLink size={11} /> View
                   </a>
                 )}
               </div>
-              {task.submittedResult ? (
+              {submittedResult ? (
                 <div className="relative aspect-[3/4] overflow-hidden bg-muted">
-                  <img src={task.submittedResult} alt="Submitted result" className="w-full h-full object-cover" />
+                  <img src={submittedResult} alt="Submitted result" className="w-full h-full object-cover" />
                   <div className="absolute inset-0 flex items-end p-3">
                     <div className="bg-black/60 text-white text-xs px-2 py-1 rounded-lg">
-                      Nộp bởi {assistant?.name}
+                      Nộp bởi {assistantName ?? 'trợ lý'} · v{latest?.versionNumber}
                     </div>
                   </div>
                 </div>
@@ -167,17 +203,11 @@ export default function TaskReviewPage() {
           </div>
 
           {/* Approve / Revise actions */}
-          {status === 'idle' && task.submittedResult && (
+          {status === 'idle' && latest && (
             <div className="space-y-4">
               <Card>
                 <CardHeader><CardTitle>Hành động xét duyệt</CardTitle></CardHeader>
                 <div className="space-y-4">
-                  {task.mangakaFeedback && (
-                    <div className="p-3 bg-orange-50 border border-orange-200 rounded-xl text-sm text-orange-800">
-                      <p className="font-semibold mb-1">Phản hồi trước đó</p>
-                      <p>{task.mangakaFeedback}</p>
-                    </div>
-                  )}
                   <div>
                     <label className="block text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-2">
                       Nhận xét chỉnh sửa (bắt buộc khi yêu cầu chỉnh sửa)
@@ -195,7 +225,6 @@ export default function TaskReviewPage() {
                       variant="outline"
                       onClick={handleRevise}
                       disabled={!revisionComment}
-                      loading={status === 'revising'}
                       className="flex-1"
                     >
                       <RotateCcw size={15} /> Yêu cầu chỉnh sửa
@@ -203,7 +232,6 @@ export default function TaskReviewPage() {
                     <Button
                       variant="primary"
                       onClick={handleApprove}
-                      loading={status === 'approving'}
                       className="flex-1"
                     >
                       <CheckCircle size={15} /> Phê duyệt Nhiệm vụ

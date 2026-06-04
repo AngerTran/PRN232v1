@@ -1,10 +1,11 @@
-import { useEffect, useId } from 'react';
+import { useEffect, useId, useState } from 'react';
 import { useParams, useNavigate } from 'react-router';
-import { ChevronLeft, TrendingUp, TrendingDown, Minus, Star, AlertTriangle } from 'lucide-react';
+import { ChevronLeft, TrendingUp, TrendingDown, Minus, AlertTriangle } from 'lucide-react';
 import Card, { CardHeader, CardTitle } from '../../components/ui/Card';
 import EmptyState from '../../components/ui/EmptyState';
 import { usePageMeta } from '../../hooks/usePageMeta';
-import { getSeriesById, getRankingBySeriesId } from '../../data/mockData';
+import type { Series, SeriesRanking } from '../../data/mockData';
+import { getSeries, getSeriesRankingTrend } from '../../services/seriesApi';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar } from 'recharts';
 import { clsx } from 'clsx';
 
@@ -14,8 +15,33 @@ export default function SeriesRankingPage() {
   const { setPageMeta } = usePageMeta();
 
   const gradientId = useId().replace(/:/g, '');
-  const series = getSeriesById(seriesId ?? '');
-  const ranking = getRankingBySeriesId(seriesId ?? '');
+  const [series, setSeries] = useState<Series | null>(null);
+  const [ranking, setRanking] = useState<SeriesRanking | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    if (!seriesId) return;
+    let isActive = true;
+    setLoading(true);
+    Promise.all([getSeries(seriesId), getSeriesRankingTrend(seriesId).catch(() => null)])
+      .then(([s, r]) => {
+        if (!isActive) return;
+        setSeries(s);
+        setRanking(r ? { ...r, isAtRisk: s.isAtRisk } : null);
+      })
+      .catch(() => {
+        if (isActive) {
+          setSeries(null);
+          setRanking(null);
+        }
+      })
+      .finally(() => {
+        if (isActive) setLoading(false);
+      });
+    return () => {
+      isActive = false;
+    };
+  }, [seriesId]);
 
   useEffect(() => {
     setPageMeta({
@@ -27,6 +53,10 @@ export default function SeriesRankingPage() {
       ],
     });
   }, [series?.id]);
+
+  if (loading) {
+    return <div className="p-6 text-sm text-muted-foreground">Đang tải xếp hạng...</div>;
+  }
 
   if (!series || !ranking) {
     return (

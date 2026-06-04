@@ -10,7 +10,8 @@ import {
   Users, UserPlus, ShieldCheck, Activity, SlidersHorizontal,
 } from 'lucide-react';
 import { clsx } from 'clsx';
-import { logoutUser, getLoggedInUser } from '../../data/mockData';
+import { getLoggedInUser } from '../../data/mockData';
+import { logoutWithApi } from '../../services/authApi';
 
 interface NavItem {
   label: string;
@@ -148,8 +149,8 @@ export default function Sidebar() {
     return location.pathname.startsWith(href);
   };
 
-  const handleLogout = () => {
-    logoutUser();
+  const handleLogout = async () => {
+    await logoutWithApi();
     navigate('/login');
   };
 

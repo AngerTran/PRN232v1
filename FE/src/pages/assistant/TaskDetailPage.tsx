@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router';
 import { usePageMeta } from '../../hooks/usePageMeta';
 import { Card, CardContent, CardHeader, CardTitle } from '../../app/components/ui/card';
@@ -8,11 +9,8 @@ import {
   MangaPagePreview,
   FeedbackBox,
 } from '../../app/components/ui/assistant';
-import {
-  getTaskById,
-  getAssistantById,
-  currentUser,
-} from '../../data/mockData';
+import { currentUser, type Task } from '../../data/mockData';
+import { getTask, startTask } from '../../services/tasksApi';
 import {
   Calendar,
   DollarSign,
@@ -25,14 +23,60 @@ import {
 } from 'lucide-react';
 import { format } from 'date-fns';
 import { vi } from 'date-fns/locale';
+import { toast } from 'sonner';
 
 export default function TaskDetailPage() {
   const { taskId } = useParams<{ taskId: string }>();
   const navigate = useNavigate();
 
-  const task = taskId ? getTaskById(taskId) : undefined;
+  const [task, setTask] = useState<Task | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [starting, setStarting] = useState(false);
+
+  useEffect(() => {
+    if (!taskId) return;
+    let isActive = true;
+    setLoading(true);
+    getTask(taskId)
+      .then(data => {
+        if (isActive) setTask(data);
+      })
+      .catch(() => {
+        if (isActive) setTask(null);
+      })
+      .finally(() => {
+        if (isActive) setLoading(false);
+      });
+    return () => {
+      isActive = false;
+    };
+  }, [taskId]);
 
   usePageMeta({ title: task ? task.title : 'Chi Tiết Task' });
+
+  const handleStart = async () => {
+    if (!task) return;
+    setStarting(true);
+    try {
+      const updated = await startTask(task.id);
+      setTask(updated);
+      toast.success('Đã bắt đầu task');
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Không thể bắt đầu task');
+    } finally {
+      setStarting(false);
+    }
+  };
+
+  if (loading) {
+    return (
+      <Card>
+        <CardContent className="py-12 text-center">
+          <p className="text-muted-foreground">Đang tải chi tiết task…</p>
+        </CardContent>
+      </Card>
+    );
+  }
 
   if (!task) {
     return (
@@ -216,9 +260,9 @@ export default function TaskDetailPage() {
         <CardContent className="py-6">
           <div className="flex flex-col sm:flex-row gap-3">
             {canStart && (
-              <Button className="flex-1" size="lg">
+              <Button className="flex-1" size="lg" onClick={handleStart} disabled={starting}>
                 <Play className="h-5 w-5 mr-2" />
-                Bắt Đầu Task
+                {starting ? 'Đang bắt đầu…' : 'Bắt Đầu Task'}
               </Button>
             )}
             {canSubmit && (

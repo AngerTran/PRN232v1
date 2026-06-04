@@ -4,6 +4,7 @@ import { Eye, EyeOff, Check } from 'lucide-react';
 import { ImageWithFallback } from '@/app/components/figma/ImageWithFallback';
 import inkflowLogo from '@/imports/image-10.png';
 import workspacePhoto from '@/imports/image-4.png';
+import { registerWithApi } from '../../services/authApi';
 
 export default function RegisterPage() {
   const navigate = useNavigate();
@@ -12,18 +13,39 @@ export default function RegisterPage() {
   const [agreed, setAgreed] = useState(false);
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   const update = (k: keyof typeof form) => (e: ChangeEvent<HTMLInputElement>) =>
     setForm(f => ({ ...f, [k]: e.target.value }));
 
-  const handleSubmit = (e: FormEvent) => {
+  const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
+    setError(null);
+
+    if (form.password.length < 6) {
+      setError('Mật khẩu phải có tối thiểu 6 ký tự.');
+      return;
+    }
+    if (form.password !== form.confirm) {
+      setError('Mật khẩu xác nhận không khớp.');
+      return;
+    }
+
     setLoading(true);
-    setTimeout(() => {
-      setLoading(false);
+    try {
+      const result = await registerWithApi({
+        email: form.email,
+        password: form.password,
+        fullName: form.name,
+      });
       setSuccess(true);
-      setTimeout(() => navigate('/login'), 1800);
-    }, 800);
+      // Nếu BE trả token luôn thì vào dashboard, ngược lại cần xác nhận email → về login.
+      setTimeout(() => navigate(result.user ? '/' : '/login'), 1800);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Đăng ký thất bại. Vui lòng thử lại.');
+    } finally {
+      setLoading(false);
+    }
   };
 
   if (success) {
@@ -177,6 +199,12 @@ export default function RegisterPage() {
                 của MangaFlow
               </span>
             </label>
+
+            {error && (
+              <p className="text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2">
+                {error}
+              </p>
+            )}
 
             <button
               type="submit"

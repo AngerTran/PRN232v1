@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router';
 import { usePageMeta } from '../../hooks/usePageMeta';
 import { Card } from '../../app/components/ui/card';
@@ -20,7 +20,8 @@ import {
   TableRow,
 } from '../../app/components/ui/table';
 import { TaskStatusBadge } from '../../app/components/ui/assistant';
-import { currentAssistant, getTasksByAssistantId, TaskStatus } from '../../data/mockData';
+import type { Task } from '../../data/mockData';
+import { getMyTasks } from '../../services/tasksApi';
 import { Search, Eye } from 'lucide-react';
 import { format } from 'date-fns';
 import { vi } from 'date-fns/locale';
@@ -31,8 +32,25 @@ export default function MyTasksPage() {
 
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
+  const [allTasks, setAllTasks] = useState<Task[]>([]);
+  const [loading, setLoading] = useState(true);
 
-  const allTasks = getTasksByAssistantId(currentAssistant.id);
+  useEffect(() => {
+    let isActive = true;
+    getMyTasks()
+      .then(data => {
+        if (isActive) setAllTasks(data);
+      })
+      .catch(() => {
+        if (isActive) setAllTasks([]);
+      })
+      .finally(() => {
+        if (isActive) setLoading(false);
+      });
+    return () => {
+      isActive = false;
+    };
+  }, []);
 
   // Filter tasks
   const filteredTasks = allTasks.filter(task => {
@@ -92,7 +110,13 @@ export default function MyTasksPage() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {filteredTasks.length === 0 ? (
+              {loading ? (
+                <TableRow>
+                  <TableCell colSpan={8} className="text-center py-8 text-muted-foreground">
+                    Đang tải công việc…
+                  </TableCell>
+                </TableRow>
+              ) : filteredTasks.length === 0 ? (
                 <TableRow>
                   <TableCell colSpan={8} className="text-center py-8 text-muted-foreground">
                     Không tìm thấy task nào

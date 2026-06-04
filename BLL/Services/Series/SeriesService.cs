@@ -45,7 +45,7 @@ public class SeriesService
     limit = limit is < 1 or > 100 ? 10 : limit;
 
     var query = BuildSeriesQuery()
-      .Where(s => SeriesStatuses.PublicVisibleValues.Contains(s.Status));
+      .Where(s => SeriesStatuses.PublicVisibleArray.Contains(s.Status));
 
     if (!string.IsNullOrWhiteSpace(genre))
     {
@@ -80,7 +80,7 @@ public class SeriesService
     }
 
     return await query
-      .Where(s => SeriesStatuses.PublicVisibleValues.Contains(s.Status) || s.AuthorId == callerId)
+      .Where(s => SeriesStatuses.PublicVisibleArray.Contains(s.Status) || s.AuthorId == callerId)
       .OrderByDescending(s => s.UpdatedAt)
       .Select(MapProjection())
       .ToListAsync(cancellationToken);

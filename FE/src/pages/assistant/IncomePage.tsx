@@ -1,8 +1,7 @@
-import { useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router';
 import { usePageMeta } from '../../hooks/usePageMeta';
 import { Card } from '../../app/components/ui/card';
-import { Badge } from '../../app/components/ui/badge';
 import { Button } from '../../app/components/ui/button';
 import {
   Select,
@@ -20,40 +19,73 @@ import {
   TableRow,
 } from '../../app/components/ui/table';
 import { IncomeSummaryCard } from '../../app/components/ui/assistant';
-import {
-  currentAssistant,
-  getTasksByStatus,
-  assistantIncome,
-  getMonthlyIncome,
-  getPendingPaymentAmount,
-} from '../../data/mockData';
-import { Wallet, TrendingUp, Clock, CheckCircle, Eye } from 'lucide-react';
+import type { Task } from '../../data/mockData';
+import { getMyTasks } from '../../services/tasksApi';
+import { getMyEarnings, type AssistantEarnings } from '../../services/submissionsApi';
+import { FileCheck, ClipboardCheck, Clock, CheckCircle, Eye } from 'lucide-react';
 import { format } from 'date-fns';
 import { vi } from 'date-fns/locale';
+
+function currentMonthKey(): string {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+}
 
 export default function IncomePage() {
   usePageMeta({ title: 'Thu Nhập' });
   const navigate = useNavigate();
 
-  const [monthFilter, setMonthFilter] = useState('2025-05');
+  const [tasks, setTasks] = useState<Task[]>([]);
+  const [earnings, setEarnings] = useState<AssistantEarnings | null>(null);
+  const [monthFilter, setMonthFilter] = useState(currentMonthKey());
 
-  const approvedTasksCount = getTasksByStatus(currentAssistant.id, 'Approved').length;
-  const submittedTasksCount = getTasksByStatus(currentAssistant.id, 'Submitted').length;
+  // 6 tháng gần nhất, tạo động theo ngày hiện tại.
+  const monthOptions = useMemo(() => {
+    return Array.from({ length: 6 }, (_, i) => {
+      const d = new Date();
+      d.setMonth(d.getMonth() - i);
+      const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+      return { key, label: `Tháng ${d.getMonth() + 1}, ${d.getFullYear()}` };
+    });
+  }, []);
 
-  const monthlyIncome = getMonthlyIncome(currentAssistant.id, monthFilter);
-  const pendingPayment = getPendingPaymentAmount(currentAssistant.id);
-  const totalIncome = assistantIncome.reduce((sum, i) => sum + i.price, 0);
+  useEffect(() => {
+    let isActive = true;
+    getMyTasks()
+      .then(list => {
+        if (isActive) setTasks(list);
+      })
+      .catch(() => {
+        if (isActive) setTasks([]);
+      });
+    return () => {
+      isActive = false;
+    };
+  }, []);
 
-  // Filter income by month
-  const filteredIncome = assistantIncome.filter(i =>
-    i.approvedDate.startsWith(monthFilter)
-  );
+  useEffect(() => {
+    let isActive = true;
+    const [year, month] = monthFilter.split('-').map(Number);
+    getMyEarnings(year, month)
+      .then(result => {
+        if (isActive) setEarnings(result);
+      })
+      .catch(() => {
+        if (isActive) setEarnings(null);
+      });
+    return () => {
+      isActive = false;
+    };
+  }, [monthFilter]);
+
+  const approvedTasks = tasks.filter(t => t.status === 'Approved');
+  const submittedTasks = tasks.filter(t => t.status === 'Submitted');
 
   return (
     <div className="p-6 space-y-6">
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
-          <Wallet className="h-5 w-5 text-primary" />
+          <FileCheck className="h-5 w-5 text-primary" />
           <h1 className="text-2xl font-bold">Thu Nhập</h1>
         </div>
 
@@ -62,11 +94,11 @@ export default function IncomePage() {
             <SelectValue placeholder="Chọn tháng" />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="2025-05">Tháng 5, 2025</SelectItem>
-            <SelectItem value="2025-04">Tháng 4, 2025</SelectItem>
-            <SelectItem value="2025-03">Tháng 3, 2025</SelectItem>
-            <SelectItem value="2025-02">Tháng 2, 2025</SelectItem>
-            <SelectItem value="2025-01">Tháng 1, 2025</SelectItem>
+            {monthOptions.map(opt => (
+              <SelectItem key={opt.key} value={opt.key}>
+                {opt.label}
+              </SelectItem>
+            ))}
           </SelectContent>
         </Select>
       </div>
@@ -74,32 +106,32 @@ export default function IncomePage() {
       {/* Summary Cards */}
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
         <IncomeSummaryCard
-          title="Task Đã Duyệt Tháng Này"
-          value={approvedTasksCount}
+          title="Bài Được Duyệt"
+          value={earnings?.approvedSubmissions ?? 0}
           icon={CheckCircle}
-          description="Task hoàn thành"
-        />
-        <IncomeSummaryCard
-          title="Task Chờ Duyệt"
-          value={submittedTasksCount}
-          icon={Clock}
-          description="Đã nộp, chờ review"
-        />
-        <IncomeSummaryCard
-          title="Thu Nhập Tháng Này"
-          value={`${monthlyIncome.toLocaleString('vi-VN')} ¥`}
-          icon={TrendingUp}
           description={`Tháng ${monthFilter.split('-')[1]}`}
         />
         <IncomeSummaryCard
-          title="Tổng Thu Nhập"
-          value={`${totalIncome.toLocaleString('vi-VN')} ¥`}
-          icon={Wallet}
-          description={`Chờ thanh toán: ${pendingPayment.toLocaleString('vi-VN')} ¥`}
+          title="Trang Được Duyệt"
+          value={earnings?.approvedPages ?? 0}
+          icon={FileCheck}
+          description={`Tháng ${monthFilter.split('-')[1]}`}
+        />
+        <IncomeSummaryCard
+          title="Task Đã Duyệt"
+          value={approvedTasks.length}
+          icon={ClipboardCheck}
+          description="Tổng số task đã duyệt"
+        />
+        <IncomeSummaryCard
+          title="Task Chờ Duyệt"
+          value={submittedTasks.length}
+          icon={Clock}
+          description="Đã nộp, chờ review"
         />
       </div>
 
-      {/* Income Table */}
+      {/* Approved tasks table */}
       <Card>
         <div className="overflow-x-auto">
           <Table>
@@ -107,40 +139,34 @@ export default function IncomePage() {
               <TableRow>
                 <TableHead>Task</TableHead>
                 <TableHead>Series</TableHead>
-                <TableHead>Ngày Duyệt</TableHead>
-                <TableHead>Giá</TableHead>
-                <TableHead>Thanh Toán</TableHead>
+                <TableHead>Trang</TableHead>
+                <TableHead>Hạn Nộp</TableHead>
                 <TableHead className="text-right">Hành Động</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
-              {filteredIncome.length === 0 ? (
+              {approvedTasks.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={6} className="text-center py-8 text-muted-foreground">
-                    Không có thu nhập trong tháng này
+                  <TableCell colSpan={5} className="text-center py-8 text-muted-foreground">
+                    Chưa có task nào được duyệt
                   </TableCell>
                 </TableRow>
               ) : (
-                filteredIncome.map(income => (
-                  <TableRow key={income.id}>
-                    <TableCell className="font-medium">{income.taskTitle}</TableCell>
-                    <TableCell>{income.seriesTitle}</TableCell>
+                approvedTasks.map(task => (
+                  <TableRow key={task.id}>
+                    <TableCell className="font-medium">{task.title}</TableCell>
+                    <TableCell>{task.seriesTitle}</TableCell>
+                    <TableCell>Trang {task.pageNumber}</TableCell>
                     <TableCell>
-                      {format(new Date(income.approvedDate), 'dd/MM/yyyy', { locale: vi })}
-                    </TableCell>
-                    <TableCell className="font-medium">
-                      {income.price.toLocaleString('vi-VN')} ¥
-                    </TableCell>
-                    <TableCell>
-                      <Badge variant={income.paymentStatus === 'Paid' ? 'default' : 'secondary'}>
-                        {income.paymentStatus === 'Paid' ? 'Đã thanh toán' : 'Chờ thanh toán'}
-                      </Badge>
+                      {task.deadline
+                        ? format(new Date(task.deadline), 'dd/MM/yyyy', { locale: vi })
+                        : '—'}
                     </TableCell>
                     <TableCell className="text-right">
                       <Button
                         variant="ghost"
                         size="sm"
-                        onClick={() => navigate(`/assistant/tasks/${income.taskId}`)}
+                        onClick={() => navigate(`/assistant/tasks/${task.id}`)}
                       >
                         <Eye className="h-4 w-4 mr-1" />
                         Xem
@@ -154,11 +180,10 @@ export default function IncomePage() {
         </div>
       </Card>
 
-      {filteredIncome.length > 0 && (
-        <div className="text-sm text-muted-foreground">
-          Tổng thu nhập tháng {monthFilter.split('-')[1]}: {monthlyIncome.toLocaleString('vi-VN')} ¥
-        </div>
-      )}
+      <p className="text-xs text-muted-foreground">
+        Backend hiện chưa cung cấp số tiền theo task; trang hiển thị số trang/bài được duyệt từ
+        thống kê thu nhập.
+      </p>
     </div>
   );
 }
