@@ -1,4 +1,5 @@
-import { apiRequest } from './apiClient';
+import { apiRequest, API_BASE_URL } from './apiClient';
+import { getChapterTaskStats } from './workspaceApi';
 import type { Chapter, ChapterStatus, Series, SeriesRanking, SeriesStatus } from '../data/mockData';
 
 type ApiEnvelope<T> = T | { data: T };
@@ -112,15 +113,39 @@ function dateOnly(value?: string | null): string {
   return value ? value.slice(0, 10) : new Date().toISOString().slice(0, 10);
 }
 
+const CHARACTERS_MARKER = '\n\n---NHAN-VAT-CHINH---\n';
+
+/** Ghép tóm tắt và nhân vật chính vào trường description của backend. */
+export function buildSeriesDescription(synopsis: string, mainCharacters?: string): string {
+  const base = synopsis.trim();
+  const chars = mainCharacters?.trim();
+  if (!chars) return base;
+  return `${base}${CHARACTERS_MARKER}${chars}`;
+}
+
+/** Tách synopsis và nhân vật chính từ description backend. */
+export function parseSeriesDescription(description?: string | null): { synopsis: string; mainCharacters: string } {
+  if (!description) return { synopsis: '', mainCharacters: '' };
+  const marker = '---NHAN-VAT-CHINH---';
+  const idx = description.indexOf(marker);
+  if (idx === -1) return { synopsis: description.trim(), mainCharacters: '' };
+  return {
+    synopsis: description.slice(0, idx).trim(),
+    mainCharacters: description.slice(idx + marker.length).trim(),
+  };
+}
+
 export function mapSeries(item: ApiSeries, chaptersCount = 0): Series {
   const genre = item.genre || 'Uncategorized';
+  const { synopsis, mainCharacters } = parseSeriesDescription(item.description);
   return {
     id: item.id,
     title: item.title,
     genre,
     genres: genre.split(',').map(g => g.trim()).filter(Boolean),
     status: mapSeriesStatus(item.status),
-    synopsis: item.description || '',
+    synopsis,
+    mainCharacters: mainCharacters || undefined,
     targetAudience: item.targetAudience || '',
     publishingType: mapPublishingFrequency(item.publishingFrequency),
     currentRank: 0,
@@ -151,6 +176,26 @@ export function mapChapter(item: ApiChapter): Chapter {
   };
 }
 
+async function enrichChapter(chapter: Chapter): Promise<Chapter> {
+  try {
+    const stats = await getChapterTaskStats(chapter.id);
+    const progress = stats.progress > 0
+      ? stats.progress
+      : (chapter.status === 'Published' ? 100 : 0);
+
+    // Suy ra trạng thái hiển thị theo tiến độ task (workflow backend vẫn giữ nguyên).
+    let status = chapter.status;
+    if (chapter.status === 'Draft' || chapter.status === 'In Progress') {
+      if (stats.totalTasks > 0 && progress === 100) status = 'Approved';
+      else if (stats.totalTasks > 0 && progress > 0) status = 'In Progress';
+    }
+
+    return { ...chapter, pagesCount: stats.pagesCount, progress, status };
+  } catch {
+    return chapter;
+  }
+}
+
 export async function getMySeries(): Promise<Series[]> {
   const items = unwrap(await apiRequest<ApiEnvelope<ApiSeries[]>>('/api/series/my-series'));
   return Promise.all(items.map(async item => {
@@ -167,6 +212,16 @@ export async function getVisibleSeries(): Promise<Series[]> {
   }));
 }
 
+const APPROVED_SERIES_STATUSES = new Set(['approved', 'publishing', 'completed']);
+
+/** Series đã qua hội đồng (approved trở đi), không tải chapter để nhẹ hơn. */
+export async function getApprovedSeries(): Promise<Series[]> {
+  const items = unwrap(await apiRequest<ApiEnvelope<ApiSeries[]>>('/api/series'));
+  return items
+    .filter(item => APPROVED_SERIES_STATUSES.has(item.status?.toLowerCase() ?? ''))
+    .map(item => mapSeries(item));
+}
+
 export async function getSeries(id: string): Promise<Series> {
   const [item, chapters] = await Promise.all([
     apiRequest<ApiEnvelope<ApiSeries>>(`/api/series/${id}`).then(unwrap),
@@ -177,12 +232,13 @@ export async function getSeries(id: string): Promise<Series> {
 
 export async function getSeriesChapters(id: string): Promise<Chapter[]> {
   const items = unwrap(await apiRequest<ApiEnvelope<ApiChapter[]>>(`/api/series/${id}/chapters`));
-  return items.map(mapChapter);
+  const chapters = items.map(mapChapter);
+  return Promise.all(chapters.map(enrichChapter));
 }
 
 export async function getChapter(id: string): Promise<Chapter> {
   const item = unwrap(await apiRequest<ApiEnvelope<ApiChapter>>(`/api/chapters/${id}`));
-  return mapChapter(item);
+  return enrichChapter(mapChapter(item));
 }
 
 export async function createSeries(input: CreateSeriesInput): Promise<Series> {
@@ -198,6 +254,71 @@ export async function createSeries(input: CreateSeriesInput): Promise<Series> {
     }),
   }));
   return mapSeries(created);
+}
+
+/** Tải ảnh bìa lên Supabase Storage và cập nhật URL trên series. */
+export async function uploadSeriesCover(seriesId: string, file: File): Promise<Series> {
+  const form = new FormData();
+  form.append('file', file);
+
+  const token = localStorage.getItem('inkflow_access_token');
+  const response = await fetch(`${API_BASE_URL}/api/series/${seriesId}/cover`, {
+    method: 'POST',
+    headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+    body: form,
+  });
+
+  if (!response.ok) {
+    const body = await response.text();
+    let message = body;
+    try {
+      const parsed = JSON.parse(body) as { message?: string; title?: string };
+      message = parsed.message || parsed.title || body;
+    } catch {
+      // giữ nguyên text
+    }
+    throw new Error(message || `Tải ảnh bìa thất bại (status ${response.status})`);
+  }
+
+  return mapSeries(unwrap(await response.json()));
+}
+
+/** Tải bản thảo lên chapter (PDF/ZIP/CBZ). */
+export async function uploadChapterManuscript(chapterId: string, file: File): Promise<Chapter> {
+  const form = new FormData();
+  form.append('file', file);
+
+  const token = localStorage.getItem('inkflow_access_token');
+  const response = await fetch(`${API_BASE_URL}/api/chapters/${chapterId}/manuscript`, {
+    method: 'POST',
+    headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+    body: form,
+  });
+
+  if (!response.ok) {
+    const body = await response.text();
+    let message = body;
+    try {
+      const parsed = JSON.parse(body) as { message?: string; title?: string };
+      message = parsed.message || parsed.title || body;
+    } catch {
+      // giữ nguyên text
+    }
+    throw new Error(message || `Tải bản thảo thất bại (status ${response.status})`);
+  }
+
+  const item = unwrap(await response.json()) as ApiChapter;
+  return mapChapter(item);
+}
+
+/** Tạo chapter bản thảo đề xuất (số 0) và upload file nếu có. */
+export async function uploadSeriesProposalManuscript(seriesId: string, file: File): Promise<Chapter> {
+  const chapter = await createChapter({
+    seriesId,
+    chapterNumber: 0,
+    title: 'Bản thảo đề xuất',
+  });
+  return uploadChapterManuscript(chapter.id, file);
 }
 
 export async function createChapter(input: CreateChapterInput): Promise<Chapter> {
@@ -219,6 +340,11 @@ export async function updateSeriesStatus(id: string, status: string): Promise<Se
     body: JSON.stringify({ status }),
   }));
   return mapSeries(updated);
+}
+
+/** Gửi series lên hội đồng xét duyệt (draft → pending_review). */
+export async function submitSeriesForReview(id: string): Promise<Series> {
+  return updateSeriesStatus(id, 'pending_review');
 }
 
 export async function deleteSeries(id: string): Promise<void> {
@@ -423,6 +549,28 @@ export async function createSchedule(seriesId: string, input: CreateScheduleInpu
 
 export async function deleteSchedule(id: string): Promise<void> {
   await apiRequest<void>(`/api/schedules/${id}`, { method: 'DELETE' });
+}
+
+export interface UpdateScheduleInput {
+  publishDate?: string;
+  frequency?: string;
+  issueNumber?: number;
+  notes?: string;
+}
+
+export async function updateSchedule(id: string, input: UpdateScheduleInput): Promise<PublishingScheduleItem> {
+  const updated = unwrap(
+    await apiRequest<ApiEnvelope<ApiSchedule>>(`/api/schedules/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify({
+        publishDate: input.publishDate,
+        frequency: input.frequency,
+        issueNumber: input.issueNumber,
+        notes: input.notes,
+      }),
+    })
+  );
+  return mapSchedule(updated);
 }
 
 // Dựng SeriesRanking (định dạng UI lịch sử theo tuần) từ các issue ranking của BE.

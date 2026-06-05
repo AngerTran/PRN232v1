@@ -7,10 +7,11 @@ import { Badge } from '../../app/components/ui/badge';
 import { Textarea } from '../../app/components/ui/textarea';
 import { SubmissionStatusBadge } from '../../app/components/ui/board';
 import type { BoardSubmissionStatus, Series } from '../../data/mockData';
-import { getSeries } from '../../services/seriesApi';
-import { listBoardVotes, castBoardVote, type BoardDecision, type BoardVote } from '../../services/boardApi';
+import { getSeries, getSeriesChapters } from '../../services/seriesApi';
+import { listBoardVotes, castBoardVote, getBoardVoteProgress, type BoardDecision, type BoardVote, type BoardVoteProgress } from '../../services/boardApi';
+import { getStoredUser } from '../../services/authApi';
 import {
-  ArrowLeft, CheckCircle, XCircle, User, BookOpen, Target, FileText,
+  ArrowLeft, CheckCircle, XCircle, User, BookOpen, Target, FileText, ExternalLink,
 } from 'lucide-react';
 import { clsx } from 'clsx';
 
@@ -22,6 +23,8 @@ function mapStatus(status: string): BoardSubmissionStatus {
       return 'Approved';
     case 'Cancelled':
       return 'Rejected';
+    case 'Submitted':
+      return 'Pending Review';
     default:
       return 'Pending Review';
   }
@@ -34,6 +37,8 @@ export default function SubmissionDetailPage() {
 
   const [series, setSeries] = useState<Series | null>(null);
   const [votes, setVotes] = useState<BoardVote[]>([]);
+  const [voteProgress, setVoteProgress] = useState<BoardVoteProgress | null>(null);
+  const [manuscriptUrl, setManuscriptUrl] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [decision, setDecision] = useState<BoardDecision | null>(null);
   const [reason, setReason] = useState('');
@@ -47,11 +52,33 @@ export default function SubmissionDetailPage() {
     if (!seriesId) return;
     let isActive = true;
     setLoading(true);
-    Promise.all([getSeries(seriesId), listBoardVotes(seriesId).catch(() => [])])
-      .then(([s, v]) => {
+    Promise.all([
+      getSeries(seriesId),
+      listBoardVotes(seriesId).catch(() => []),
+      getBoardVoteProgress(seriesId).catch(() => null),
+      getSeriesChapters(seriesId).catch(() => []),
+    ])
+      .then(([s, v, progress, chapters]) => {
         if (!isActive) return;
         setSeries(s);
         setVotes(v);
+        setVoteProgress(progress);
+        const proposal = chapters.find(c => c.number === 0) ?? chapters.find(c => c.description);
+        setManuscriptUrl(proposal?.description || null);
+
+        const currentUserId = getStoredUser()?.id;
+        const myVote = currentUserId
+          ? v.find(vote => vote.boardMemberId === currentUserId)
+          : undefined;
+        if (myVote) {
+          setSubmitted(true);
+          setDecision(myVote.decision === 'reject' ? 'reject' : 'approve');
+          setReason(myVote.comment ?? '');
+        } else {
+          setSubmitted(false);
+          setDecision(null);
+          setReason('');
+        }
       })
       .catch(err => {
         if (isActive) setError(err instanceof Error ? err.message : 'Không thể tải submission.');
@@ -64,9 +91,14 @@ export default function SubmissionDetailPage() {
     };
   }, [seriesId]);
 
-  const approveVotes = votes.filter(v => v.decision === 'approve').length;
-  const rejectVotes = votes.filter(v => v.decision === 'reject').length;
+  const approveVotes = voteProgress?.approveVotes ?? votes.filter(v => v.decision === 'approve').length;
+  const rejectVotes = voteProgress?.rejectVotes ?? votes.filter(v => v.decision === 'reject').length;
+  const totalBoardMembers = voteProgress?.totalBoardMembers ?? 0;
+  const votedBoardMembers = voteProgress?.votedBoardMembers ?? 0;
+  const quorumMet = voteProgress?.quorumMet ?? false;
   const totalVotes = approveVotes + rejectVotes;
+  const isPendingReview = series?.status === 'Submitted';
+  const myDecision = submitted ? decision : null;
 
   const handleSubmitVote = async () => {
     if (!decision || !seriesId) return;
@@ -74,8 +106,14 @@ export default function SubmissionDetailPage() {
     setError('');
     try {
       await castBoardVote(seriesId, decision, reason.trim() || undefined);
-      const refreshed = await listBoardVotes(seriesId).catch(() => votes);
-      setVotes(refreshed);
+      const [refreshedVotes, refreshedSeries, refreshedProgress] = await Promise.all([
+        listBoardVotes(seriesId).catch(() => votes),
+        getSeries(seriesId).catch(() => series),
+        getBoardVoteProgress(seriesId).catch(() => voteProgress),
+      ]);
+      setVotes(refreshedVotes);
+      if (refreshedSeries) setSeries(refreshedSeries);
+      if (refreshedProgress) setVoteProgress(refreshedProgress);
       setSubmitted(true);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Không thể ghi nhận phiếu bầu.');
@@ -131,6 +169,13 @@ export default function SubmissionDetailPage() {
               </div>
 
               {/* Vote summary */}
+              {totalBoardMembers > 0 && isPendingReview && (
+                <p className="text-xs text-muted-foreground mb-3">
+                  {quorumMet
+                    ? 'Đủ phiếu board — hệ thống sẽ quyết định theo đa số.'
+                    : `Cần ${votedBoardMembers}/${totalBoardMembers} board vote mới quyết định.`}
+                </p>
+              )}
               <div className="grid grid-cols-2 gap-4 pt-4 border-t">
                 <div className="text-center">
                   <p className="text-2xl font-bold text-green-600">{approveVotes}</p>
@@ -180,6 +225,40 @@ export default function SubmissionDetailPage() {
             </CardContent>
           </Card>
 
+          {series.mainCharacters && (
+            <Card className="shadow-sm">
+              <CardHeader className="pb-3">
+                <CardTitle className="text-base flex items-center gap-2">
+                  <User className="h-4 w-4 text-primary" /> Nhân Vật Chính
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <p className="text-sm leading-relaxed text-muted-foreground whitespace-pre-line">{series.mainCharacters}</p>
+              </CardContent>
+            </Card>
+          )}
+
+          {manuscriptUrl && (
+            <Card className="shadow-sm">
+              <CardHeader className="pb-3">
+                <CardTitle className="text-base flex items-center gap-2">
+                  <FileText className="h-4 w-4 text-primary" /> Bản Thảo Đề Xuất
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <a
+                  href={manuscriptUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-2 text-sm font-medium text-primary hover:underline"
+                >
+                  <ExternalLink className="h-4 w-4" />
+                  Xem / tải bản thảo
+                </a>
+              </CardContent>
+            </Card>
+          )}
+
           {/* Board Votes */}
           <Card className="shadow-sm">
             <CardHeader className="pb-3">
@@ -224,12 +303,20 @@ export default function SubmissionDetailPage() {
               <CardTitle className="text-base">Bỏ Phiếu Của Bạn</CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
-              {submitted ? (
+              {!isPendingReview ? (
+                <div className="text-center py-6">
+                  <CheckCircle className="h-10 w-10 text-green-500 mx-auto mb-3" />
+                  <p className="font-medium">Series đã có quyết định</p>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Trạng thái: <span className="font-semibold">{series.status === 'Cancelled' ? 'Từ chối' : 'Đã duyệt'}</span>
+                  </p>
+                </div>
+              ) : submitted ? (
                 <div className="text-center py-6">
                   <CheckCircle className="h-10 w-10 text-green-500 mx-auto mb-3" />
                   <p className="font-medium">Đã ghi nhận phiếu bầu!</p>
                   <p className="text-xs text-muted-foreground mt-1">
-                    Quyết định: <span className="font-semibold">{decision === 'approve' ? 'Phê Duyệt' : 'Từ Chối'}</span>
+                    Quyết định: <span className="font-semibold">{myDecision === 'approve' ? 'Phê Duyệt' : 'Từ Chối'}</span>
                   </p>
                 </div>
               ) : (

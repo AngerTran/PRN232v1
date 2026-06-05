@@ -1,37 +1,91 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router';
 import { usePageMeta } from '../../hooks/usePageMeta';
-import { Card, CardContent } from '../../app/components/ui/card';
+import { Card } from '../../app/components/ui/card';
 import { Button } from '../../app/components/ui/button';
 import { Input } from '../../app/components/ui/input';
 import { Badge } from '../../app/components/ui/badge';
-import { getBoardSubmissions, getPublishingSchedules } from '../../data/mockData';
+import type { Series, SeriesStatus } from '../../data/mockData';
+import { getApprovedSeries, getSeriesSchedules } from '../../services/seriesApi';
 import { PublishingTypeBadge } from '../../app/components/ui/board';
-import { Search, Settings } from 'lucide-react';
+import { Search, CalendarDays, CalendarPlus } from 'lucide-react';
+
+type ApprovedRow = Series & {
+  scheduleType: 'Weekly' | 'Monthly' | null;
+  hasSchedule: boolean;
+};
+
+function statusLabel(status: SeriesStatus): { text: string; className: string } {
+  switch (status) {
+    case 'In Progress':
+      return { text: 'Đang xuất bản', className: 'text-blue-700 bg-blue-100' };
+    case 'Published':
+      return { text: 'Hoàn thành', className: 'text-slate-700 bg-slate-100' };
+    case 'Approved':
+    default:
+      return { text: 'Đã duyệt', className: 'text-green-700 bg-green-100' };
+  }
+}
 
 export default function BoardApprovedSeriesPage() {
   usePageMeta({ title: 'Series Đã Duyệt' });
   const navigate = useNavigate();
   const [search, setSearch] = useState('');
+  const [rows, setRows] = useState<ApprovedRow[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
 
-  const approved = getBoardSubmissions().filter((s) => s.status === 'Approved');
-  const schedules = getPublishingSchedules();
+  useEffect(() => {
+    let isActive = true;
 
-  const filtered = approved.filter(
-    (s) =>
-      s.seriesTitle.toLowerCase().includes(search.toLowerCase()) ||
-      s.mangakaName.toLowerCase().includes(search.toLowerCase())
+    async function load() {
+      setLoading(true);
+      setError('');
+      try {
+        const list = await getApprovedSeries();
+        const enriched = await Promise.all(
+          list.map(async series => {
+            const schedules = await getSeriesSchedules(series.id).catch(() => []);
+            const latest = schedules.sort(
+              (a, b) => new Date(b.publishDate).getTime() - new Date(a.publishDate).getTime()
+            )[0];
+            const scheduleType = latest
+              ? latest.frequency?.toLowerCase() === 'monthly'
+                ? 'Monthly'
+                : 'Weekly'
+              : null;
+            return { ...series, scheduleType, hasSchedule: schedules.length > 0 };
+          })
+        );
+        if (isActive) setRows(enriched);
+      } catch (err) {
+        if (isActive) {
+          setError(err instanceof Error ? err.message : 'Không thể tải danh sách series đã duyệt.');
+          setRows([]);
+        }
+      } finally {
+        if (isActive) setLoading(false);
+      }
+    }
+
+    load();
+    return () => {
+      isActive = false;
+    };
+  }, []);
+
+  const filtered = rows.filter(
+    s =>
+      s.title.toLowerCase().includes(search.toLowerCase()) ||
+      (s.mangakaName ?? '').toLowerCase().includes(search.toLowerCase())
   );
-
-  const getSchedule = (seriesTitle: string) =>
-    schedules.find((s) => s.seriesTitle === seriesTitle);
 
   return (
     <div className="p-6 space-y-6">
       <div>
         <h1 className="text-2xl font-bold">Series Đã Được Phê Duyệt</h1>
         <p className="text-muted-foreground mt-1">
-          {approved.length} series đã được hội đồng thông qua
+          {loading ? 'Đang tải...' : `${rows.length} series đã được hội đồng thông qua`}
         </p>
       </div>
 
@@ -41,9 +95,13 @@ export default function BoardApprovedSeriesPage() {
           placeholder="Tìm theo tên series hoặc mangaka..."
           className="pl-9 max-w-md"
           value={search}
-          onChange={(e) => setSearch(e.target.value)}
+          onChange={e => setSearch(e.target.value)}
         />
       </div>
+
+      {error && (
+        <p className="text-sm text-destructive">{error}</p>
+      )}
 
       <Card className="shadow-sm overflow-hidden">
         <div className="overflow-x-auto">
@@ -60,45 +118,68 @@ export default function BoardApprovedSeriesPage() {
               </tr>
             </thead>
             <tbody className="divide-y">
-              {filtered.length === 0 ? (
+              {loading ? (
+                <tr>
+                  <td colSpan={7} className="px-4 py-12 text-center text-muted-foreground">
+                    Đang tải danh sách...
+                  </td>
+                </tr>
+              ) : filtered.length === 0 ? (
                 <tr>
                   <td colSpan={7} className="px-4 py-12 text-center text-muted-foreground">
                     Không có series nào phù hợp
                   </td>
                 </tr>
               ) : (
-                filtered.map((sub) => {
-                  const sched = getSchedule(sub.seriesTitle);
+                filtered.map(series => {
+                  const badge = statusLabel(series.status);
+                  const publishType = series.scheduleType ?? series.publishingType;
                   return (
-                    <tr key={sub.id} className="hover:bg-muted/30 transition-colors">
+                    <tr key={series.id} className="hover:bg-muted/30 transition-colors">
                       <td className="px-4 py-3">
                         <div className="flex items-center gap-3">
-                          <img src={sub.coverUrl} alt={sub.seriesTitle} className="w-10 h-14 object-cover rounded" />
-                          <span className="font-medium">{sub.seriesTitle}</span>
+                          <img
+                            src={series.coverUrl}
+                            alt={series.title}
+                            className="w-10 h-14 object-cover rounded"
+                          />
+                          <span className="font-medium">{series.title}</span>
                         </div>
                       </td>
-                      <td className="px-4 py-3 text-muted-foreground">{sub.mangakaName}</td>
+                      <td className="px-4 py-3 text-muted-foreground">{series.mangakaName ?? '—'}</td>
                       <td className="px-4 py-3">
-                        <Badge variant="outline">{sub.genre}</Badge>
+                        <Badge variant="outline">{series.genre}</Badge>
                       </td>
-                      <td className="px-4 py-3 text-muted-foreground whitespace-nowrap">{sub.submittedDate}</td>
+                      <td className="px-4 py-3 text-muted-foreground whitespace-nowrap">
+                        {series.updatedAt ?? series.createdAt}
+                      </td>
                       <td className="px-4 py-3">
-                        {sched ? (
-                          <PublishingTypeBadge type={sched.publishingType} />
+                        {publishType ? (
+                          <PublishingTypeBadge type={publishType} />
                         ) : (
                           <span className="text-xs text-muted-foreground">Chưa lên lịch</span>
                         )}
                       </td>
                       <td className="px-4 py-3">
-                        <span className="inline-flex items-center gap-1.5 text-xs font-medium text-green-700 bg-green-100 px-2.5 py-1 rounded-full">
-                          <span className="w-1.5 h-1.5 rounded-full bg-green-500" />
-                          Đã Duyệt
+                        <span
+                          className={`inline-flex items-center gap-1.5 text-xs font-medium px-2.5 py-1 rounded-full ${badge.className}`}
+                        >
+                          <span className="w-1.5 h-1.5 rounded-full bg-current opacity-70" />
+                          {badge.text}
                         </span>
                       </td>
                       <td className="px-4 py-3">
-                        <Button size="sm" variant="outline" onClick={() => navigate('/board/publishing-schedule')}>
-                          <Settings className="h-3.5 w-3.5 mr-1" />
-                          Quản Lý
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => navigate(`/board/publishing-schedule?seriesId=${series.id}`)}
+                        >
+                          {series.hasSchedule ? (
+                            <CalendarDays className="h-3.5 w-3.5 mr-1" />
+                          ) : (
+                            <CalendarPlus className="h-3.5 w-3.5 mr-1" />
+                          )}
+                          {series.hasSchedule ? 'Xem lịch' : 'Lên lịch'}
                         </Button>
                       </td>
                     </tr>
@@ -110,7 +191,11 @@ export default function BoardApprovedSeriesPage() {
         </div>
       </Card>
 
-      <p className="text-xs text-muted-foreground">Hiển thị {filtered.length} / {approved.length} series</p>
+      {!loading && (
+        <p className="text-xs text-muted-foreground">
+          Hiển thị {filtered.length} / {rows.length} series
+        </p>
+      )}
     </div>
   );
 }

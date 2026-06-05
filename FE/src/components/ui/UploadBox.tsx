@@ -51,8 +51,8 @@ export default function UploadBox({ label = 'Tải lên file', accept = '*', hin
           <input
             type="file"
             accept={accept}
-            className="sr-only"
-            onChange={e => { if (e.target.files?.[0]) handleFile(e.target.files[0]); }}
+            className="hidden"
+            onChange={e => { if (e.target.files?.[0]) handleFile(e.target.files[0]); e.target.value = ''; }}
           />
           <div className="p-2.5 bg-muted rounded-xl">
             <Upload size={20} className="text-muted-foreground" />
@@ -101,8 +101,8 @@ export function MultiUploadBox({ label = 'Tải lên trang', className, onChange
           type="file"
           accept="image/*"
           multiple
-          className="sr-only"
-          onChange={e => { if (e.target.files) addFiles(Array.from(e.target.files)); }}
+          className="hidden"
+          onChange={e => { if (e.target.files) addFiles(Array.from(e.target.files)); e.target.value = ''; }}
         />
         <FileImage size={22} className="text-muted-foreground" />
         <div className="text-center">

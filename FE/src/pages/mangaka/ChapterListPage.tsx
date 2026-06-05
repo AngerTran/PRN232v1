@@ -5,14 +5,16 @@ import Button from '../../components/ui/Button';
 import ChapterCard from '../../components/ui/ChapterCard';
 import EmptyState from '../../components/ui/EmptyState';
 import { usePageMeta } from '../../hooks/usePageMeta';
+import { useConfirm } from '../../components/ui/ConfirmDialog';
 import type { Chapter, Series } from '../../data/mockData';
-import { getSeries, getSeriesChapters } from '../../services/seriesApi';
+import { getSeries, getSeriesChapters, deleteChapter } from '../../services/seriesApi';
 import { FileText } from 'lucide-react';
 
 export default function ChapterListPage() {
   const { seriesId } = useParams<{ seriesId: string }>();
   const navigate = useNavigate();
   const { setPageMeta } = usePageMeta();
+  const confirm = useConfirm();
 
   const [series, setSeries] = useState<Series | null>(null);
   const [chapters, setChapters] = useState<Chapter[]>([]);
@@ -66,6 +68,30 @@ export default function ChapterListPage() {
     });
   }, [series?.id, seriesId]);
 
+  const handleDeleteChapter = async (chapterId: string) => {
+    const target = chapters.find(c => c.id === chapterId);
+    const confirmed = await confirm({
+      title: 'Xóa chương',
+      message: (
+        <>
+          Bạn có chắc muốn xóa chương <span className="font-semibold text-foreground">Ch.{target?.number} {target?.title ?? ''}</span>?
+          <br />Hành động này không thể hoàn tác.
+        </>
+      ),
+      confirmText: 'Xóa chương',
+    });
+    if (!confirmed) return;
+
+    const previous = chapters;
+    setChapters(prev => prev.filter(c => c.id !== chapterId));
+    try {
+      await deleteChapter(chapterId);
+    } catch (err) {
+      setChapters(previous);
+      alert(err instanceof Error ? err.message : 'Không thể xóa chương.');
+    }
+  };
+
   if (loading) {
     return <div className="p-6 text-sm text-muted-foreground">Đang tải chương...</div>;
   }
@@ -108,7 +134,7 @@ export default function ChapterListPage() {
       ) : (
         <div className="space-y-2">
           {chapters.map(ch => (
-            <ChapterCard key={ch.id} chapter={ch} seriesId={seriesId ?? ''} />
+            <ChapterCard key={ch.id} chapter={ch} seriesId={seriesId ?? ''} onDelete={handleDeleteChapter} />
           ))}
         </div>
       )}

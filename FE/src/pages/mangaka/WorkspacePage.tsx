@@ -8,15 +8,18 @@ import MangaPanelPreview from '../../components/workspace/MangaPanelPreview';
 import Badge from '../../components/ui/Badge';
 import {
   createWorkspaceTask,
+  deleteWorkspaceTask,
   getWorkspace,
   uploadTaskResources,
   type Region,
   type WorkspacePayload,
 } from '../../services/workspaceApi';
+import { useConfirm } from '../../components/ui/ConfirmDialog';
 
 export default function WorkspacePage() {
   const { pageId } = useParams<{ pageId: string }>();
   const navigate = useNavigate();
+  const confirm = useConfirm();
 
   const [selectedPageId, setSelectedPageId] = useState(pageId ?? '');
   const [isSelecting, setIsSelecting] = useState(false);
@@ -28,6 +31,7 @@ export default function WorkspacePage() {
   const [workspace, setWorkspace] = useState<WorkspacePayload | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [deletingTaskId, setDeletingTaskId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const canvasRef = useRef<HTMLDivElement>(null);
 
@@ -181,12 +185,51 @@ export default function WorkspacePage() {
     }
   };
 
+  const handleDeleteTask = async (taskId: string) => {
+    const target = pageTasks.find(t => t.id === taskId);
+    const confirmed = await confirm({
+      title: 'Hủy nhiệm vụ',
+      message: (
+        <>
+          Bạn có chắc muốn hủy nhiệm vụ <span className="font-semibold text-foreground">{target?.title ?? ''}</span>?
+          <br />Nhiệm vụ đã giao sẽ bị xóa và không thể hoàn tác.
+        </>
+      ),
+      confirmText: 'Hủy nhiệm vụ',
+    });
+    if (!confirmed) return;
+
+    setDeletingTaskId(taskId);
+    setError(null);
+    try {
+      await deleteWorkspaceTask(taskId);
+      setWorkspace(current => current
+        ? {
+            ...current,
+            page: {
+              ...current.page,
+              tasksCount: Math.max(0, (current.page.tasksCount ?? current.tasks.length) - 1),
+            },
+            pages: current.pages.map(p => p.id === selectedPageId
+              ? { ...p, tasksCount: Math.max(0, (p.tasksCount ?? current.tasks.length) - 1) }
+              : p),
+            tasks: current.tasks.filter(t => t.id !== taskId),
+          }
+        : current
+      );
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Không thể hủy nhiệm vụ.');
+    } finally {
+      setDeletingTaskId(null);
+    }
+  };
+
   const regionLabel = region
     ? `Region: ${Math.round(region.x)}%,${Math.round(region.y)}% — ${Math.round(region.width)}×${Math.round(region.height)}`
     : undefined;
 
   return (
-    <div className="flex h-full overflow-hidden" style={{ background: '#1C1C1C' }}>
+    <div className="fixed inset-0 z-40 flex overflow-hidden" style={{ background: '#1C1C1C' }}>
       {/* Left panel — page thumbnails */}
       <div className="w-[68px] flex flex-col gap-1.5 py-3 px-2 overflow-y-auto bg-[#161616] border-r border-[#2E2E2E] shrink-0">
         <button onClick={() => navigate(-1)} className="w-10 h-10 flex items-center justify-center rounded-lg text-gray-400 hover:text-white hover:bg-[#2E2E2E] transition-colors mb-2">
@@ -339,7 +382,7 @@ export default function WorkspacePage() {
       </div>
 
       {/* Right panel */}
-      <div className="w-[300px] flex flex-col bg-[#1E1E1E] border-l border-[#2E2E2E] shrink-0 overflow-hidden">
+      <div className="w-[360px] flex flex-col bg-[#1E1E1E] border-l border-[#2E2E2E] shrink-0 overflow-hidden">
         {/* Task panel (form) */}
         <div className="flex-1 overflow-hidden min-h-0 border-b border-[#2E2E2E]">
           {error && (
@@ -368,7 +411,13 @@ export default function WorkspacePage() {
             {isLoading ? (
               <div className="p-4 text-center text-gray-500 text-sm">Đang tải task...</div>
             ) : (
-              <TaskList tasks={pageTasks} assistants={assistants} onHoverTask={setHoverRegion} />
+              <TaskList
+                tasks={pageTasks}
+                assistants={assistants}
+                onHoverTask={setHoverRegion}
+                onDeleteTask={handleDeleteTask}
+                deletingTaskId={deletingTaskId}
+              />
             )}
           </div>
         </div>

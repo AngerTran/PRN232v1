@@ -1,5 +1,5 @@
 import { useNavigate } from 'react-router';
-import { Calendar, FileText, ChevronRight } from 'lucide-react';
+import { Calendar, FileText, ChevronRight, Trash2 } from 'lucide-react';
 import { clsx } from 'clsx';
 import Badge from './Badge';
 import ProgressBar from './ProgressBar';
@@ -9,9 +9,10 @@ import { format, isPast, differenceInDays } from 'date-fns';
 interface ChapterCardProps {
   chapter: Chapter;
   seriesId: string;
+  onDelete?: (id: string) => void;
 }
 
-export default function ChapterCard({ chapter, seriesId }: ChapterCardProps) {
+export default function ChapterCard({ chapter, seriesId, onDelete }: ChapterCardProps) {
   const navigate = useNavigate();
   const deadlineDate = new Date(chapter.deadline);
   const daysLeft = differenceInDays(deadlineDate, new Date());
@@ -51,6 +52,15 @@ export default function ChapterCard({ chapter, seriesId }: ChapterCardProps) {
       </div>
       <div className="flex items-center gap-3 shrink-0">
         <Badge status={chapter.status} />
+        {onDelete && (
+          <button
+            onClick={e => { e.stopPropagation(); onDelete(chapter.id); }}
+            title="Xóa chương"
+            className="p-1.5 rounded-lg text-muted-foreground hover:text-red-600 hover:bg-red-50 transition-colors"
+          >
+            <Trash2 size={15} />
+          </button>
+        )}
         <ChevronRight size={16} className="text-muted-foreground group-hover:text-foreground transition-colors" />
       </div>
     </div>

@@ -8,8 +8,9 @@ import SeriesCard from '../../components/ui/SeriesCard';
 import Button from '../../components/ui/Button';
 import EmptyState from '../../components/ui/EmptyState';
 import { usePageMeta } from '../../hooks/usePageMeta';
+import { useConfirm } from '../../components/ui/ConfirmDialog';
 import type { Series, SeriesStatus } from '../../data/mockData';
-import { getMySeries } from '../../services/seriesApi';
+import { deleteSeries, getMySeries } from '../../services/seriesApi';
 import { BookOpen } from 'lucide-react';
 
 const STATUS_OPTIONS: SeriesStatus[] = ['Draft', 'Submitted', 'Approved', 'In Progress', 'Revision Required', 'At Risk', 'Published', 'Cancelled'];
@@ -18,6 +19,7 @@ const GENRE_OPTIONS = ['Action', 'Historical', 'Sci-fi', 'Fantasy', 'Drama', 'Su
 export default function SeriesListPage() {
   const navigate = useNavigate();
   const { setPageMeta } = usePageMeta();
+  const confirm = useConfirm();
 
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('All');
@@ -47,6 +49,30 @@ export default function SeriesListPage() {
       active = false;
     };
   }, []);
+
+  const handleDeleteSeries = async (seriesId: string) => {
+    const target = series.find(s => s.id === seriesId);
+    const confirmed = await confirm({
+      title: 'Xóa series',
+      message: (
+        <>
+          Bạn có chắc muốn xóa series <span className="font-semibold text-foreground">{target?.title ?? ''}</span>?
+          <br />Toàn bộ chương và dữ liệu liên quan sẽ bị xóa. Hành động này không thể hoàn tác.
+        </>
+      ),
+      confirmText: 'Xóa series',
+    });
+    if (!confirmed) return;
+
+    const previous = series;
+    setSeries(prev => prev.filter(s => s.id !== seriesId));
+    try {
+      await deleteSeries(seriesId);
+    } catch (err) {
+      setSeries(previous);
+      setError(err instanceof Error ? err.message : 'Không thể xóa series.');
+    }
+  };
 
   const filtered = series.filter(s => {
     const matchSearch = s.title.toLowerCase().includes(search.toLowerCase()) || s.genre.toLowerCase().includes(search.toLowerCase());
@@ -99,11 +125,11 @@ export default function SeriesListPage() {
         />
       ) : view === 'grid' ? (
         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
-          {filtered.map(s => <SeriesCard key={s.id} series={s} view="grid" />)}
+          {filtered.map(s => <SeriesCard key={s.id} series={s} view="grid" onDelete={handleDeleteSeries} />)}
         </div>
       ) : (
         <div className="space-y-2">
-          {filtered.map(s => <SeriesCard key={s.id} series={s} view="list" />)}
+          {filtered.map(s => <SeriesCard key={s.id} series={s} view="list" onDelete={handleDeleteSeries} />)}
         </div>
       )}
     </div>

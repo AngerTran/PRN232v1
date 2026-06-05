@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using DAL.Common;
 
 namespace DAL.Models;
 
@@ -11,7 +12,7 @@ public partial class PublishingSchedule
 
     public DateOnly PublishDate { get; set; }
 
-    public string Frequency { get; set; } = null!;
+    public PublishingFrequency Frequency { get; set; }
 
     public int? IssueNumber { get; set; }
 

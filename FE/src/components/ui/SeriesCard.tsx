@@ -1,5 +1,5 @@
 import { useNavigate } from 'react-router';
-import { BookOpen, TrendingUp, TrendingDown, Minus, Star, ChevronRight } from 'lucide-react';
+import { BookOpen, TrendingUp, TrendingDown, Minus, Star, ChevronRight, Trash2 } from 'lucide-react';
 import { clsx } from 'clsx';
 import Badge from './Badge';
 import type { Series } from '../../data/mockData';
@@ -7,9 +7,10 @@ import type { Series } from '../../data/mockData';
 interface SeriesCardProps {
   series: Series;
   view?: 'grid' | 'list';
+  onDelete?: (id: string) => void;
 }
 
-export default function SeriesCard({ series, view = 'grid' }: SeriesCardProps) {
+export default function SeriesCard({ series, view = 'grid', onDelete }: SeriesCardProps) {
   const navigate = useNavigate();
 
   const rankDelta = series.previousRank - series.currentRank;
@@ -45,6 +46,15 @@ export default function SeriesCard({ series, view = 'grid' }: SeriesCardProps) {
               <span className="font-semibold">#{series.currentRank}</span>
             </div>
           )}
+          {onDelete && (
+            <button
+              onClick={e => { e.stopPropagation(); onDelete(series.id); }}
+              title="Xóa series"
+              className="p-1.5 rounded-lg text-muted-foreground hover:text-red-600 hover:bg-red-50 transition-colors"
+            >
+              <Trash2 size={15} />
+            </button>
+          )}
           <ChevronRight size={16} className="text-muted-foreground group-hover:text-foreground transition-colors" />
         </div>
       </div>
@@ -66,6 +76,15 @@ export default function SeriesCard({ series, view = 'grid' }: SeriesCardProps) {
           <div className="absolute top-3 right-3">
             <span className="text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 bg-red-600 text-white rounded-full">Nguy cơ</span>
           </div>
+        )}
+        {onDelete && (
+          <button
+            onClick={e => { e.stopPropagation(); onDelete(series.id); }}
+            title="Xóa series"
+            className="absolute top-3 right-3 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center w-7 h-7 bg-red-600/90 hover:bg-red-600 text-white rounded-lg"
+          >
+            <Trash2 size={13} />
+          </button>
         )}
         {series.currentRank > 0 && (
           <div className="absolute bottom-3 right-3 flex items-center gap-1 bg-black/60 text-white px-2 py-1 rounded-lg text-xs">

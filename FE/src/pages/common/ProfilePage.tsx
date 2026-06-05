@@ -6,6 +6,7 @@ import Badge from '../../components/ui/Badge';
 import type { Series, User } from '../../data/mockData';
 import { getMe, getStoredUser, updateMyProfile } from '../../services/authApi';
 import { getMySeries } from '../../services/seriesApi';
+import { usePageMeta } from '../../hooks/usePageMeta';
 import { format } from 'date-fns';
 
 const ROLE_LABEL: Record<User['role'], string> = {
@@ -17,6 +18,7 @@ const ROLE_LABEL: Record<User['role'], string> = {
 };
 
 export default function ProfilePage() {
+  const { setPageMeta } = usePageMeta();
   const [user, setUser] = useState<User | null>(getStoredUser());
   const [series, setSeries] = useState<Series[]>([]);
   const [editMode, setEditMode] = useState(false);
@@ -25,6 +27,8 @@ export default function ProfilePage() {
   const [saved, setSaved] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
+
+  useEffect(() => { setPageMeta({ title: 'Hồ sơ' }); }, [setPageMeta]);
 
   useEffect(() => {
     let isActive = true;
@@ -79,7 +83,7 @@ export default function ProfilePage() {
   const isMangaka = user?.role === 'mangaka';
 
   return (
-    <div className="p-6 max-w-3xl space-y-5">
+    <div className="p-6 space-y-5">
       <h1 className="text-xl font-bold">Hồ sơ</h1>
 
       {error && (
@@ -158,7 +162,7 @@ export default function ProfilePage() {
       {/* Mangaka stats + series */}
       {isMangaka && (
         <>
-          <div className="grid grid-cols-4 gap-4">
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
             {[
               { icon: <BookOpen size={18} />, label: 'Series đang hoạt động', value: String(publishedSeries.length) },
               { icon: <FileText size={18} />, label: 'Tổng số chương', value: String(totalChapters) },

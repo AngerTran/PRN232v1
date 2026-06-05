@@ -46,6 +46,8 @@ public class BoardService
             existing.Comment = request.Comment;
             VoteRepository.Update(existing);
             await _unitOfWork.SaveChangesAsync(cancellationToken);
+            await TryAutoUpdateSeriesStatusAsync(series, request.SeriesId, cancellationToken);
+            await _unitOfWork.SaveChangesAsync(cancellationToken);
             return MapVote(existing, series.Title, caller.FullName);
         }
 
@@ -60,6 +62,7 @@ public class BoardService
         };
 
         await VoteRepository.AddAsync(vote, cancellationToken);
+        await _unitOfWork.SaveChangesAsync(cancellationToken);
         await TryAutoUpdateSeriesStatusAsync(series, request.SeriesId, cancellationToken);
         await _unitOfWork.SaveChangesAsync(cancellationToken);
 
@@ -101,6 +104,7 @@ public class BoardService
             .ToListAsync(cancellationToken);
 
         var seriesIds = pending.Select(s => s.Id).ToList();
+        var boardMemberIds = await GetActiveBoardMemberIdsAsync(cancellationToken);
         var votes = await _unitOfWork.Context.BoardVotes
             .AsNoTracking()
             .Where(v => v.SeriesId != null && seriesIds.Contains(v.SeriesId.Value))
@@ -108,7 +112,10 @@ public class BoardService
 
         return pending.Select(s =>
         {
-            var seriesVotes = votes.Where(v => v.SeriesId == s.Id).ToList();
+            var seriesVotes = votes
+                .Where(v => v.SeriesId == s.Id && v.BoardMemberId != null && boardMemberIds.Contains(v.BoardMemberId.Value))
+                .ToList();
+            var votedCount = seriesVotes.Select(v => v.BoardMemberId!.Value).Distinct().Count();
             return new PendingSeriesItemResponse(
                 s.Id,
                 s.Title,
@@ -116,8 +123,29 @@ public class BoardService
                 s.AuthorId,
                 s.Author.FullName,
                 seriesVotes.Count(v => v.Decision == VoteDecisions.Approve),
-                seriesVotes.Count(v => v.Decision == VoteDecisions.Reject));
+                seriesVotes.Count(v => v.Decision == VoteDecisions.Reject),
+                boardMemberIds.Count,
+                votedCount);
         }).ToList();
+    }
+
+    public async Task<BoardVoteProgressResponse> GetVoteProgressAsync(
+        Guid callerId,
+        Guid seriesId,
+        CancellationToken cancellationToken = default)
+    {
+        await RequireBoardOrAdminAsync(callerId, cancellationToken);
+
+        var boardMemberIds = await GetActiveBoardMemberIdsAsync(cancellationToken);
+        var boardVotes = await GetBoardVotesForSeriesAsync(seriesId, boardMemberIds, cancellationToken);
+        var votedCount = boardVotes.Select(v => v.BoardMemberId!.Value).Distinct().Count();
+
+        return new BoardVoteProgressResponse(
+            boardMemberIds.Count,
+            votedCount,
+            boardVotes.Count(v => v.Decision == VoteDecisions.Approve),
+            boardVotes.Count(v => v.Decision == VoteDecisions.Reject),
+            boardMemberIds.Count > 0 && votedCount >= boardMemberIds.Count);
     }
 
     public async Task<IReadOnlyList<LeaderboardItemResponse>> GetLeaderboardAsync(
@@ -165,12 +193,20 @@ public class BoardService
         Guid seriesId,
         CancellationToken cancellationToken)
     {
-        var votes = await _unitOfWork.Context.BoardVotes
-            .AsNoTracking()
-            .Where(v => v.SeriesId == seriesId)
-            .ToListAsync(cancellationToken);
+        if (series.Status != SeriesStatus.PendingReview)
+        {
+            return;
+        }
 
-        if (votes.Count == 0)
+        var boardMemberIds = await GetActiveBoardMemberIdsAsync(cancellationToken);
+        if (boardMemberIds.Count == 0)
+        {
+            return;
+        }
+
+        var votes = await GetBoardVotesForSeriesAsync(seriesId, boardMemberIds, cancellationToken);
+        var votedMemberIds = votes.Select(v => v.BoardMemberId!.Value).Distinct().ToHashSet();
+        if (votedMemberIds.Count < boardMemberIds.Count)
         {
             return;
         }
@@ -178,18 +214,41 @@ public class BoardService
         var approves = votes.Count(v => v.Decision == VoteDecisions.Approve);
         var rejects = votes.Count(v => v.Decision == VoteDecisions.Reject);
 
-        if (approves > rejects && series.Status == SeriesStatus.PendingReview)
+        if (approves > rejects)
         {
             series.Status = SeriesStatus.Approved;
             series.UpdatedAt = DateTime.UtcNow;
             SeriesRepository.Update(series);
         }
-        else if (rejects > approves && series.Status == SeriesStatus.PendingReview)
+        else if (rejects > approves)
         {
             series.Status = SeriesStatus.Cancelled;
             series.UpdatedAt = DateTime.UtcNow;
             SeriesRepository.Update(series);
         }
+    }
+
+    private async Task<List<Guid>> GetActiveBoardMemberIdsAsync(CancellationToken cancellationToken) =>
+        await _unitOfWork.Context.Profiles
+            .AsNoTracking()
+            .Where(p => p.Role == ProfileRole.Board && (p.IsActive == null || p.IsActive == true))
+            .Select(p => p.Id)
+            .ToListAsync(cancellationToken);
+
+    private async Task<List<BoardVote>> GetBoardVotesForSeriesAsync(
+        Guid seriesId,
+        IReadOnlyCollection<Guid> boardMemberIds,
+        CancellationToken cancellationToken)
+    {
+        if (boardMemberIds.Count == 0)
+        {
+            return [];
+        }
+
+        return await _unitOfWork.Context.BoardVotes
+            .AsNoTracking()
+            .Where(v => v.SeriesId == seriesId && v.BoardMemberId != null && boardMemberIds.Contains(v.BoardMemberId.Value))
+            .ToListAsync(cancellationToken);
     }
 
     private async Task<Profile> RequireBoardMemberAsync(Guid callerId, CancellationToken cancellationToken)

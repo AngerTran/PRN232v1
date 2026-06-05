@@ -15,14 +15,20 @@ interface ApiTask {
   region: string;
   assignedTo?: string | null;
   assignedToName?: string | null;
+  assignedBy?: string | null;
+  assignedByName?: string | null;
   deadline?: string | null;
   createdAt?: string | null;
+  resourceUrls?: string[] | null;
+  price?: number | null;
 }
 
 interface ApiPage {
   id: string;
   chapterId: string;
   pageNumber: number;
+  imageUrl?: string | null;
+  thumbnailUrl?: string | null;
 }
 
 interface ApiChapter {
@@ -130,10 +136,13 @@ async function enrichTask(task: ApiTask, cache: EnrichCache): Promise<Task> {
     assistantId: task.assignedTo ?? '',
     description: task.description ?? '',
     deadline: task.deadline?.slice(0, 10) ?? '',
-    price: 0,
+    price: Number(task.price) || 0,
     status: mapApiTaskStatus(task.status),
     region: parseRegion(task.region),
     createdAt: task.createdAt?.slice(0, 10) ?? '',
+    resourceUrls: task.resourceUrls ?? [],
+    assignedByName: task.assignedByName ?? '',
+    pageImageUrl: page?.imageUrl ?? page?.thumbnailUrl ?? '',
   };
 }
 

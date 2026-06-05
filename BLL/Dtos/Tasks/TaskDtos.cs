@@ -18,7 +18,9 @@ public record TaskItemResponse(
     DateTime? StartedAt,
     DateTime? CompletedAt,
     DateTime? CreatedAt,
-    IReadOnlyList<string>? ResourceUrls = null);
+    IReadOnlyList<string>? ResourceUrls = null,
+    string? AssignedByName = null,
+    decimal Price = 0);
 
 public record KanbanColumnItemResponse(
     Guid Id,
@@ -40,7 +42,8 @@ public record CreateTaskRequest(
     string? Description,
     Guid? AssignedTo,
     int? Priority,
-    DateTime? Deadline);
+    DateTime? Deadline,
+    [Range(0, 999999999)] decimal? Price = null);
 
 public record UpdateTaskRequest(
     [MaxLength(255)] string? Title,
@@ -48,7 +51,8 @@ public record UpdateTaskRequest(
     string? Region,
     Guid? AssignedTo,
     int? Priority,
-    DateTime? Deadline);
+    DateTime? Deadline,
+    [Range(0, 999999999)] decimal? Price = null);
 
 public record UpdateTaskStatusRequest(
     [Required, MaxLength(30)] string Status);

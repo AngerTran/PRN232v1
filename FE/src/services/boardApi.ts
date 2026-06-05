@@ -17,6 +17,8 @@ export interface PendingSeriesItem {
   authorName?: string;
   approveVotes: number;
   rejectVotes: number;
+  totalBoardMembers: number;
+  votedBoardMembers: number;
 }
 
 interface ApiPendingSeriesItem {
@@ -27,6 +29,24 @@ interface ApiPendingSeriesItem {
   authorName?: string | null;
   approveVotes: number;
   rejectVotes: number;
+  totalBoardMembers: number;
+  votedBoardMembers: number;
+}
+
+export interface BoardVoteProgress {
+  totalBoardMembers: number;
+  votedBoardMembers: number;
+  approveVotes: number;
+  rejectVotes: number;
+  quorumMet: boolean;
+}
+
+interface ApiBoardVoteProgress {
+  totalBoardMembers: number;
+  votedBoardMembers: number;
+  approveVotes: number;
+  rejectVotes: number;
+  quorumMet: boolean;
 }
 
 export interface LeaderboardItem {
@@ -92,7 +112,22 @@ export async function getPendingSeries(): Promise<PendingSeriesItem[]> {
     authorName: item.authorName ?? undefined,
     approveVotes: item.approveVotes,
     rejectVotes: item.rejectVotes,
+    totalBoardMembers: item.totalBoardMembers,
+    votedBoardMembers: item.votedBoardMembers,
   }));
+}
+
+export async function getBoardVoteProgress(seriesId: string): Promise<BoardVoteProgress> {
+  const item = unwrap(
+    await apiRequest<ApiEnvelope<ApiBoardVoteProgress>>(`/api/board/vote-progress?seriesId=${seriesId}`)
+  );
+  return {
+    totalBoardMembers: item.totalBoardMembers,
+    votedBoardMembers: item.votedBoardMembers,
+    approveVotes: item.approveVotes,
+    rejectVotes: item.rejectVotes,
+    quorumMet: item.quorumMet,
+  };
 }
 
 export async function getLeaderboard(metric?: string): Promise<LeaderboardItem[]> {

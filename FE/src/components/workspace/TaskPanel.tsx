@@ -1,5 +1,5 @@
 import { useEffect, useState, type FormEvent } from 'react';
-import { Target, User, Calendar, DollarSign, FileText, Plus } from 'lucide-react';
+import { User, Calendar, DollarSign, FileText, Plus } from 'lucide-react';
 import type { TaskType, WorkspaceAssistant } from '../../services/workspaceApi';
 
 const TASK_TYPES: TaskType[] = ['Background', 'Shading', 'Effect', 'Screentone', 'Clean Line', 'Dialogue Edit'];
@@ -44,9 +44,6 @@ export interface TaskFormData {
 export default function TaskPanel({
   hasRegion,
   region,
-  onSelectRegion,
-  isSelectingRegion,
-  regionLabel,
   onAssignTask,
   assistants,
   isSubmitting = false,
@@ -94,43 +91,7 @@ export default function TaskPanel({
             <li>1. Bấm <span className="text-gray-200">Chọn vùng</span>.</li>
             <li>2. Kéo chuột trực tiếp trên canvas để khoanh vùng.</li>
             <li>3. Thả chuột để chốt vùng.</li>
-            <li>4. Kiểm tra JSON vùng bên dưới rồi giao task.</li>
           </ol>
-        </div>
-
-        {/* Region selector */}
-        <div>
-          <label className="block text-xs font-semibold text-gray-300 uppercase tracking-wide mb-2">
-            Vùng đã chọn
-          </label>
-          <button
-            type="button"
-            onClick={onSelectRegion}
-            className={`w-full flex items-center gap-2 px-3 py-2.5 rounded-lg border text-sm font-medium transition-all duration-150 ${
-              isSelectingRegion
-                ? 'border-primary bg-primary/20 text-primary'
-                : hasRegion
-                ? 'border-green-600 bg-green-900/30 text-green-400'
-                : 'border-[#4A4A4A] bg-[#3A3A3A] text-gray-400 hover:border-gray-500'
-            }`}
-          >
-            <Target size={15} />
-            <span>
-              {isSelectingRegion
-                ? 'Nhấn & kéo để chọn…'
-                : hasRegion
-                ? regionLabel ?? 'Đã chọn vùng'
-                : 'Chọn vùng trên canvas'}
-            </span>
-          </button>
-          {region && (
-            <div className="mt-2 rounded-lg border border-[#3A3A3A] bg-[#181818] p-3">
-              <p className="text-[11px] uppercase tracking-wide text-gray-500 mb-2">JSONB payload</p>
-              <pre className="text-[11px] leading-relaxed text-green-300 font-mono whitespace-pre-wrap break-words">
-{JSON.stringify(region, null, 2)}
-              </pre>
-            </div>
-          )}
         </div>
 
         {/* Task type */}
@@ -224,8 +185,11 @@ export default function TaskPanel({
             <input
               type="file"
               multiple
-              className="sr-only"
-              onChange={e => setFiles(prev => [...prev, ...Array.from(e.target.files ?? [])])}
+              className="hidden"
+              onChange={e => {
+                setFiles(prev => [...prev, ...Array.from(e.target.files ?? [])]);
+                e.target.value = '';
+              }}
             />
             <p className="text-xs text-gray-500">Nhấn để tải lên tài liệu tham khảo</p>
           </label>

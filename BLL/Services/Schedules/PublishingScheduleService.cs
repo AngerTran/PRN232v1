@@ -53,7 +53,7 @@ public class PublishingScheduleService
             Id = Guid.NewGuid(),
             SeriesId = seriesId,
             PublishDate = request.PublishDate,
-            Frequency = request.Frequency.Trim(),
+            Frequency = PublishingFrequencies.ParseOrDefault(request.Frequency),
             IssueNumber = request.IssueNumber,
             Notes = request.Notes,
             CreatedAt = DateTime.UtcNow
@@ -91,7 +91,7 @@ public class PublishingScheduleService
 
         if (request.Frequency is not null)
         {
-            schedule.Frequency = request.Frequency.Trim();
+            schedule.Frequency = PublishingFrequencies.ParseOrDefault(request.Frequency);
         }
 
         if (request.IssueNumber is not null)
@@ -172,5 +172,12 @@ public class PublishingScheduleService
     }
 
     private static PublishingScheduleResponse Map(PublishingSchedule s) =>
-        new(s.Id, s.SeriesId, s.PublishDate, s.Frequency, s.IssueNumber, s.Notes, s.CreatedAt);
+        new(
+            s.Id,
+            s.SeriesId,
+            s.PublishDate,
+            PublishingFrequencies.ToDbValue(s.Frequency),
+            s.IssueNumber,
+            s.Notes,
+            s.CreatedAt);
 }

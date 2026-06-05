@@ -63,7 +63,7 @@ public partial class AppDbContext : DbContext
             .HasPostgresEnum<TaskStatusDb>(name: "task_status")
             .HasPostgresEnum<TaskTypeDb>(name: "task_type")
             .HasPostgresEnum<ProfileRole>(name: "user_role")
-            .HasPostgresEnum("vote_decision", new[] { "approve", "reject" })
+            .HasPostgresEnum<VoteDecisionDb>(name: "vote_decision")
             .HasPostgresExtension("extensions", "pg_stat_statements")
             .HasPostgresExtension("extensions", "pgcrypto")
             .HasPostgresExtension("extensions", "uuid-ossp")
@@ -196,7 +196,9 @@ public partial class AppDbContext : DbContext
                 .HasDefaultValueSql("now()")
                 .HasColumnName("created_at");
             entity.Property(e => e.Decision)
-                .HasColumnType("vote_decision")
+                .HasConversion(
+                    v => VoteEnumConversions.DecisionFromString(v),
+                    v => VoteEnumConversions.DecisionToString(v))
                 .HasColumnName("decision");
             entity.Property(e => e.SeriesId).HasColumnName("series_id");
 
@@ -552,6 +554,10 @@ public partial class AppDbContext : DbContext
                 .HasColumnType("text[]")
                 .HasDefaultValueSql("'{}'::text[]")
                 .HasColumnName("resource_urls");
+            entity.Property(e => e.Price)
+                .HasColumnType("numeric(12,2)")
+                .HasDefaultValue(0m)
+                .HasColumnName("price");
 
             entity.HasOne(d => d.AssignedByNavigation).WithMany(p => p.TaskAssignedByNavigations)
                 .HasForeignKey(d => d.AssignedBy)

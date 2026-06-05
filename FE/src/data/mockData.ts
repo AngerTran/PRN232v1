@@ -1,3 +1,5 @@
+import { API_BASE_URL } from '../services/apiClient';
+
 // ─── Types ───────────────────────────────────────────────────────────────────
 
 export type SeriesStatus =
@@ -44,6 +46,7 @@ export interface Series {
   coverUrl: string;
   mangakaId: string;
   mangakaName?: string;
+  mainCharacters?: string;
   createdAt: string;
   updatedAt: string;
   isAtRisk: boolean;
@@ -92,6 +95,9 @@ export interface Task {
   submittedResult?: string;
   mangakaFeedback?: string;
   createdAt: string;
+  resourceUrls?: string[];
+  assignedByName?: string;
+  pageImageUrl?: string;
 }
 
 export interface Submission {
@@ -859,8 +865,6 @@ type ApiAuthResponse = {
     role: User['role'] | string;
   };
 };
-
-const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:5120').replace(/\/$/, '');
 
 function normalizeRole(role: string): User['role'] {
   const normalized = role.trim().toLowerCase();

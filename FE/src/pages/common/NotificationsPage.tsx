@@ -6,6 +6,7 @@ import Card from '../../components/ui/Card';
 import Button from '../../components/ui/Button';
 import type { Notification, NotifType } from '../../data/mockData';
 import { getNotifications, markAllNotificationsRead, markNotificationRead } from '../../services/notificationsApi';
+import { usePageMeta } from '../../hooks/usePageMeta';
 import { formatDistanceToNow } from 'date-fns';
 
 const NOTIF_ICON: Record<NotifType, ReactNode> = {
@@ -20,9 +21,12 @@ const NOTIF_ICON: Record<NotifType, ReactNode> = {
 
 export default function NotificationsPage() {
   const navigate = useNavigate();
+  const { setPageMeta } = usePageMeta();
   const [notifs, setNotifs] = useState<Notification[]>([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<'all' | 'unread'>('all');
+
+  useEffect(() => { setPageMeta({ title: 'Thông báo' }); }, [setPageMeta]);
 
   useEffect(() => {
     let isActive = true;
@@ -63,8 +67,8 @@ export default function NotificationsPage() {
   };
 
   return (
-    <div className="p-6 max-w-2xl">
-      <div className="flex items-center justify-between mb-6">
+    <div className="p-6 space-y-5">
+      <div className="flex items-center justify-between gap-4 flex-wrap">
         <div>
           <h1 className="text-xl font-bold">Thông báo</h1>
           {unreadCount > 0 && <p className="text-sm text-muted-foreground mt-0.5">{unreadCount} chưa đọc</p>}

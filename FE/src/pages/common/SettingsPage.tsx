@@ -1,7 +1,8 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Bell, Shield, Palette, Globe, HelpCircle, ChevronRight } from 'lucide-react';
 import Card, { CardHeader, CardTitle } from '../../components/ui/Card';
 import Button from '../../components/ui/Button';
+import { usePageMeta } from '../../hooks/usePageMeta';
 
 const SECTIONS = [
   {
@@ -32,11 +33,14 @@ const DISPLAY_OPTIONS = [
 ];
 
 export default function SettingsPage() {
+  const { setPageMeta } = usePageMeta();
   const [toggles, setToggles] = useState<Record<string, boolean>>({
     task_submit: true, deadline: true, ranking: true, editorial: false,
     '2fa': false, profile_visible: true,
   });
   const [saved, setSaved] = useState(false);
+
+  useEffect(() => { setPageMeta({ title: 'Cài đặt' }); }, [setPageMeta]);
 
   const toggle = (key: string) => setToggles(t => ({ ...t, [key]: !t[key] }));
 
@@ -46,14 +50,15 @@ export default function SettingsPage() {
   };
 
   return (
-    <div className="p-6 max-w-2xl space-y-5">
-      <div className="flex items-center justify-between">
+    <div className="p-6 space-y-5">
+      <div className="flex items-center justify-between gap-4 flex-wrap">
         <h1 className="text-xl font-bold">Cài đặt</h1>
         <Button variant="primary" size="sm" onClick={handleSave}>
           {saved ? '✓ Đã lưu' : 'Lưu thay đổi'}
         </Button>
       </div>
 
+      <div className="grid grid-cols-1 xl:grid-cols-2 gap-5">
       {SECTIONS.map(section => (
         <Card key={section.label}>
           <CardHeader>
@@ -117,6 +122,7 @@ export default function SettingsPage() {
           ))}
         </div>
       </Card>
+      </div>
 
       <div className="p-4 bg-red-50 border border-red-200 rounded-xl">
         <p className="text-sm font-semibold text-red-700 mb-2">Vùng nguy hiểm</p>

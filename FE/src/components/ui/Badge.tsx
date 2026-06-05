@@ -76,7 +76,7 @@ export default function Badge({ status, showDot = true, size = 'sm', className }
   return (
     <span
       className={clsx(
-        'inline-flex items-center gap-1.5 font-semibold border rounded-full',
+        'inline-flex items-center gap-1.5 font-semibold border rounded-full whitespace-nowrap shrink-0',
         size === 'sm' ? 'px-2 py-0.5 text-[10px] tracking-wide uppercase' : 'px-3 py-1 text-xs tracking-wide uppercase',
         style,
         className

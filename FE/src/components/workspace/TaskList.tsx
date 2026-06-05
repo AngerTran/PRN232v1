@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { ChevronDown, ChevronUp, Calendar, DollarSign } from 'lucide-react';
+import { ChevronDown, ChevronUp, Calendar, DollarSign, Trash2 } from 'lucide-react';
 import { clsx } from 'clsx';
 import type { WorkspaceAssistant, WorkspaceTask } from '../../services/workspaceApi';
 import { TypeBadge } from '../ui/Badge';
@@ -13,20 +13,30 @@ const STATUS_DOT: Record<string, string> = {
   'Revision Required': 'bg-orange-500',
 };
 
+const STATUS_LABEL_VI: Record<string, string> = {
+  'Pending': 'Chờ thực hiện',
+  'In Progress': 'Đang thực hiện',
+  'Submitted': 'Đã nộp',
+  'Approved': 'Đã duyệt',
+  'Revision Required': 'Cần chỉnh sửa',
+};
+
 interface TaskListProps {
   tasks: WorkspaceTask[];
   assistants: WorkspaceAssistant[];
   onHoverTask?: (region: WorkspaceTask['region'] | null) => void;
+  onDeleteTask?: (id: string) => void;
+  deletingTaskId?: string | null;
 }
 
-export default function TaskList({ tasks, assistants, onHoverTask }: TaskListProps) {
+export default function TaskList({ tasks, assistants, onHoverTask, onDeleteTask, deletingTaskId }: TaskListProps) {
   const [expanded, setExpanded] = useState<string | null>(null);
   const assistantNames = new Map(assistants.map(assistant => [assistant.id, assistant.name]));
 
   if (tasks.length === 0) {
     return (
       <div className="p-4 text-center text-gray-500 text-sm">
-        No tasks on this page yet.
+        Chưa có nhiệm vụ nào cho trang này.
       </div>
     );
   }
@@ -77,7 +87,7 @@ export default function TaskList({ tasks, assistants, onHoverTask }: TaskListPro
                   </span>
                 </div>
                 <div className="flex items-center gap-1.5">
-                  <span>Status:</span>
+                  <span>Trạng thái:</span>
                   <span className={clsx('font-semibold', {
                     'text-green-400': task.status === 'Approved',
                     'text-blue-400': task.status === 'Submitted',
@@ -85,9 +95,19 @@ export default function TaskList({ tasks, assistants, onHoverTask }: TaskListPro
                     'text-purple-400': task.status === 'In Progress',
                     'text-gray-400': task.status === 'Pending',
                   })}>
-                    {task.status}
+                    {STATUS_LABEL_VI[task.status] ?? task.status}
                   </span>
                 </div>
+                {onDeleteTask && task.status !== 'Approved' && (
+                  <button
+                    onClick={() => onDeleteTask(task.id)}
+                    disabled={deletingTaskId === task.id}
+                    className="mt-1 inline-flex items-center gap-1.5 rounded-md border border-red-900/60 bg-red-950/40 px-2.5 py-1.5 text-xs font-medium text-red-300 hover:bg-red-900/40 hover:text-red-200 transition-colors disabled:opacity-50 disabled:pointer-events-none"
+                  >
+                    <Trash2 size={12} />
+                    {deletingTaskId === task.id ? 'Đang hủy…' : 'Hủy task'}
+                  </button>
+                )}
               </div>
             )}
           </div>

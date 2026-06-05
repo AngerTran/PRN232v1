@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { useSearchParams } from 'react-router';
 import { usePageMeta } from '../../hooks/usePageMeta';
 import { Card, CardContent, CardHeader, CardTitle } from '../../app/components/ui/card';
 import { Button } from '../../app/components/ui/button';
@@ -11,25 +12,45 @@ import {
   getVisibleSeries,
   getSeriesSchedules,
   createSchedule,
+  updateSchedule,
   deleteSchedule,
   type PublishingScheduleItem,
 } from '../../services/seriesApi';
-import { Plus, X, CalendarDays, Trash2 } from 'lucide-react';
+import { Plus, X, CalendarDays, Trash2, Pencil } from 'lucide-react';
 
 type ScheduleRow = PublishingScheduleItem & { seriesTitle: string; mangakaName?: string };
 
 const emptyForm = { seriesId: '', frequency: 'weekly', publishDate: '', issueNumber: '', notes: '' };
 
+function toForm(row: ScheduleRow) {
+  return {
+    seriesId: row.seriesId ?? '',
+    frequency: row.frequency?.toLowerCase() === 'monthly' ? 'monthly' : 'weekly',
+    publishDate: row.publishDate,
+    issueNumber: row.issueNumber != null ? String(row.issueNumber) : '',
+    notes: row.notes ?? '',
+  };
+}
+
 export default function PublishingSchedulePage() {
   usePageMeta({ title: 'Lịch Xuất Bản' });
+  const [searchParams] = useSearchParams();
+  const focusSeriesId = searchParams.get('seriesId') ?? '';
 
   const [series, setSeries] = useState<Series[]>([]);
   const [rows, setRows] = useState<ScheduleRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [showForm, setShowForm] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
   const [form, setForm] = useState(emptyForm);
   const [saving, setSaving] = useState(false);
+
+  const focusSeries = series.find(s => s.id === focusSeriesId);
+  const visibleRows = focusSeriesId
+    ? rows.filter(r => r.seriesId === focusSeriesId)
+    : rows;
+  const isEditing = editingId !== null;
 
   async function loadAll() {
     setLoading(true);
@@ -57,23 +78,70 @@ export default function PublishingSchedulePage() {
     loadAll();
   }, []);
 
+  useEffect(() => {
+    if (!focusSeriesId || !focusSeries || loading) return;
+
+    if (visibleRows.length === 0) {
+      setEditingId(null);
+      setForm({
+        ...emptyForm,
+        seriesId: focusSeriesId,
+        frequency: focusSeries.publishingType === 'Monthly' ? 'monthly' : 'weekly',
+      });
+      setShowForm(true);
+      return;
+    }
+
+    setShowForm(false);
+    setEditingId(null);
+    setForm(emptyForm);
+  }, [focusSeriesId, focusSeries, loading, visibleRows.length]);
+
+  const openCreateForm = () => {
+    setEditingId(null);
+    setForm({
+      ...emptyForm,
+      seriesId: focusSeriesId || '',
+      frequency: focusSeries?.publishingType === 'Monthly' ? 'monthly' : 'weekly',
+    });
+    setShowForm(true);
+  };
+
+  const openEditForm = (row: ScheduleRow) => {
+    setEditingId(row.id);
+    setForm(toForm(row));
+    setShowForm(true);
+  };
+
+  const closeForm = () => {
+    setShowForm(false);
+    setEditingId(null);
+    setForm(emptyForm);
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!form.seriesId || !form.publishDate) return;
     setSaving(true);
     setError('');
     try {
-      await createSchedule(form.seriesId, {
+      const payload = {
         publishDate: form.publishDate,
         frequency: form.frequency,
         issueNumber: form.issueNumber ? Number(form.issueNumber) : undefined,
         notes: form.notes || undefined,
-      });
-      setShowForm(false);
-      setForm(emptyForm);
+      };
+
+      if (isEditing && editingId) {
+        await updateSchedule(editingId, payload);
+      } else {
+        await createSchedule(form.seriesId, payload);
+      }
+
+      closeForm();
       await loadAll();
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Không thể tạo lịch.');
+      setError(err instanceof Error ? err.message : isEditing ? 'Không thể cập nhật lịch.' : 'Không thể tạo lịch.');
     } finally {
       setSaving(false);
     }
@@ -82,6 +150,7 @@ export default function PublishingSchedulePage() {
   const handleDelete = async (id: string) => {
     try {
       await deleteSchedule(id);
+      if (editingId === id) closeForm();
       setRows(prev => prev.filter(r => r.id !== id));
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Không thể xóa lịch.');
@@ -93,11 +162,17 @@ export default function PublishingSchedulePage() {
       <div className="flex items-start justify-between">
         <div>
           <h1 className="text-2xl font-bold">Lịch Xuất Bản</h1>
-          <p className="text-muted-foreground mt-1">{rows.length} lịch phát hành</p>
+          <p className="text-muted-foreground mt-1">
+            {focusSeries
+              ? visibleRows.length > 0
+                ? `"${focusSeries.title}" có ${visibleRows.length} lịch phát hành`
+                : `"${focusSeries.title}" chưa có lịch — tạo lịch đầu tiên bên dưới`
+              : `${visibleRows.length} lịch phát hành`}
+          </p>
         </div>
-        <Button onClick={() => setShowForm(!showForm)}>
+        <Button onClick={() => (showForm ? closeForm() : openCreateForm())}>
           {showForm ? <X className="h-4 w-4 mr-1" /> : <Plus className="h-4 w-4 mr-1" />}
-          {showForm ? 'Đóng' : 'Tạo Lịch'}
+          {showForm ? 'Đóng' : focusSeriesId && visibleRows.length > 0 ? 'Thêm kỳ' : 'Tạo Lịch'}
         </Button>
       </div>
 
@@ -105,20 +180,23 @@ export default function PublishingSchedulePage() {
         <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{error}</div>
       )}
 
-      {/* Create Form */}
       {showForm && (
         <Card className="shadow-sm border-primary/20">
           <CardHeader className="pb-4">
             <CardTitle className="text-base flex items-center gap-2">
               <CalendarDays className="h-4 w-4 text-primary" />
-              Tạo Lịch Xuất Bản Mới
+              {isEditing ? 'Sửa Lịch Xuất Bản' : 'Tạo Lịch Xuất Bản Mới'}
             </CardTitle>
           </CardHeader>
           <CardContent>
             <form onSubmit={handleSubmit} className="grid gap-4 md:grid-cols-2">
               <div className="space-y-1.5">
                 <label className="text-sm font-medium">Series</label>
-                <Select value={form.seriesId} onValueChange={v => setForm({ ...form, seriesId: v })}>
+                <Select
+                  value={form.seriesId}
+                  onValueChange={v => setForm({ ...form, seriesId: v })}
+                  disabled={Boolean(focusSeriesId) || isEditing}
+                >
                   <SelectTrigger>
                     <SelectValue placeholder="Chọn series..." />
                   </SelectTrigger>
@@ -171,9 +249,9 @@ export default function PublishingSchedulePage() {
               </div>
               <div className="md:col-span-2 flex gap-3">
                 <Button type="submit" disabled={!form.seriesId || !form.publishDate || saving}>
-                  {saving ? 'Đang tạo…' : 'Tạo Lịch'}
+                  {saving ? 'Đang lưu…' : isEditing ? 'Lưu thay đổi' : 'Tạo Lịch'}
                 </Button>
-                <Button type="button" variant="outline" onClick={() => setShowForm(false)}>
+                <Button type="button" variant="outline" onClick={closeForm}>
                   Hủy
                 </Button>
               </div>
@@ -182,7 +260,6 @@ export default function PublishingSchedulePage() {
         </Card>
       )}
 
-      {/* Schedule Table */}
       <Card className="shadow-sm overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
@@ -200,10 +277,12 @@ export default function PublishingSchedulePage() {
             <tbody className="divide-y">
               {loading ? (
                 <tr><td colSpan={7} className="px-4 py-12 text-center text-muted-foreground">Đang tải...</td></tr>
-              ) : rows.length === 0 ? (
-                <tr><td colSpan={7} className="px-4 py-12 text-center text-muted-foreground">Chưa có lịch xuất bản nào</td></tr>
+              ) : visibleRows.length === 0 ? (
+                <tr><td colSpan={7} className="px-4 py-12 text-center text-muted-foreground">
+                  {focusSeries ? `Chưa có lịch xuất bản cho "${focusSeries.title}"` : 'Chưa có lịch xuất bản nào'}
+                </td></tr>
               ) : (
-                rows.map(s => (
+                visibleRows.map(s => (
                   <tr key={s.id} className="hover:bg-muted/30 transition-colors">
                     <td className="px-4 py-3 font-medium">{s.seriesTitle}</td>
                     <td className="px-4 py-3 text-muted-foreground">{s.mangakaName ?? '—'}</td>
@@ -214,9 +293,14 @@ export default function PublishingSchedulePage() {
                     <td className="px-4 py-3 text-muted-foreground">{s.issueNumber ?? '—'}</td>
                     <td className="px-4 py-3 text-muted-foreground max-w-xs truncate">{s.notes ?? '—'}</td>
                     <td className="px-4 py-3">
-                      <Button size="sm" variant="ghost" className="text-xs text-destructive" onClick={() => handleDelete(s.id)}>
-                        <Trash2 className="h-3.5 w-3.5 mr-1" /> Xóa
-                      </Button>
+                      <div className="flex items-center gap-1">
+                        <Button size="sm" variant="ghost" className="text-xs" onClick={() => openEditForm(s)}>
+                          <Pencil className="h-3.5 w-3.5 mr-1" /> Sửa
+                        </Button>
+                        <Button size="sm" variant="ghost" className="text-xs text-destructive" onClick={() => handleDelete(s.id)}>
+                          <Trash2 className="h-3.5 w-3.5 mr-1" /> Xóa
+                        </Button>
+                      </div>
                     </td>
                   </tr>
                 ))

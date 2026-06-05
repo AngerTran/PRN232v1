@@ -199,11 +199,13 @@ interface ApiTask {
   deadline?: string | null;
   createdAt?: string | null;
   resourceUrls?: string[] | null;
+  price?: number | null;
 }
 
 interface ApiKanbanItem {
   id: string;
   pageId: string;
+  status?: string;
 }
 
 interface ApiKanban {
@@ -228,12 +230,16 @@ function normalizeRegion(region: Region | string): Region {
 
 function mapPageStatus(status: string): PageStatus {
   switch (status?.toLowerCase()) {
+    case 'assigned':
     case 'in_progress':
       return 'In Progress';
+    case 'reviewing':
+      return 'Review';
     case 'completed':
-      return 'Completed';
     case 'approved':
-      return 'Approved';
+      return 'Completed';
+    case 'published':
+      return 'Published';
     case 'draft':
     default:
       return 'Draft';
@@ -308,7 +314,7 @@ function mapTask(
     assistantName: task.assignedToName ?? undefined,
     description: task.description ?? '',
     deadline: task.deadline?.slice(0, 10) ?? new Date().toISOString().slice(0, 10),
-    price: 0,
+    price: Number(task.price) || 0,
     status: mapTaskStatus(task.status),
     region: normalizeRegion(task.region),
     createdAt: task.createdAt?.slice(0, 10),
@@ -412,6 +418,7 @@ export async function createWorkspaceTask(input: CreateWorkspaceTaskInput): Prom
       title: buildTaskTitleVi(input.type),
       description: input.description,
       deadline: input.deadline,
+      price: input.price,
       region: JSON.stringify(input.region),
     }),
   }));
@@ -454,8 +461,47 @@ export async function deleteChapterPage(pageId: string): Promise<void> {
 }
 
 export async function getChapterPages(chapterId: string): Promise<WorkspacePageItem[]> {
-  const pages = unwrap(await apiRequest<ApiEnvelope<ApiPage[]>>(`/api/chapters/${chapterId}/pages`));
-  return pages.map(mapPage);
+  const [apiPages, kanban] = await Promise.all([
+    apiRequest<ApiEnvelope<ApiPage[]>>(`/api/chapters/${chapterId}/pages`).then(unwrap),
+    apiRequest<ApiEnvelope<ApiKanban>>(`/api/chapters/${chapterId}/kanban`).then(unwrap).catch(() => undefined),
+  ]);
+
+  const pages = apiPages.map(mapPage);
+
+  // Đếm task theo từng trang từ kanban (mỗi item có pageId + status). Hoàn thành = approved.
+  const items = [
+    ...(kanban?.todo ?? []),
+    ...(kanban?.doing ?? []),
+    ...(kanban?.done ?? []),
+  ];
+  const counts = new Map<string, { total: number; completed: number }>();
+  items.forEach(item => {
+    const c = counts.get(item.pageId) ?? { total: 0, completed: 0 };
+    c.total += 1;
+    if (item.status?.toLowerCase() === 'approved') c.completed += 1;
+    counts.set(item.pageId, c);
+  });
+
+  return pages.map(page => ({
+    ...page,
+    tasksCount: counts.get(page.id)?.total ?? 0,
+    completedTasksCount: counts.get(page.id)?.completed ?? 0,
+  }));
+}
+
+/** Tính số trang và tiến độ task thật của một chương (dùng cho danh sách chương). */
+export async function getChapterTaskStats(chapterId: string): Promise<{
+  pagesCount: number;
+  totalTasks: number;
+  progress: number;
+}> {
+  const pages = await getChapterPages(chapterId);
+  const totalTasks = pages.reduce((sum, p) => sum + (p.tasksCount ?? 0), 0);
+  const completedTasks = pages.reduce((sum, p) => sum + (p.completedTasksCount ?? 0), 0);
+  const progress = totalTasks > 0
+    ? Math.round((completedTasks / totalTasks) * 100)
+    : 0;
+  return { pagesCount: pages.length, totalTasks, progress };
 }
 
 export async function uploadChapterPage(

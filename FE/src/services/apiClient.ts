@@ -79,7 +79,10 @@ export async function apiRequest<T>(path: string, options: ApiRequestOptions = {
       const parsed = JSON.parse(body) as { message?: string; title?: string; error?: string };
       message = parsed.message || parsed.title || parsed.error || body;
     } catch {
-      // Keep the plain text body.
+      // Trang lỗi dev ASP.NET — chỉ lấy dòng đầu, bỏ stack trace / HEADERS.
+      const trimmed = body.split(/\r?\nHEADERS\r?\n/)[0]?.trim() ?? body;
+      const firstLine = trimmed.split(/\r?\n/).find(line => line.trim())?.trim();
+      if (firstLine) message = firstLine;
     }
 
     throw new Error(message || `Request failed with status ${response.status}`);

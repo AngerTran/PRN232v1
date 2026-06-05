@@ -24,7 +24,16 @@ public record PendingSeriesItemResponse(
     Guid AuthorId,
     string? AuthorName,
     int ApproveVotes,
-    int RejectVotes);
+    int RejectVotes,
+    int TotalBoardMembers,
+    int VotedBoardMembers);
+
+public record BoardVoteProgressResponse(
+    int TotalBoardMembers,
+    int VotedBoardMembers,
+    int ApproveVotes,
+    int RejectVotes,
+    bool QuorumMet);
 
 public record LeaderboardItemResponse(
     Guid SeriesId,

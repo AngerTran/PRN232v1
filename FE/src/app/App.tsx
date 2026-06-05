@@ -1,11 +1,14 @@
 import { RouterProvider } from 'react-router';
 import { router } from './routes';
 import { PageMetaProvider } from '../hooks/usePageMeta';
+import { ConfirmProvider } from '../components/ui/ConfirmDialog';
 
 export default function App() {
   return (
     <PageMetaProvider>
-      <RouterProvider router={router} />
+      <ConfirmProvider>
+        <RouterProvider router={router} />
+      </ConfirmProvider>
     </PageMetaProvider>
   );
 }

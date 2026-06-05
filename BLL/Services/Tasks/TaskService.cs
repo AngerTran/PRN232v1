@@ -141,6 +141,7 @@ public class TaskService
         var tasks = await _unitOfWork.Context.Tasks
             .AsNoTracking()
             .Include(t => t.AssignedToNavigation)
+            .Include(t => t.AssignedByNavigation)
             .Where(t => t.AssignedTo == callerId)
             .OrderByDescending(t => t.CreatedAt)
             .ToListAsync(cancellationToken);
@@ -226,12 +227,15 @@ public class TaskService
             Priority = request.Priority ?? 1,
             Status = TaskStatuses.Todo,
             Deadline = ToUtc(request.Deadline),
+            Price = request.Price ?? 0m,
             CreatedAt = now,
             UpdatedAt = now
         };
 
         await TaskRepository.AddAsync(task, cancellationToken);
         await _unitOfWork.SaveChangesAsync(cancellationToken);
+
+        await SyncPageStatusFromTasksAsync(pageId, cancellationToken);
 
         if (task.AssignedTo is not null)
         {
@@ -304,6 +308,11 @@ public class TaskService
             task.Deadline = ToUtc(request.Deadline);
         }
 
+        if (request.Price is not null)
+        {
+            task.Price = request.Price.Value;
+        }
+
         task.UpdatedAt = DateTime.UtcNow;
         TaskRepository.Update(task);
         await _unitOfWork.SaveChangesAsync(cancellationToken);
@@ -360,7 +369,54 @@ public class TaskService
         TaskRepository.Update(task);
         await _unitOfWork.SaveChangesAsync(cancellationToken);
 
+        await SyncPageStatusFromTasksAsync(task.PageId, cancellationToken);
+
         return await GetByIdAsync(callerId, taskId, cancellationToken);
+    }
+
+    // Tự cập nhật trạng thái trang theo tiến độ các task của trang đó:
+    //  - không có task            → draft (bản nháp)
+    //  - tất cả task đã duyệt      → approved (hoàn thành)
+    //  - có task đang nộp/đã duyệt → reviewing (đang xét duyệt)
+    //  - còn lại (đã giao việc)    → assigned (đã giao)
+    private async Task SyncPageStatusFromTasksAsync(Guid pageId, CancellationToken cancellationToken)
+    {
+        var page = await _unitOfWork.Context.Pages
+            .FirstOrDefaultAsync(p => p.Id == pageId, cancellationToken);
+        if (page is null)
+        {
+            return;
+        }
+
+        var statuses = await _unitOfWork.Context.Tasks
+            .Where(t => t.PageId == pageId)
+            .Select(t => t.Status)
+            .ToListAsync(cancellationToken);
+
+        PageStatus newStatus;
+        if (statuses.Count == 0)
+        {
+            newStatus = PageStatus.Draft;
+        }
+        else if (statuses.All(s => s == TaskStatuses.Approved))
+        {
+            newStatus = PageStatus.Approved;
+        }
+        else if (statuses.Any(s => s == TaskStatuses.Submitted || s == TaskStatuses.Approved))
+        {
+            newStatus = PageStatus.Reviewing;
+        }
+        else
+        {
+            newStatus = PageStatus.Assigned;
+        }
+
+        if (page.Status != newStatus)
+        {
+            page.Status = newStatus;
+            page.UpdatedAt = DateTime.UtcNow;
+            await _unitOfWork.SaveChangesAsync(cancellationToken);
+        }
     }
 
     public async Task<bool> DeleteAsync(Guid callerId, Guid taskId, CancellationToken cancellationToken = default)
@@ -380,14 +436,18 @@ public class TaskService
             throw new WorkflowForbiddenException("You do not have permission to delete this task.");
         }
 
+        var pageId = task.PageId;
         TaskRepository.Remove(task);
         await _unitOfWork.SaveChangesAsync(cancellationToken);
+
+        await SyncPageStatusFromTasksAsync(pageId, cancellationToken);
         return true;
     }
 
     internal async Task<EditorTask?> LoadTaskAsync(Guid taskId, CancellationToken cancellationToken) =>
         await _unitOfWork.Context.Tasks
             .Include(t => t.AssignedToNavigation)
+            .Include(t => t.AssignedByNavigation)
             .FirstOrDefaultAsync(t => t.Id == taskId, cancellationToken);
 
     private async Task EnsureCanViewTaskAsync(Guid callerId, EditorTask task, CancellationToken cancellationToken)
@@ -446,7 +506,7 @@ public class TaskService
     private static KanbanColumnItemResponse MapKanbanItem(EditorTask t) =>
         new(t.Id, t.TaskType, t.Status, t.PageId, t.Title, t.AssignedTo);
 
-    private static TaskItemResponse MapTaskItem(EditorTask t, string? assignedToName) =>
+    private static TaskItemResponse MapTaskItem(EditorTask t, string? assignedToName, string? assignedByName = null) =>
         new(
             t.Id,
             t.PageId,
@@ -463,7 +523,9 @@ public class TaskService
             t.StartedAt,
             t.CompletedAt,
             t.CreatedAt,
-            t.ResourceUrls);
+            t.ResourceUrls,
+            assignedByName ?? t.AssignedByNavigation?.FullName,
+            t.Price);
 
     private static string NormalizeRegionJson(string region)
     {

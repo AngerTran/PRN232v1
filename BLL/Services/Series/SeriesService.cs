@@ -115,7 +115,15 @@ public class SeriesService
 
     if (!CanViewSeries(caller, series))
     {
-      throw new SeriesForbiddenException("You do not have permission to view this series.");
+      // Cho phép cộng tác viên (assistant) xem series nếu họ được giao ít nhất một task thuộc series này.
+      var hasTaskInSeries = await _unitOfWork.Context.Tasks
+        .AsNoTracking()
+        .AnyAsync(t => t.AssignedTo == caller.Id && t.Page.Chapter.SeriesId == id, cancellationToken);
+
+      if (!hasTaskInSeries)
+      {
+        throw new SeriesForbiddenException("You do not have permission to view this series.");
+      }
     }
 
     return MapToDto(series);
@@ -451,7 +459,15 @@ public class SeriesService
 
     if (!CanViewSeries(caller, chapter.Series))
     {
-      throw new SeriesForbiddenException("You do not have permission to view this chapter.");
+      // Cho phép cộng tác viên (assistant) xem chapter nếu họ được giao ít nhất một task trong chapter này.
+      var hasTaskInChapter = await _unitOfWork.Context.Tasks
+        .AsNoTracking()
+        .AnyAsync(t => t.AssignedTo == caller.Id && t.Page.ChapterId == chapterId, cancellationToken);
+
+      if (!hasTaskInChapter)
+      {
+        throw new SeriesForbiddenException("You do not have permission to view this chapter.");
+      }
     }
 
     return MapChapterToDto(chapter);

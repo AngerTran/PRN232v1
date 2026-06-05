@@ -7,6 +7,7 @@ import ProgressBar from '../../components/ui/ProgressBar';
 import MangaPageCard from '../../components/ui/MangaPageCard';
 import EmptyState from '../../components/ui/EmptyState';
 import { usePageMeta } from '../../hooks/usePageMeta';
+import { useConfirm } from '../../components/ui/ConfirmDialog';
 import type { Chapter, Series } from '../../data/mockData';
 import { getChapter, getSeries } from '../../services/seriesApi';
 import { getChapterPages, uploadChapterPage, deleteChapterPage, type WorkspacePageItem } from '../../services/workspaceApi';
@@ -16,6 +17,7 @@ export default function ChapterDetailPage() {
   const { chapterId } = useParams<{ chapterId: string }>();
   const navigate = useNavigate();
   const { setPageMeta } = usePageMeta();
+  const confirm = useConfirm();
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [chapter, setChapter] = useState<Chapter | null>(null);
@@ -107,9 +109,17 @@ export default function ChapterDetailPage() {
 
   const handleDeletePage = async (pageId: string) => {
     const target = pages.find(p => p.id === pageId);
-    if (!window.confirm(`Xóa Trang ${target?.pageNumber ?? ''}? Hành động này không thể hoàn tác.`)) {
-      return;
-    }
+    const confirmed = await confirm({
+      title: 'Xóa trang',
+      message: (
+        <>
+          Bạn có chắc muốn xóa <span className="font-semibold text-foreground">Trang {target?.pageNumber ?? ''}</span>?
+          <br />Hành động này không thể hoàn tác.
+        </>
+      ),
+      confirmText: 'Xóa trang',
+    });
+    if (!confirmed) return;
 
     const previous = pages;
     setPages(prev => prev.filter(p => p.id !== pageId));
@@ -132,7 +142,29 @@ export default function ChapterDetailPage() {
     return <div className="p-6"><EmptyState title="Không tìm thấy chương" /></div>;
   }
 
-  const completedPages = pages.filter(p => p.status === 'Completed' || p.status === 'Approved').length;
+  // Tiến độ tính theo task đã duyệt (approved). Một trang coi là hoàn thành khi có task và tất cả đã duyệt.
+  const totalTasks = pages.reduce((sum, p) => sum + (p.tasksCount ?? 0), 0);
+  const completedTasks = pages.reduce((sum, p) => sum + (p.completedTasksCount ?? 0), 0);
+  const completedPages = pages.filter(p => (p.tasksCount ?? 0) > 0 && (p.completedTasksCount ?? 0) === p.tasksCount).length;
+  const progress = totalTasks > 0
+    ? Math.round((completedTasks / totalTasks) * 100)
+    : (chapter.status === 'Published' ? 100 : 0);
+
+  const displayChapterStatus =
+    (chapter.status === 'Draft' || chapter.status === 'In Progress') && totalTasks > 0 && progress === 100
+      ? 'Approved'
+      : (chapter.status === 'Draft' || chapter.status === 'In Progress') && totalTasks > 0 && progress > 0
+      ? 'In Progress'
+      : chapter.status;
+
+  // Suy ra trạng thái hiển thị của trang theo task: đủ task đã duyệt → Hoàn thành.
+  const displayPages = pages.map(p => {
+    const total = p.tasksCount ?? 0;
+    const done = p.completedTasksCount ?? 0;
+    if (total > 0 && done === total) return { ...p, status: 'Completed' as const };
+    if (total > 0 && done > 0) return { ...p, status: 'In Progress' as const };
+    return p;
+  });
 
   return (
     <div className="p-6 space-y-5">
@@ -146,7 +178,7 @@ export default function ChapterDetailPage() {
           <div className="flex items-center gap-3 mb-1 flex-wrap">
             <span className="text-sm font-semibold text-muted-foreground">Ch.{chapter.number}</span>
             <h1 className="text-xl font-bold">{chapter.title}</h1>
-            <Badge status={chapter.status} size="md" />
+            <Badge status={displayChapterStatus} size="md" />
           </div>
           <p className="text-sm text-muted-foreground mb-3">{series?.title}</p>
 
@@ -166,7 +198,7 @@ export default function ChapterDetailPage() {
           </div>
 
           <div className="mt-3 max-w-sm">
-            <ProgressBar value={chapter.progress} showLabel size="md" />
+            <ProgressBar value={progress} showLabel size="md" />
           </div>
         </div>
         <Button variant="primary" size="sm" onClick={() => pages[0] && navigate(`/mangaka/pages/${pages[0].id}/workspace`)}>
@@ -197,8 +229,8 @@ export default function ChapterDetailPage() {
             description="Tải lên trang nháp để bắt đầu làm việc."
           />
         ) : (
-          <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 xl:grid-cols-8 gap-3">
-            {pages.map(page => (
+          <div className="grid grid-cols-[repeat(auto-fill,minmax(180px,1fr))] gap-3">
+            {displayPages.map(page => (
               <MangaPageCard key={page.id} page={page} onDelete={handleDeletePage} />
             ))}
           </div>

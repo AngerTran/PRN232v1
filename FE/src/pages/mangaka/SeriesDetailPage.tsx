@@ -9,17 +9,20 @@ import ChapterCard from '../../components/ui/ChapterCard';
 import RankingTrend from '../../components/ui/RankingTrend';
 import EmptyState from '../../components/ui/EmptyState';
 import { usePageMeta } from '../../hooks/usePageMeta';
+import { useConfirm } from '../../components/ui/ConfirmDialog';
 import type { Chapter, Series } from '../../data/mockData';
-import { getSeries, getSeriesChapters } from '../../services/seriesApi';
+import { getSeries, getSeriesChapters, submitSeriesForReview } from '../../services/seriesApi';
 
 export default function SeriesDetailPage() {
   const { seriesId } = useParams<{ seriesId: string }>();
   const navigate = useNavigate();
   const { setPageMeta } = usePageMeta();
+  const confirm = useConfirm();
   const [tab, setTab] = useState('chapters');
   const [series, setSeries] = useState<Series | null>(null);
   const [chapters, setChapters] = useState<Chapter[]>([]);
   const [loading, setLoading] = useState(true);
+  const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
 
   // Series-level editorial submissions and ranking history are not yet exposed
@@ -74,6 +77,31 @@ export default function SeriesDetailPage() {
     }
   }, [series?.id]);
 
+  const handleSubmitForReview = async () => {
+    if (!series) return;
+    const confirmed = await confirm({
+      title: 'Gửi xét duyệt',
+      message: (
+        <>
+          Gửi series <span className="font-semibold text-foreground">{series.title}</span> đến hội đồng xét duyệt?
+        </>
+      ),
+      confirmText: 'Gửi duyệt',
+    });
+    if (!confirmed) return;
+
+    setSubmitting(true);
+    setError('');
+    try {
+      const updated = await submitSeriesForReview(series.id);
+      setSeries(prev => prev ? { ...prev, status: updated.status } : prev);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Không thể gửi series để xét duyệt.');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
   if (loading) {
     return <div className="p-6 text-sm text-muted-foreground">Dang tai series...</div>;
   }
@@ -88,6 +116,24 @@ export default function SeriesDetailPage() {
 
   return (
     <div className="p-6 space-y-5">
+      {error && (
+        <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+          {error}
+        </div>
+      )}
+
+      {series.status === 'Submitted' && (
+        <div className="rounded-xl border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-800">
+          Series đang chờ hội đồng xét duyệt.
+        </div>
+      )}
+
+      {series.status === 'Cancelled' && (
+        <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
+          Series đã bị hội đồng từ chối.
+        </div>
+      )}
+
       {/* Header */}
       <div className="flex items-start gap-5">
         <div className="w-28 h-36 rounded-xl overflow-hidden shrink-0 bg-muted shadow-md">
@@ -120,7 +166,12 @@ export default function SeriesDetailPage() {
               <span className="text-xs text-muted-foreground uppercase tracking-wide font-semibold">Chương</span>
               <span className="font-bold text-lg text-foreground">{series.chaptersCount}</span>
             </div>
-            <div className="flex gap-2 ml-auto">
+            <div className="flex gap-2 ml-auto flex-wrap">
+              {series.status === 'Draft' && (
+                <Button variant="primary" size="sm" loading={submitting} onClick={handleSubmitForReview}>
+                  <Send size={14} /> Gửi xét duyệt
+                </Button>
+              )}
               <Button variant="outline" size="sm" onClick={() => navigate(`/mangaka/series/${series.id}/chapters`)}>
                 <FileText size={14} /> Chương
               </Button>
@@ -147,6 +198,12 @@ export default function SeriesDetailPage() {
               <CardHeader><CardTitle>Tóm tắt</CardTitle></CardHeader>
               <p className="text-sm text-foreground/80 leading-relaxed">{series.synopsis}</p>
             </Card>
+            {series.mainCharacters && (
+              <Card>
+                <CardHeader><CardTitle>Nhân vật chính</CardTitle></CardHeader>
+                <p className="text-sm text-foreground/80 leading-relaxed whitespace-pre-line">{series.mainCharacters}</p>
+              </Card>
+            )}
             <Card>
               <CardHeader><CardTitle>Chi tiết Series</CardTitle></CardHeader>
               <dl className="space-y-3">

@@ -9,7 +9,7 @@ import {
   MangaPagePreview,
   FeedbackBox,
 } from '../../app/components/ui/assistant';
-import { currentUser, type Task } from '../../data/mockData';
+import { type Task } from '../../data/mockData';
 import { getTask, startTask } from '../../services/tasksApi';
 import {
   Calendar,
@@ -20,10 +20,24 @@ import {
   Send,
   Download,
   ArrowLeft,
+  Clock,
+  CheckCircle2,
 } from 'lucide-react';
 import { format } from 'date-fns';
 import { vi } from 'date-fns/locale';
 import { toast } from 'sonner';
+
+function resourceFileName(url: string, index: number): string {
+  try {
+    const path = new URL(url).pathname;
+    const raw = decodeURIComponent(path.split('/').pop() ?? '');
+    // Tên file lúc upload có dạng "<guid>_tenfile.ext" → bỏ phần guid prefix nếu có.
+    const cleaned = raw.replace(/^[0-9a-fA-F]{32}_/, '');
+    return cleaned || `Tài liệu ${index + 1}`;
+  } catch {
+    return `Tài liệu ${index + 1}`;
+  }
+}
 
 export default function TaskDetailPage() {
   const { taskId } = useParams<{ taskId: string }>();
@@ -164,7 +178,7 @@ export default function TaskDetailPage() {
               </div>
               <div>
                 <p className="text-sm text-muted-foreground">Giao bởi</p>
-                <p className="font-medium">{currentUser.name}</p>
+                <p className="font-medium">{task.assignedByName || '—'}</p>
               </div>
             </div>
 
@@ -185,7 +199,7 @@ export default function TaskDetailPage() {
       {task.status === 'Revision Required' && task.mangakaFeedback && (
         <FeedbackBox
           feedback={task.mangakaFeedback}
-          from={currentUser.name}
+          from={task.assignedByName || 'Tác giả'}
           date={format(new Date(), 'dd/MM/yyyy HH:mm', { locale: vi })}
         />
       )}
@@ -230,16 +244,26 @@ export default function TaskDetailPage() {
             {/* Resource Files */}
             <div>
               <h4 className="font-medium mb-3">Tài Liệu Tham Khảo</h4>
-              <div className="space-y-2">
-                <Button variant="outline" size="sm" className="w-full justify-start">
-                  <Download className="h-4 w-4 mr-2" />
-                  reference_sketch.psd
-                </Button>
-                <Button variant="outline" size="sm" className="w-full justify-start">
-                  <Download className="h-4 w-4 mr-2" />
-                  style_guide.pdf
-                </Button>
-              </div>
+              {task.resourceUrls && task.resourceUrls.length > 0 ? (
+                <div className="space-y-2">
+                  {task.resourceUrls.map((url, idx) => (
+                    <Button
+                      key={url}
+                      asChild
+                      variant="outline"
+                      size="sm"
+                      className="w-full justify-start"
+                    >
+                      <a href={url} target="_blank" rel="noopener noreferrer" download>
+                        <Download className="h-4 w-4 mr-2" />
+                        {resourceFileName(url, idx)}
+                      </a>
+                    </Button>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-sm text-muted-foreground">Không có tài liệu tham khảo.</p>
+              )}
             </div>
           </CardContent>
         </Card>
@@ -247,15 +271,36 @@ export default function TaskDetailPage() {
         {/* Manga Page Preview */}
         <Card>
           <CardHeader>
-            <CardTitle>Preview Manga Page</CardTitle>
+            <CardTitle>Xem trước trang truyện</CardTitle>
           </CardHeader>
           <CardContent>
-            <MangaPagePreview task={task} />
+            <MangaPagePreview task={task} imageUrl={task.pageImageUrl || undefined} />
           </CardContent>
         </Card>
       </div>
 
+      {/* Status Notice */}
+      {task.status === 'Submitted' && (
+        <div className="flex items-center gap-3 rounded-lg border border-blue-200 bg-blue-50 px-4 py-3 text-blue-700">
+          <Clock className="h-5 w-5 shrink-0" />
+          <div>
+            <p className="font-medium">Đã nộp kết quả</p>
+            <p className="text-sm">Kết quả của bạn đang chờ tác giả duyệt. Vui lòng chờ phản hồi.</p>
+          </div>
+        </div>
+      )}
+      {task.status === 'Approved' && (
+        <div className="flex items-center gap-3 rounded-lg border border-green-200 bg-green-50 px-4 py-3 text-green-700">
+          <CheckCircle2 className="h-5 w-5 shrink-0" />
+          <div>
+            <p className="font-medium">Đã được duyệt</p>
+            <p className="text-sm">Tác giả đã chấp nhận kết quả của bạn. Cảm ơn bạn đã hoàn thành công việc!</p>
+          </div>
+        </div>
+      )}
+
       {/* Action Buttons */}
+      {(canStart || canSubmit || task.submittedResult) && (
       <Card>
         <CardContent className="py-6">
           <div className="flex flex-col sm:flex-row gap-3">
@@ -284,6 +329,7 @@ export default function TaskDetailPage() {
           </div>
         </CardContent>
       </Card>
+      )}
     </div>
   );
 }

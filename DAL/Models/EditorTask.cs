@@ -39,6 +39,9 @@ public partial class EditorTask
     // URL các file tham khảo do mangaka/editor đính kèm khi giao task.
     public List<string> ResourceUrls { get; set; } = new();
 
+    // Giá (tiền công) cho task, do mangaka/editor đặt khi giao việc.
+    public decimal Price { get; set; }
+
     public virtual Profile? AssignedByNavigation { get; set; }
 
     public virtual Profile? AssignedToNavigation { get; set; }

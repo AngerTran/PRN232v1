@@ -64,6 +64,21 @@ public class BoardController : ControllerBase
         return Ok(await _boardService.ListPendingSeriesAsync(userId, cancellationToken));
     }
 
+    [HttpGet("vote-progress")]
+    [SwaggerOperation(Summary = "Get board vote progress", Description = "Returns how many board members have voted and whether quorum is met for a series.")]
+    [ProducesResponseType(typeof(BoardVoteProgressResponse), StatusCodes.Status200OK)]
+    public async Task<ActionResult<BoardVoteProgressResponse>> VoteProgress(
+        [FromQuery] Guid seriesId,
+        CancellationToken cancellationToken)
+    {
+        if (!this.TryGetUserId(out var userId))
+        {
+            return Unauthorized();
+        }
+
+        return Ok(await _boardService.GetVoteProgressAsync(userId, seriesId, cancellationToken));
+    }
+
     [HttpGet("leaderboard")]
     [SwaggerOperation(Summary = "Get leaderboard", Description = "Returns leaderboard metrics for series performance. The metric query controls which ranking signal is used.")]
     [ProducesResponseType(typeof(IReadOnlyList<LeaderboardItemResponse>), StatusCodes.Status200OK)]

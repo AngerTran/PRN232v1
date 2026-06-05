@@ -144,9 +144,23 @@ export default function Sidebar() {
     ? BOARD_GROUPS
     : MANGAKA_GROUPS;
 
+  const allHrefs = GROUPS.flatMap(group => group.items.map(item => item.href));
+
   const isActive = (href: string, exact?: boolean) => {
     if (exact) return location.pathname === href;
-    return location.pathname.startsWith(href);
+
+    const matches = location.pathname === href || location.pathname.startsWith(href + '/');
+    if (!matches) return false;
+
+    // Nếu có mục khác cụ thể hơn (href dài hơn) cũng khớp đường dẫn hiện tại,
+    // thì mục ngắn hơn không được tính là active (vd /mangaka/series vs /mangaka/series/create).
+    const hasMoreSpecific = allHrefs.some(
+      other =>
+        other !== href &&
+        other.startsWith(href + '/') &&
+        (location.pathname === other || location.pathname.startsWith(other + '/'))
+    );
+    return !hasMoreSpecific;
   };
 
   const handleLogout = async () => {

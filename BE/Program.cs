@@ -16,6 +16,7 @@ dataSourceBuilder.MapEnum<ChapterStatus>("chapter_status");
 dataSourceBuilder.MapEnum<PageStatus>("page_status");
 dataSourceBuilder.MapEnum<TaskStatusDb>("task_status");
 dataSourceBuilder.MapEnum<TaskTypeDb>("task_type");
+dataSourceBuilder.MapEnum<VoteDecisionDb>("vote_decision");
 var dataSource = dataSourceBuilder.Build();
 
 builder.Services.AddSingleton(dataSource);
@@ -29,7 +30,8 @@ builder.Services.AddDbContext<AppDbContext>((serviceProvider, options) =>
             .MapEnum<ChapterStatus>("chapter_status")
             .MapEnum<PageStatus>("page_status")
             .MapEnum<TaskStatusDb>("task_status")
-            .MapEnum<TaskTypeDb>("task_type")));
+            .MapEnum<TaskTypeDb>("task_type")
+            .MapEnum<VoteDecisionDb>("vote_decision")));
 
 builder.Services.AddControllers();
 builder.Services.AddCors(options =>
@@ -61,17 +63,75 @@ app.UseAuthentication();
 app.UseAuthorization();
 app.MapControllers();
 
-// Đảm bảo cột resource_urls (file tham khảo cho task) tồn tại. Idempotent + an toàn.
+// Đảm bảo các cột bổ sung cho task (file tham khảo, giá) tồn tại. Idempotent + an toàn.
 try
 {
     await using var ensureConn = await dataSource.OpenConnectionAsync();
     await using var ensureCmd = ensureConn.CreateCommand();
-    ensureCmd.CommandText = "alter table public.tasks add column if not exists resource_urls text[] not null default '{}'::text[];";
+    ensureCmd.CommandText = @"
+        alter table public.tasks add column if not exists resource_urls text[] not null default '{}'::text[];
+        alter table public.tasks add column if not exists price numeric(12,2) not null default 0;";
     await ensureCmd.ExecuteNonQueryAsync();
 }
 catch (Exception ex)
 {
-    app.Logger.LogWarning(ex, "Could not ensure tasks.resource_urls column exists.");
+    app.Logger.LogWarning(ex, "Could not ensure extra task columns exist.");
+}
+
+// Đồng bộ trạng thái series đã có phiếu nhưng còn kẹt pending_review (sửa dữ liệu cũ).
+try
+{
+    await using var syncConn = await dataSource.OpenConnectionAsync();
+    await using var syncCmd = syncConn.CreateCommand();
+    syncCmd.CommandText = @"
+        update public.series s
+        set status = 'approved'::series_status, updated_at = now()
+        where s.status = 'pending_review'::series_status
+          and (select count(*) from public.profiles p where p.role = 'board'::user_role and coalesce(p.is_active, true) = true) > 0
+          and (
+            select count(distinct v.board_member_id)
+            from public.board_votes v
+            inner join public.profiles p on p.id = v.board_member_id
+            where v.series_id = s.id and p.role = 'board'::user_role and coalesce(p.is_active, true) = true
+          ) = (
+            select count(*) from public.profiles p where p.role = 'board'::user_role and coalesce(p.is_active, true) = true
+          )
+          and (
+            select count(*) from public.board_votes v
+            inner join public.profiles p on p.id = v.board_member_id
+            where v.series_id = s.id and p.role = 'board'::user_role and v.decision = 'approve'::vote_decision
+          ) > (
+            select count(*) from public.board_votes v
+            inner join public.profiles p on p.id = v.board_member_id
+            where v.series_id = s.id and p.role = 'board'::user_role and v.decision = 'reject'::vote_decision
+          );
+
+        update public.series s
+        set status = 'cancelled'::series_status, updated_at = now()
+        where s.status = 'pending_review'::series_status
+          and (select count(*) from public.profiles p where p.role = 'board'::user_role and coalesce(p.is_active, true) = true) > 0
+          and (
+            select count(distinct v.board_member_id)
+            from public.board_votes v
+            inner join public.profiles p on p.id = v.board_member_id
+            where v.series_id = s.id and p.role = 'board'::user_role and coalesce(p.is_active, true) = true
+          ) = (
+            select count(*) from public.profiles p where p.role = 'board'::user_role and coalesce(p.is_active, true) = true
+          )
+          and (
+            select count(*) from public.board_votes v
+            inner join public.profiles p on p.id = v.board_member_id
+            where v.series_id = s.id and p.role = 'board'::user_role and v.decision = 'reject'::vote_decision
+          ) > (
+            select count(*) from public.board_votes v
+            inner join public.profiles p on p.id = v.board_member_id
+            where v.series_id = s.id and p.role = 'board'::user_role and v.decision = 'approve'::vote_decision
+          );";
+    await syncCmd.ExecuteNonQueryAsync();
+}
+catch (Exception ex)
+{
+    app.Logger.LogWarning(ex, "Could not sync series status from board votes.");
 }
 
 app.Run();
