@@ -36,6 +36,9 @@ public partial class EditorTask
 
     public DateTime? UpdatedAt { get; set; }
 
+    // URL các file tham khảo do mangaka/editor đính kèm khi giao task.
+    public List<string> ResourceUrls { get; set; } = new();
+
     public virtual Profile? AssignedByNavigation { get; set; }
 
     public virtual Profile? AssignedToNavigation { get; set; }

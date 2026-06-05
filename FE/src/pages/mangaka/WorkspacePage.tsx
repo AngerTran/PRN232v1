@@ -9,6 +9,7 @@ import Badge from '../../components/ui/Badge';
 import {
   createWorkspaceTask,
   getWorkspace,
+  uploadTaskResources,
   type Region,
   type WorkspacePayload,
 } from '../../services/workspaceApi';
@@ -132,14 +133,14 @@ export default function WorkspacePage() {
     setCurrentDrag(null);
   };
 
-  const handleAssignTask = async (data: TaskFormData & { region: string }) => {
+  const handleAssignTask = async (data: TaskFormData & { region: string; files: File[] }) => {
     if (!region) return;
 
     setIsSubmitting(true);
     setError(null);
 
     try {
-      const created = await createWorkspaceTask({
+      let created = await createWorkspaceTask({
         pageId: selectedPageId,
         type: data.type,
         assistantId: data.assistantId,
@@ -148,6 +149,14 @@ export default function WorkspacePage() {
         price: Number(data.price) || 0,
         region,
       });
+
+      if (data.files.length > 0) {
+        try {
+          created = await uploadTaskResources(created.id, data.files);
+        } catch (uploadErr) {
+          setError(uploadErr instanceof Error ? uploadErr.message : 'Tạo task xong nhưng tải file tham khảo thất bại.');
+        }
+      }
 
       setWorkspace(current => current
         ? {
@@ -193,7 +202,11 @@ export default function WorkspacePage() {
             )}
           >
             <div className="w-full h-full bg-[#F0EBE0]">
-              <MangaPanelPreview layout={p.panelLayout ?? 0} />
+              {p.thumbnailUrl ? (
+                <img src={p.thumbnailUrl} alt={`Trang ${p.pageNumber}`} className="w-full h-full object-cover" />
+              ) : (
+                <MangaPanelPreview layout={p.panelLayout ?? 0} />
+              )}
             </div>
           </button>
         ))}
@@ -264,7 +277,11 @@ export default function WorkspacePage() {
           >
             {/* Manga page */}
             <div className="w-full h-full bg-[#F2EDE0] overflow-hidden">
-              {page && <MangaPanelPreview layout={page.panelLayout ?? 0} />}
+              {page?.thumbnailUrl ? (
+                <img src={page.thumbnailUrl} alt={`Trang ${page.pageNumber}`} className="w-full h-full object-contain" />
+              ) : (
+                page && <MangaPanelPreview layout={page.panelLayout ?? 0} />
+              )}
             </div>
 
             {/* Existing task regions */}

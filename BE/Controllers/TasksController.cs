@@ -67,6 +67,30 @@ public class TasksController : ControllerBase
         return CreatedAtAction(nameof(GetById), new { id = created.Id }, created);
     }
 
+    [HttpPost("/api/tasks/{id:guid}/resources")]
+    [SwaggerOperation(Summary = "Upload task reference files", Description = "Uploads reference materials for a task. Requires mangaka, assigned editor, or admin permission.")]
+    [ProducesResponseType(typeof(TaskItemResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<ActionResult<TaskItemResponse>> UploadResources(
+        Guid id,
+        [FromForm] List<IFormFile> files,
+        CancellationToken cancellationToken)
+    {
+        if (!this.TryGetUserId(out var userId))
+        {
+            return Unauthorized();
+        }
+
+        if (files is null || files.Count == 0)
+        {
+            return BadRequest(new { message = "No files provided." });
+        }
+
+        var updated = await _taskService.UploadResourcesAsync(userId, id, files, cancellationToken);
+        return updated is null ? NotFound() : Ok(updated);
+    }
+
     [HttpPatch("/api/tasks/{id:guid}/status_in_progress")]
     [HttpPatch("/api/task/{id:guid}/status_in_progress")]
     [SwaggerOperation(Summary = "Mark task in progress", Description = "Marks an assigned assistant task as in progress.")]

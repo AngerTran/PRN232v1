@@ -60,8 +60,8 @@ public partial class AppDbContext : DbContext
             .HasPostgresEnum("realtime", "equality_op", new[] { "eq", "neq", "lt", "lte", "gt", "gte", "in" })
             .HasPostgresEnum<SeriesStatus>(name: "series_status")
             .HasPostgresEnum("storage", "buckettype", new[] { "STANDARD", "ANALYTICS", "VECTOR" })
-            .HasPostgresEnum("task_status", new[] { "todo", "in_progress", "submitted", "approved", "rejected" })
-            .HasPostgresEnum("task_type", new[] { "background", "shading", "cleanup", "speech_bubble", "effects", "lineart", "other" })
+            .HasPostgresEnum<TaskStatusDb>(name: "task_status")
+            .HasPostgresEnum<TaskTypeDb>(name: "task_type")
             .HasPostgresEnum<ProfileRole>(name: "user_role")
             .HasPostgresEnum("vote_decision", new[] { "approve", "reject" })
             .HasPostgresExtension("extensions", "pg_stat_statements")
@@ -471,7 +471,9 @@ public partial class AppDbContext : DbContext
             entity.Property(e => e.FileUrl).HasColumnName("file_url");
             entity.Property(e => e.Note).HasColumnName("note");
             entity.Property(e => e.Status)
-                .HasColumnType("task_status")
+                .HasConversion(
+                    v => TaskEnumConversions.StatusFromString(v),
+                    v => TaskEnumConversions.StatusToString(v))
                 .HasDefaultValueSql("'submitted'::task_status")
                 .HasColumnName("status");
             entity.Property(e => e.PreviewImageUrl).HasColumnName("preview_image_url");
@@ -530,11 +532,15 @@ public partial class AppDbContext : DbContext
                 .HasColumnName("region");
             entity.Property(e => e.StartedAt).HasColumnName("started_at");
             entity.Property(e => e.Status)
-                .HasColumnType("task_status")
+                .HasConversion(
+                    v => TaskEnumConversions.StatusFromString(v),
+                    v => TaskEnumConversions.StatusToString(v))
                 .HasDefaultValueSql("'todo'::task_status")
                 .HasColumnName("status");
             entity.Property(e => e.TaskType)
-                .HasColumnType("task_type")
+                .HasConversion(
+                    v => TaskEnumConversions.TypeFromString(v),
+                    v => TaskEnumConversions.TypeToString(v))
                 .HasColumnName("task_type");
             entity.Property(e => e.Title)
                 .HasMaxLength(255)
@@ -542,6 +548,10 @@ public partial class AppDbContext : DbContext
             entity.Property(e => e.UpdatedAt)
                 .HasDefaultValueSql("now()")
                 .HasColumnName("updated_at");
+            entity.Property(e => e.ResourceUrls)
+                .HasColumnType("text[]")
+                .HasDefaultValueSql("'{}'::text[]")
+                .HasColumnName("resource_urls");
 
             entity.HasOne(d => d.AssignedByNavigation).WithMany(p => p.TaskAssignedByNavigations)
                 .HasForeignKey(d => d.AssignedBy)

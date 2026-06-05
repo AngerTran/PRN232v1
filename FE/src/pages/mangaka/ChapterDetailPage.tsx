@@ -9,7 +9,7 @@ import EmptyState from '../../components/ui/EmptyState';
 import { usePageMeta } from '../../hooks/usePageMeta';
 import type { Chapter, Series } from '../../data/mockData';
 import { getChapter, getSeries } from '../../services/seriesApi';
-import { getChapterPages, uploadChapterPage, type WorkspacePageItem } from '../../services/workspaceApi';
+import { getChapterPages, uploadChapterPage, deleteChapterPage, type WorkspacePageItem } from '../../services/workspaceApi';
 import { format } from 'date-fns';
 
 export default function ChapterDetailPage() {
@@ -105,6 +105,22 @@ export default function ChapterDetailPage() {
     }
   };
 
+  const handleDeletePage = async (pageId: string) => {
+    const target = pages.find(p => p.id === pageId);
+    if (!window.confirm(`Xóa Trang ${target?.pageNumber ?? ''}? Hành động này không thể hoàn tác.`)) {
+      return;
+    }
+
+    const previous = pages;
+    setPages(prev => prev.filter(p => p.id !== pageId));
+    try {
+      await deleteChapterPage(pageId);
+    } catch (err) {
+      setPages(previous);
+      alert(err instanceof Error ? err.message : 'Không thể xóa trang.');
+    }
+  };
+
   if (isLoading) {
     return <div className="p-6"><EmptyState title="Đang tải chương..." /></div>;
   }
@@ -183,7 +199,7 @@ export default function ChapterDetailPage() {
         ) : (
           <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 xl:grid-cols-8 gap-3">
             {pages.map(page => (
-              <MangaPageCard key={page.id} page={page} />
+              <MangaPageCard key={page.id} page={page} onDelete={handleDeletePage} />
             ))}
           </div>
         )}

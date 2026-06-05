@@ -28,7 +28,7 @@ interface TaskPanelProps {
   onSelectRegion: () => void;
   isSelectingRegion: boolean;
   regionLabel?: string;
-  onAssignTask?: (data: TaskFormData & { region: string }) => void | Promise<void>;
+  onAssignTask?: (data: TaskFormData & { region: string; files: File[] }) => void | Promise<void>;
   assistants: WorkspaceAssistant[];
   isSubmitting?: boolean;
 }
@@ -59,6 +59,7 @@ export default function TaskPanel({
     price: '',
   });
   const [submitted, setSubmitted] = useState(false);
+  const [files, setFiles] = useState<File[]>([]);
 
   useEffect(() => {
     if (!form.assistantId && assistants[0]?.id) {
@@ -70,10 +71,11 @@ export default function TaskPanel({
     e.preventDefault();
     if (!hasRegion || !region) return;
     try {
-      await onAssignTask?.({ ...form, region: JSON.stringify(region) });
+      await onAssignTask?.({ ...form, region: JSON.stringify(region), files });
     } catch {
       return;
     }
+    setFiles([]);
     setSubmitted(true);
     setTimeout(() => setSubmitted(false), 2500);
   };
@@ -218,10 +220,31 @@ export default function TaskPanel({
         {/* Resource upload */}
         <div>
           <label className="block text-xs font-semibold text-gray-300 uppercase tracking-wide mb-2">File tham khảo</label>
-          <div className="border-2 border-dashed border-[#4A4A4A] rounded-lg p-3 text-center hover:border-gray-500 transition-colors cursor-pointer">
-            <input type="file" multiple className="sr-only" />
+          <label className="block border-2 border-dashed border-[#4A4A4A] rounded-lg p-3 text-center hover:border-gray-500 transition-colors cursor-pointer">
+            <input
+              type="file"
+              multiple
+              className="sr-only"
+              onChange={e => setFiles(prev => [...prev, ...Array.from(e.target.files ?? [])])}
+            />
             <p className="text-xs text-gray-500">Nhấn để tải lên tài liệu tham khảo</p>
-          </div>
+          </label>
+          {files.length > 0 && (
+            <ul className="mt-2 space-y-1">
+              {files.map((f, i) => (
+                <li key={`${f.name}-${i}`} className="flex items-center justify-between gap-2 text-xs text-gray-300 bg-[#242424] border border-[#3A3A3A] rounded-md px-2 py-1.5">
+                  <span className="truncate">{f.name}</span>
+                  <button
+                    type="button"
+                    onClick={() => setFiles(prev => prev.filter((_, idx) => idx !== i))}
+                    className="text-gray-500 hover:text-red-400 shrink-0"
+                  >
+                    ✕
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
         </div>
       </div>
 

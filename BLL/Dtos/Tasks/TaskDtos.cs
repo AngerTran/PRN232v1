@@ -17,7 +17,8 @@ public record TaskItemResponse(
     DateTime? Deadline,
     DateTime? StartedAt,
     DateTime? CompletedAt,
-    DateTime? CreatedAt);
+    DateTime? CreatedAt,
+    IReadOnlyList<string>? ResourceUrls = null);
 
 public record KanbanColumnItemResponse(
     Guid Id,

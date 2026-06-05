@@ -1,4 +1,6 @@
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
+using Microsoft.AspNetCore.Http;
 using DAL.Common;
 using BLL.Dtos.Tasks;
 using DAL.Models;
@@ -6,6 +8,8 @@ using DAL.Repositories;
 using DAL.Services.Workflow;
 using BLL.Services.Workflow;
 using BLL.Services.Notifications;
+using BLL.Services.Storage;
+using BLL.Configuration;
 using System.Text.Json;
 
 namespace BLL.Services.Tasks;
@@ -15,14 +19,64 @@ public class TaskService
     private readonly UnitOfWork _unitOfWork;
     private readonly PageAccessService _pageAccess;
     private readonly NotificationService _notificationService;
+    private readonly SupabaseStorageService _storage;
+    private readonly SupabaseOptions _supabaseOptions;
     private Repository<EditorTask> TaskRepository => _unitOfWork.Repository<EditorTask>();
     private Repository<Profile> ProfileRepository => _unitOfWork.Repository<Profile>();
 
-    public TaskService(UnitOfWork unitOfWork, PageAccessService pageAccess, NotificationService notificationService)
+    public TaskService(
+        UnitOfWork unitOfWork,
+        PageAccessService pageAccess,
+        NotificationService notificationService,
+        SupabaseStorageService storage,
+        IOptions<SupabaseOptions> supabaseOptions)
     {
         _unitOfWork = unitOfWork;
         _pageAccess = pageAccess;
         _notificationService = notificationService;
+        _storage = storage;
+        _supabaseOptions = supabaseOptions.Value;
+    }
+
+    public async Task<TaskItemResponse?> UploadResourcesAsync(
+        Guid callerId,
+        Guid taskId,
+        IReadOnlyList<IFormFile> files,
+        CancellationToken cancellationToken = default)
+    {
+        var caller = await _pageAccess.RequireProfileAsync(callerId, cancellationToken);
+        var task = await TaskRepository.GetByIdAsync(taskId, asNoTracking: false, cancellationToken);
+        if (task is null)
+        {
+            return null;
+        }
+
+        var ctx = await _pageAccess.GetPageContextAsync(task.PageId, cancellationToken)
+            ?? throw new WorkflowForbiddenException("Page not found.");
+
+        if (!_pageAccess.CanAssignTasks(caller, ctx))
+        {
+            throw new WorkflowForbiddenException("You do not have permission to add resources to this task.");
+        }
+
+        var urls = task.ResourceUrls?.ToList() ?? new List<string>();
+        foreach (var file in files)
+        {
+            if (file.Length <= 0)
+            {
+                continue;
+            }
+
+            var objectPath = $"tasks/{taskId}/resources/{Guid.NewGuid():N}_{file.FileName}";
+            var url = await _storage.UploadAsync(_supabaseOptions.SubmissionsBucket, objectPath, file, cancellationToken);
+            urls.Add(url);
+        }
+
+        task.ResourceUrls = urls;
+        task.UpdatedAt = DateTime.UtcNow;
+        await _unitOfWork.SaveChangesAsync(cancellationToken);
+
+        return MapTaskItem(task, task.AssignedToNavigation?.FullName);
     }
 
     public async Task<KanbanResponse> GetKanbanByChapterAsync(
@@ -109,6 +163,24 @@ public class TaskService
         return MapTaskItem(task, task.AssignedToNavigation?.FullName);
     }
 
+    // Postgres `timestamptz` chỉ chấp nhận UTC. Deadline từ client thường có Kind=Unspecified
+    // (vd "2026-06-10"), nên cần ép về UTC trước khi lưu để tránh lỗi Npgsql.
+    private static DateTime? ToUtc(DateTime? value)
+    {
+        if (value is null)
+        {
+            return null;
+        }
+
+        var v = value.Value;
+        return v.Kind switch
+        {
+            DateTimeKind.Utc => v,
+            DateTimeKind.Local => v.ToUniversalTime(),
+            _ => DateTime.SpecifyKind(v, DateTimeKind.Utc)
+        };
+    }
+
     public async Task<TaskItemResponse> CreateAsync(
         Guid callerId,
         Guid pageId,
@@ -153,7 +225,7 @@ public class TaskService
             AssignedBy = callerId,
             Priority = request.Priority ?? 1,
             Status = TaskStatuses.Todo,
-            Deadline = request.Deadline,
+            Deadline = ToUtc(request.Deadline),
             CreatedAt = now,
             UpdatedAt = now
         };
@@ -229,7 +301,7 @@ public class TaskService
 
         if (request.Deadline is not null)
         {
-            task.Deadline = request.Deadline;
+            task.Deadline = ToUtc(request.Deadline);
         }
 
         task.UpdatedAt = DateTime.UtcNow;
@@ -390,7 +462,8 @@ public class TaskService
             t.Deadline,
             t.StartedAt,
             t.CompletedAt,
-            t.CreatedAt);
+            t.CreatedAt,
+            t.ResourceUrls);
 
     private static string NormalizeRegionJson(string region)
     {

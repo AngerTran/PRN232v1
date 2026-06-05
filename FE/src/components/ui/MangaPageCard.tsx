@@ -1,6 +1,5 @@
 import { useNavigate } from 'react-router';
-import { ExternalLink, CheckCircle, Circle } from 'lucide-react';
-import { clsx } from 'clsx';
+import { ExternalLink, CheckCircle, Circle, Trash2 } from 'lucide-react';
 import Badge from './Badge';
 import MangaPanelPreview from '../workspace/MangaPanelPreview';
 
@@ -12,21 +11,36 @@ interface MangaPageCardProps {
     tasksCount?: number;
     completedTasksCount?: number;
     panelLayout?: number;
+    thumbnailUrl?: string;
   };
+  onDelete?: (id: string) => void;
 }
 
-export default function MangaPageCard({ page }: MangaPageCardProps) {
+export default function MangaPageCard({ page, onDelete }: MangaPageCardProps) {
   const navigate = useNavigate();
 
   return (
     <div className="bg-card border border-border rounded-xl overflow-hidden hover:shadow-md transition-shadow group">
       <div className="relative bg-[#F0EBE0] aspect-[3/4] overflow-hidden">
-        <MangaPanelPreview layout={page.panelLayout ?? 0} />
+        {page.thumbnailUrl ? (
+          <img src={page.thumbnailUrl} alt={`Trang ${page.pageNumber}`} className="w-full h-full object-cover" />
+        ) : (
+          <MangaPanelPreview layout={page.panelLayout ?? 0} />
+        )}
         <div className="absolute top-2 left-2">
           <span className="text-[10px] font-bold bg-foreground/80 text-white px-1.5 py-0.5 rounded">
             P.{page.pageNumber}
           </span>
         </div>
+        {onDelete && (
+          <button
+            onClick={() => onDelete(page.id)}
+            title="Xóa trang"
+            className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center w-6 h-6 bg-red-600/90 hover:bg-red-600 text-white rounded-lg"
+          >
+            <Trash2 size={12} />
+          </button>
+        )}
         <button
           onClick={() => navigate(`/mangaka/pages/${page.id}/workspace`)}
           className="absolute bottom-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-1 px-2 py-1 bg-primary text-white text-[10px] font-bold rounded-lg"
