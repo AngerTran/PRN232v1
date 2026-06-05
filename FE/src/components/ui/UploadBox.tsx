@@ -7,13 +7,22 @@ interface UploadBoxProps {
   accept?: string;
   hint?: string;
   className?: string;
+  onChange?: (file: File | null) => void;
 }
 
-export default function UploadBox({ label = 'Tải lên file', accept = '*', hint, className }: UploadBoxProps) {
+export default function UploadBox({ label = 'Tải lên file', accept = '*', hint, className, onChange }: UploadBoxProps) {
   const [dragging, setDragging] = useState(false);
   const [fileName, setFileName] = useState<string | null>(null);
 
-  const handleFile = (file: File) => setFileName(file.name);
+  const handleFile = (file: File) => {
+    setFileName(file.name);
+    if (onChange) onChange(file);
+  };
+
+  const handleClear = () => {
+    setFileName(null);
+    if (onChange) onChange(null);
+  };
 
   return (
     <div className={className}>
@@ -21,7 +30,7 @@ export default function UploadBox({ label = 'Tải lên file', accept = '*', hin
         <div className="flex items-center gap-3 p-3 bg-green-50 border border-green-200 rounded-xl">
           <CheckCircle size={18} className="text-green-600 shrink-0" />
           <span className="text-sm text-green-800 font-medium flex-1 truncate">{fileName}</span>
-          <button onClick={() => setFileName(null)} className="text-green-600 hover:text-green-800 transition-colors">
+          <button type="button" onClick={handleClear} className="text-green-600 hover:text-green-800 transition-colors">
             <X size={15} />
           </button>
         </div>
@@ -58,11 +67,30 @@ export default function UploadBox({ label = 'Tải lên file', accept = '*', hin
   );
 }
 
-export function MultiUploadBox({ label = 'Tải lên trang', className }: { label?: string; className?: string }) {
-  const [files, setFiles] = useState<string[]>([]);
+interface MultiUploadBoxProps {
+  label?: string;
+  className?: string;
+  onChange?: (files: File[]) => void;
+}
 
-  const addFile = (file: File) => setFiles(prev => [...prev, file.name]);
-  const removeFile = (i: number) => setFiles(prev => prev.filter((_, idx) => idx !== i));
+export function MultiUploadBox({ label = 'Tải lên trang', className, onChange }: MultiUploadBoxProps) {
+  const [files, setFiles] = useState<File[]>([]);
+
+  const addFiles = (newFiles: File[]) => {
+    setFiles(prev => {
+      const next = [...prev, ...newFiles];
+      if (onChange) onChange(next);
+      return next;
+    });
+  };
+
+  const removeFile = (i: number) => {
+    setFiles(prev => {
+      const next = prev.filter((_, idx) => idx !== i);
+      if (onChange) onChange(next);
+      return next;
+    });
+  };
 
   return (
     <div className={className}>
@@ -74,7 +102,7 @@ export function MultiUploadBox({ label = 'Tải lên trang', className }: { labe
           accept="image/*"
           multiple
           className="sr-only"
-          onChange={e => { if (e.target.files) Array.from(e.target.files).forEach(addFile); }}
+          onChange={e => { if (e.target.files) addFiles(Array.from(e.target.files)); }}
         />
         <FileImage size={22} className="text-muted-foreground" />
         <div className="text-center">
@@ -84,11 +112,11 @@ export function MultiUploadBox({ label = 'Tải lên trang', className }: { labe
       </label>
       {files.length > 0 && (
         <ul className="mt-3 space-y-1.5">
-          {files.map((name, i) => (
+          {files.map((file, i) => (
             <li key={i} className="flex items-center gap-2 px-3 py-2 bg-muted/60 rounded-lg text-sm">
               <FileImage size={14} className="text-muted-foreground shrink-0" />
-              <span className="flex-1 truncate">{name}</span>
-              <button onClick={() => removeFile(i)} className="text-muted-foreground hover:text-foreground">
+              <span className="flex-1 truncate">{file.name}</span>
+              <button type="button" onClick={() => removeFile(i)} className="text-muted-foreground hover:text-foreground">
                 <X size={13} />
               </button>
             </li>

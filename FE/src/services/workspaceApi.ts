@@ -1,4 +1,4 @@
-import { apiRequest } from './apiClient';
+import { API_BASE_URL, apiRequest } from './apiClient';
 
 export type PageStatus = 'Draft' | 'In Progress' | 'Completed' | 'Approved' | string;
 export type TaskType = 'Background' | 'Shading' | 'Effect' | 'Screentone' | 'Clean Line' | 'Dialogue Edit';
@@ -397,4 +397,37 @@ export async function deleteWorkspaceTask(taskId: string): Promise<void> {
 export async function getChapterPages(chapterId: string): Promise<WorkspacePageItem[]> {
   const pages = unwrap(await apiRequest<ApiEnvelope<ApiPage[]>>(`/api/chapters/${chapterId}/pages`));
   return pages.map(mapPage);
+}
+
+export async function uploadChapterPage(
+  chapterId: string,
+  input: { file: File; pageNumber: number; width?: number; height?: number; thumbnail?: File }
+): Promise<WorkspacePageItem> {
+  const form = new FormData();
+  form.append('file', input.file);
+  form.append('pageNumber', String(input.pageNumber));
+  if (input.width !== undefined) form.append('width', String(input.width));
+  if (input.height !== undefined) form.append('height', String(input.height));
+  if (input.thumbnail) form.append('thumbnail', input.thumbnail);
+
+  const token = localStorage.getItem('inkflow_access_token');
+  const response = await fetch(`${API_BASE_URL}/api/chapters/${chapterId}/pages`, {
+    method: 'POST',
+    headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+    body: form,
+  });
+
+  if (!response.ok) {
+    const body = await response.text();
+    let message = body;
+    try {
+      const parsed = JSON.parse(body) as { message?: string; title?: string };
+      message = parsed.message || parsed.title || body;
+    } catch {
+      // giữ nguyên text
+    }
+    throw new Error(message || `Tải trang lên thất bại (status ${response.status})`);
+  }
+
+  return mapPage(unwrap(await response.json()));
 }

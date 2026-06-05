@@ -6,6 +6,7 @@ import Card, { CardHeader, CardTitle } from '../../components/ui/Card';
 import { MultiUploadBox } from '../../components/ui/UploadBox';
 import { usePageMeta } from '../../hooks/usePageMeta';
 import { createChapter, getSeries, getSeriesChapters } from '../../services/seriesApi';
+import { uploadChapterPage } from '../../services/workspaceApi';
 
 export default function CreateChapterPage() {
   const { seriesId } = useParams<{ seriesId: string }>();
@@ -19,6 +20,7 @@ export default function CreateChapterPage() {
     description: '',
     deadline: '',
   });
+  const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -61,12 +63,23 @@ export default function CreateChapterPage() {
     setError(null);
     setLoading(true);
     try {
-      await createChapter({
+      const created = await createChapter({
         seriesId,
         chapterNumber: Number(form.number) || 1,
         title: form.title || undefined,
         deadline: form.deadline || undefined,
       });
+
+      // Upload selected draft pages sequentially
+      if (selectedFiles.length > 0) {
+        for (let i = 0; i < selectedFiles.length; i++) {
+          await uploadChapterPage(created.id, {
+            file: selectedFiles[i],
+            pageNumber: i + 1,
+          });
+        }
+      }
+
       navigate(`/mangaka/series/${seriesId}/chapters`);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Tạo chương thất bại.');
@@ -118,7 +131,7 @@ export default function CreateChapterPage() {
 
         <Card>
           <CardHeader><CardTitle>Tải lên trang nháp</CardTitle></CardHeader>
-          <MultiUploadBox label="Tải lên trang Manga" />
+          <MultiUploadBox label="Tải lên trang Manga" onChange={setSelectedFiles} />
           <p className="text-xs text-muted-foreground mt-3">Tải lên trang nháp của bạn. Trợ lý sẽ làm việc từ các file này.</p>
         </Card>
 

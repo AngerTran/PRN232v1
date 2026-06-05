@@ -51,11 +51,12 @@ async function tryRefreshToken(): Promise<boolean> {
 export async function apiRequest<T>(path: string, options: ApiRequestOptions = {}): Promise<T> {
   const { auth = true, headers, _retried, ...requestOptions } = options;
   const token = auth ? getAccessToken() : null;
+  const isFormData = requestOptions.body instanceof FormData;
 
   const response = await fetch(`${API_BASE_URL}${path}`, {
     ...requestOptions,
     headers: {
-      'Content-Type': 'application/json',
+      ...(!isFormData ? { 'Content-Type': 'application/json' } : {}),
       ...(token ? { Authorization: `Bearer ${token}` } : {}),
       ...headers,
     },

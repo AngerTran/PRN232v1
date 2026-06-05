@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router';
 import { ChevronLeft, Calendar, FileText, Layers, Plus } from 'lucide-react';
 import Button from '../../components/ui/Button';
@@ -9,13 +9,14 @@ import EmptyState from '../../components/ui/EmptyState';
 import { usePageMeta } from '../../hooks/usePageMeta';
 import type { Chapter, Series } from '../../data/mockData';
 import { getChapter, getSeries } from '../../services/seriesApi';
-import { getChapterPages, type WorkspacePageItem } from '../../services/workspaceApi';
+import { getChapterPages, uploadChapterPage, type WorkspacePageItem } from '../../services/workspaceApi';
 import { format } from 'date-fns';
 
 export default function ChapterDetailPage() {
   const { chapterId } = useParams<{ chapterId: string }>();
   const navigate = useNavigate();
   const { setPageMeta } = usePageMeta();
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [chapter, setChapter] = useState<Chapter | null>(null);
   const [pages, setPages] = useState<WorkspacePageItem[]>([]);
@@ -78,6 +79,32 @@ export default function ChapterDetailPage() {
     }
   }, [chapter?.id]);
 
+  const handleAddPageClick = () => {
+    fileInputRef.current?.click();
+  };
+
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !chapterId) return;
+
+    try {
+      setIsLoading(true);
+      const nextPageNumber = pages.length > 0 ? Math.max(...pages.map(p => p.pageNumber)) + 1 : 1;
+      const newPage = await uploadChapterPage(chapterId, {
+        file,
+        pageNumber: nextPageNumber,
+      });
+      setPages(prev => [...prev, newPage].sort((a, b) => a.pageNumber - b.pageNumber));
+    } catch (err) {
+      alert(err instanceof Error ? err.message : 'Không thể tải trang lên.');
+    } finally {
+      setIsLoading(false);
+      if (fileInputRef.current) {
+        fileInputRef.current.value = '';
+      }
+    }
+  };
+
   if (isLoading) {
     return <div className="p-6"><EmptyState title="Đang tải chương..." /></div>;
   }
@@ -135,9 +162,16 @@ export default function ChapterDetailPage() {
       <div>
         <div className="flex items-center justify-between mb-4">
           <h2 className="font-semibold">Trang Manga</h2>
-          <Button variant="outline" size="sm">
+          <Button variant="outline" size="sm" onClick={handleAddPageClick}>
             <Plus size={14} /> Thêm trang
           </Button>
+          <input
+            type="file"
+            ref={fileInputRef}
+            onChange={handleFileChange}
+            accept="image/*"
+            className="hidden"
+          />
         </div>
 
         {pages.length === 0 ? (

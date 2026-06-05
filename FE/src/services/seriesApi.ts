@@ -102,6 +102,12 @@ function toApiPublishingFrequency(value?: string): string | undefined {
   return value.toLowerCase().includes('month') || value.toLowerCase().includes('thang') ? 'monthly' : 'weekly';
 }
 
+function toApiDateTime(value?: string): string | undefined {
+  if (!value) return undefined;
+  if (value.includes('T') || value.includes('Z')) return value;
+  return `${value}T00:00:00Z`;
+}
+
 function dateOnly(value?: string | null): string {
   return value ? value.slice(0, 10) : new Date().toISOString().slice(0, 10);
 }
@@ -201,7 +207,7 @@ export async function createChapter(input: CreateChapterInput): Promise<Chapter>
       chapterNumber: input.chapterNumber,
       title: input.title,
       manuscriptUrl: input.manuscriptUrl,
-      deadline: input.deadline || undefined,
+      deadline: toApiDateTime(input.deadline),
     }),
   }));
   return mapChapter(created);
