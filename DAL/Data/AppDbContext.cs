@@ -25,6 +25,8 @@ public partial class AppDbContext : DbContext
 
     public virtual DbSet<Notification> Notifications { get; set; }
 
+    public virtual DbSet<MangakaAssistant> MangakaAssistants { get; set; }
+
     public virtual DbSet<Page> Pages { get; set; }
 
     public virtual DbSet<Profile> Profiles { get; set; }
@@ -276,6 +278,37 @@ public partial class AppDbContext : DbContext
                 .HasForeignKey(d => d.UserId)
                 .OnDelete(DeleteBehavior.Cascade)
                 .HasConstraintName("notifications_user_id_fkey");
+        });
+
+        modelBuilder.Entity<MangakaAssistant>(entity =>
+        {
+            entity.HasKey(e => new { e.MangakaId, e.AssistantId })
+                .HasName("mangaka_assistants_pkey");
+
+            entity.ToTable("mangaka_assistants");
+
+            entity.HasIndex(e => e.AssistantId, "idx_mangaka_assistants_assistant");
+
+            entity.Property(e => e.MangakaId).HasColumnName("mangaka_id");
+            entity.Property(e => e.AssistantId).HasColumnName("assistant_id");
+            entity.Property(e => e.Status)
+                .HasMaxLength(20)
+                .HasDefaultValue("pending")
+                .HasColumnName("status");
+            entity.Property(e => e.CreatedAt)
+                .HasDefaultValueSql("now()")
+                .HasColumnName("created_at");
+            entity.Property(e => e.RespondedAt).HasColumnName("responded_at");
+
+            entity.HasOne(d => d.Mangaka).WithMany(p => p.MangakaAssistants)
+                .HasForeignKey(d => d.MangakaId)
+                .OnDelete(DeleteBehavior.Cascade)
+                .HasConstraintName("mangaka_assistants_mangaka_id_fkey");
+
+            entity.HasOne(d => d.Assistant).WithMany(p => p.AssistantMangakas)
+                .HasForeignKey(d => d.AssistantId)
+                .OnDelete(DeleteBehavior.Cascade)
+                .HasConstraintName("mangaka_assistants_assistant_id_fkey");
         });
 
         modelBuilder.Entity<Page>(entity =>

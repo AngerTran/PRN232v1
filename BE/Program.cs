@@ -70,7 +70,20 @@ try
     await using var ensureCmd = ensureConn.CreateCommand();
     ensureCmd.CommandText = @"
         alter table public.tasks add column if not exists resource_urls text[] not null default '{}'::text[];
-        alter table public.tasks add column if not exists price numeric(12,2) not null default 0;";
+        alter table public.tasks add column if not exists price numeric(12,2) not null default 0;
+
+        create table if not exists public.mangaka_assistants (
+            mangaka_id uuid not null references public.profiles(id) on delete cascade,
+            assistant_id uuid not null references public.profiles(id) on delete cascade,
+            status varchar(20) not null default 'accepted',
+            created_at timestamptz not null default now(),
+            responded_at timestamptz null,
+            constraint mangaka_assistants_pkey primary key (mangaka_id, assistant_id)
+        );
+        alter table public.mangaka_assistants add column if not exists status varchar(20) not null default 'accepted';
+        alter table public.mangaka_assistants add column if not exists responded_at timestamptz null;
+        create index if not exists idx_mangaka_assistants_assistant
+            on public.mangaka_assistants(assistant_id);";
     await ensureCmd.ExecuteNonQueryAsync();
 }
 catch (Exception ex)

@@ -19,3 +19,17 @@ public record UpdateProfileRequest(
     string? AvatarUrl,
     string? Bio,
     [MaxLength(50)] string? Role);
+
+public record AddAssistantRequest(
+    [Required, EmailAddress, MaxLength(255)] string Email);
+
+public record AssistantInvitationResponse(
+    Guid MangakaId,
+    string MangakaName,
+    string MangakaEmail,
+    Guid AssistantId,
+    string AssistantName,
+    string AssistantEmail,
+    string Status,
+    DateTime CreatedAt,
+    DateTime? RespondedAt);

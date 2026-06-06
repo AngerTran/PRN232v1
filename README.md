@@ -1,27 +1,57 @@
-# PRN232v1
+# MangaFlow - Manga Creation Workflow
 
-Monorepo — **BE đã được xóa sạch** để bạn tự tạo lại và kết nối Supabase mới.
+Monorepo quản lý quy trình sáng tác, giao việc cho assistant, duyệt nội dung và xuất bản manga.
 
 ## Cấu trúc
 
-```
+```text
 PRN232v1/
-├── BE/          # (trống) — tạo Web API mới tại đây
-├── FE/          # Frontend (xem FE/README.md)
-├── PRN232v1.slnx
-└── README.md
+├── BE/          # ASP.NET Core Web API
+├── BLL/         # Services, DTOs và business rules
+├── DAL/         # EF Core models, repositories và migrations
+├── FE/          # React + Vite frontend
+└── PRN232v1.slnx
 ```
 
-## Backend
+## Mangaka và Assistant
 
-Tạo project mới trong `BE/` (ví dụ):
+- Assistant cần có tài khoản với role `assistant`.
+- Mangaka gửi lời mời assistant bằng email tại trang `/mangaka/assistants`.
+- Assistant xác nhận hoặc từ chối tại trang `/assistant/invitations`.
+- Một assistant có thể làm việc cho nhiều mangaka.
+- Danh sách giao task trong workspace chỉ hiển thị assistant đã chấp nhận lời mời.
+- Backend kiểm tra quyền khi tạo hoặc cập nhật task. Mangaka không thể assign task cho assistant ngoài studio.
+- Gỡ assistant khỏi studio không xóa tài khoản hoặc các task đã giao trước đó, nhưng mangaka không thể giao task mới cho assistant đó.
+
+## Chạy backend
+
+Tạo `BE/appsettings.Development.json` từ file example và cấu hình Supabase.
 
 ```bash
-dotnet new webapi -n PRN232v1 -o BE --use-controllers
+dotnet restore
+dotnet ef database update --project DAL --startup-project BE
+dotnet run --project BE
 ```
 
-Cấu hình Supabase trong `BE/appsettings.Development.json` (file này nên nằm trong `.gitignore`, không commit password).
+Swagger mặc định: `https://localhost:7054/swagger`
 
-## Frontend (FE)
+## Chạy frontend
 
-Gọi API từ project trong `FE/` khi đã có BE.
+```bash
+cd FE
+npm install
+npm run dev
+```
+
+## Build
+
+```bash
+dotnet build PRN232v1.slnx
+cd FE
+npm run build
+```
+
+Xem thêm:
+
+- Backend API: `BE/README.md`
+- Frontend: `FE/README.md`

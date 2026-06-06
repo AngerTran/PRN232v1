@@ -34,6 +34,10 @@ public partial class Profile
 
     public virtual ICollection<Notification> Notifications { get; set; } = new List<Notification>();
 
+    public virtual ICollection<MangakaAssistant> MangakaAssistants { get; set; } = new List<MangakaAssistant>();
+
+    public virtual ICollection<MangakaAssistant> AssistantMangakas { get; set; } = new List<MangakaAssistant>();
+
     public virtual ICollection<Series> SeriesAuthors { get; set; } = new List<Series>();
 
     public virtual ICollection<Series> SeriesEditors { get; set; } = new List<Series>();

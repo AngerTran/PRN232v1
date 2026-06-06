@@ -7,7 +7,7 @@ import {
   CheckCircle, AlertTriangle, Wallet, Calendar as CalendarIcon,
   Shield, Gavel, Star, CalendarDays, Vote, TrendingUp, BarChart3,
   ChevronLeft, ChevronRight,
-  Users, UserPlus, ShieldCheck, Activity, SlidersHorizontal,
+  Users, UserPlus, ShieldCheck, Activity, SlidersHorizontal, Mail,
 } from 'lucide-react';
 import { clsx } from 'clsx';
 import { getLoggedInUser } from '../../data/mockData';
@@ -39,6 +39,7 @@ const MANGAKA_GROUPS: NavGroup[] = [
     label: 'Quản lý',
     items: [
       { label: 'Nhiệm vụ', icon: <ClipboardList size={18} />, href: '/mangaka/tasks' },
+      { label: 'Trợ lý', icon: <Users size={18} />, href: '/mangaka/assistants' },
       { label: 'Nộp bài', icon: <Send size={18} />, href: '/mangaka/submissions' },
       { label: 'Xếp hạng', icon: <BarChart2 size={18} />, href: '/mangaka/ranking' },
     ],
@@ -51,6 +52,7 @@ const ASSISTANT_GROUPS: NavGroup[] = [
     items: [
       { label: 'Dashboard', icon: <LayoutDashboard size={18} />, href: '/assistant/dashboard', exact: true },
       { label: 'Công việc của tôi', icon: <ClipboardList size={18} />, href: '/assistant/tasks' },
+      { label: 'Lời mời studio', icon: <Mail size={18} />, href: '/assistant/invitations' },
       { label: 'Cần chỉnh sửa', icon: <AlertTriangle size={18} />, href: '/assistant/revisions' },
       { label: 'Đã duyệt', icon: <CheckCircle size={18} />, href: '/assistant/approved' },
     ],

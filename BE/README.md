@@ -1,139 +1,148 @@
-# BE — Supabase Auth + Profile API
+# Backend - ASP.NET Core Web API
 
-**Controller → Service → Repository** — không gọi `DbContext` trực tiếp từ Controller/Service.
+Backend sử dụng ASP.NET Core, EF Core và PostgreSQL/Supabase. Kiến trúc chính:
 
-## Cấu hình
-
-`appsettings.Development.json`: connection string, `Supabase:AnonKey`, `Supabase:JwtSecret`, `Google:*`.
-
-Role lưu trong cột `profiles.role` (enum `user_role` trên Supabase).
-
-## Chạy
-
-```bash
-cd BE
-dotnet run
+```text
+Controller -> Service -> UnitOfWork/Repository -> AppDbContext
 ```
 
-Swagger: https://localhost:7054/swagger
+## Cấu hình và chạy
 
-## I. AUTH — `/api/auth`
+Tạo `BE/appsettings.Development.json` từ `BE/appsettings.Development.example.json`, sau đó cấu hình connection string và Supabase.
+
+```bash
+dotnet restore
+dotnet ef database update --project DAL --startup-project BE
+dotnet run --project BE
+```
+
+Swagger mặc định: `https://localhost:7054/swagger`
+
+## Role
+
+Role được lưu tại `profiles.role` bằng PostgreSQL enum `user_role`.
+
+- `mangaka`: quản lý series, chapter, studio assistant và giao task.
+- `assistant`: nhận task, thực hiện và gửi submission.
+- `editor`: quản lý workflow biên tập.
+- `board`: duyệt và xếp hạng.
+- `admin`: quản trị hệ thống.
+
+Tài khoản mới đăng ký mặc định có role `assistant`.
+
+## Mangaka Assistant
+
+Quan hệ studio được lưu trong bảng `mangaka_assistants`:
+
+| Column | Mô tả |
+|---|---|
+| `mangaka_id` | Profile mangaka sở hữu studio |
+| `assistant_id` | Profile assistant được thêm vào studio |
+| `status` | `pending`, `accepted` hoặc `rejected` |
+| `created_at` | Thời điểm thêm |
+| `responded_at` | Thời điểm assistant phản hồi |
+
+Khóa chính gồm `(mangaka_id, assistant_id)`, vì vậy một assistant có thể thuộc nhiều studio nhưng không thể bị thêm trùng trong cùng một studio.
+
+Quy tắc:
+
+- Chỉ mangaka được quản lý danh sách assistant của chính mình.
+- Chỉ profile đang hoạt động với role `assistant` có thể được mời.
+- Lời mời mới có trạng thái `pending`; assistant phải chấp nhận hoặc từ chối.
+- Khi mangaka tạo hoặc cập nhật assignment, backend bắt buộc quan hệ có trạng thái `accepted`.
+- Admin và editor giữ quyền assign hiện tại theo workflow.
+
+### Assistant API - `/api/profiles/assistants`
+
+| Method | Endpoint | Role | Mô tả |
+|---|---|---|---|
+| GET | `/api/profiles/assistants` | mangaka | Danh sách assistant trong studio hiện tại |
+| POST | `/api/profiles/assistants` | mangaka | Gửi lời mời bằng email |
+| GET | `/api/profiles/assistants/invitations/sent` | mangaka | Xem các lời mời đã gửi |
+| GET | `/api/profiles/assistants/invitations/mine` | assistant | Xem lời mời nhận được |
+| PATCH | `/api/profiles/assistants/invitations/{mangakaId}/accept` | assistant | Chấp nhận lời mời |
+| PATCH | `/api/profiles/assistants/invitations/{mangakaId}/reject` | assistant | Từ chối lời mời |
+| DELETE | `/api/profiles/assistants/{assistantId}` | mangaka | Hủy lời mời hoặc gỡ assistant |
+
+Request thêm assistant:
+
+```json
+{
+  "email": "assistant@example.com"
+}
+```
+
+## API chính
+
+### Auth - `/api/auth`
 
 | Method | Endpoint | Mô tả |
-|--------|----------|--------|
+|---|---|---|
 | POST | `/register` | Đăng ký |
 | POST | `/login` | Đăng nhập |
 | POST | `/refresh-token` | Refresh token |
-| POST | `/logout` | Logout |
-| GET | `/me` | Current user |
-| PUT | `/profile` | Sửa profile của mình |
+| POST | `/logout` | Đăng xuất |
+| GET | `/me` | Người dùng hiện tại |
 
-## II. PROFILE — `/api/profiles`
+### Profiles - `/api/profiles`
 
 | Method | Endpoint | Role |
-|--------|----------|------|
-| GET | `/me` | đã login |
+|---|---|---|
+| GET | `/me` | đã đăng nhập |
 | PUT | `/update` | owner |
 | GET | `/` | admin |
-| GET | `/{id}` | all (đã login) |
-| GET | `/assistants` | mangaka |
+| GET | `/{id}` | đã đăng nhập |
 | GET | `/editors` | admin |
 | PUT | `/{id}` | owner hoặc admin |
-| DELETE | `/{id}` | admin (soft-delete `is_active=false`) |
+| DELETE | `/{id}` | admin |
 
-## IIb. NOTIFICATIONS — `/api/notifications`
+### Tasks và Kanban
 
-| Method | Endpoint | Mô tả |
-|--------|----------|--------|
-| GET | `/` | Danh sách (`?unreadOnly=true`) |
-| PATCH | `/{id}/read` | Đánh dấu đã đọc |
-| PATCH | `/read-all` | Đọc tất cả |
-
-Phân quyền đọc `role` từ bảng `profiles` (không dựa JWT claim).
-
-User mới đăng ký mặc định `role = assistant`. Đổi role admin: cập nhật DB hoặc `PUT` bởi admin (field `role`).
-
-## III. SERIES — `/api/series`
-
-| Method | Endpoint | Role / Ghi chú |
-|--------|----------|----------------|
-| GET | `/catalog?genre=&page=1&limit=10` | Public — truyện `approved`, `publishing`, `completed` |
-| GET | `/` | Đã login — lọc theo role |
-| GET | `/my-series` | mangaka |
-| GET | `/ranking` | Đã login |
-| GET | `/danger-zone` | mangaka / staff — rank ≥ 30 |
-| GET | `/{id}` | Theo quyền xem |
-| GET | `/{id}/stats` | Thống kê series |
-| POST | `/{id}/cover` | Upload ảnh bìa (multipart) |
-| POST | `/` | mangaka, admin |
-| PUT | `/{id}` | author, editor gán, admin |
-| PUT | `/{id}/status` | Luồng trạng thái (xem bên dưới) |
-| DELETE | `/{id}` | admin; mangaka xóa bản nháp của mình |
-| GET | `/{seriesId}/chapters` | Xem chapter theo quyền series |
-| POST | `/{seriesId}/chapters` | mangaka (tác giả), admin |
-
-## IV. TASKS & KANBAN
-
-| Method | Endpoint | Role |
-|--------|----------|------|
+| Method | Endpoint | Role / Quy tắc |
+|---|---|---|
 | GET | `/api/chapters/{chapterId}/kanban` | mangaka, assistant, staff |
 | GET | `/api/tasks/my` | assistant |
 | POST | `/api/pages/{pageId}/tasks` | mangaka, editor, admin |
-| GET/PATCH/PUT/DELETE | `/api/tasks/{id}` | theo task |
+| GET | `/api/tasks/{id}` | theo quyền xem |
+| PUT | `/api/tasks/{id}` | người có quyền assign |
+| PATCH | `/api/tasks/{id}/status` | theo workflow task |
+| DELETE | `/api/tasks/{id}` | người có quyền assign |
 
-## V. SUBMISSIONS
+Mangaka chỉ có thể truyền `assignedTo` là ID của assistant đã chấp nhận lời mời vào studio.
+
+### Series và Chapter
+
+| Method | Endpoint | Role / Quy tắc |
+|---|---|---|
+| GET | `/api/series/catalog` | public |
+| GET | `/api/series/my-series` | mangaka |
+| POST | `/api/series` | mangaka, admin |
+| PUT | `/api/series/{id}` | author, assigned editor, admin |
+| GET/POST | `/api/series/{seriesId}/chapters` | theo quyền series |
+| GET/PUT | `/api/chapters/{id}` | theo quyền series |
+
+### Submissions
 
 | Method | Endpoint | Role |
-|--------|----------|------|
-| GET | `/api/tasks/{taskId}/submissions` | assignee, mangaka, editor |
-| POST | `/api/tasks/{taskId}/submissions` | assistant (multipart) |
+|---|---|---|
+| GET | `/api/tasks/{taskId}/submissions` | assignee hoặc người quản lý |
+| POST | `/api/tasks/{taskId}/submissions` | assigned assistant |
 | PATCH | `/api/submissions/{id}/review` | mangaka, editor, admin |
 | GET | `/api/assistants/me/earnings` | assistant |
 
-## VI. ANNOTATIONS
+## Migration
 
-| Method | Endpoint | Role |
-|--------|----------|------|
-| GET/POST | `/api/pages/{pageId}/annotations` | studio |
-| PUT/DELETE | `/api/annotations/{id}` | creator, admin |
+Migration cho quan hệ studio assistant:
 
-## VII. BOARD & RANKINGS
-
-| Method | Endpoint | Role |
-|--------|----------|------|
-| POST | `/api/board/votes` | board |
-| GET | `/api/board/votes?seriesId=` | board, admin |
-| GET | `/api/board/pending-series` | board, admin |
-| GET | `/api/board/leaderboard?metric=votes\|popularity` | board, admin |
-| POST | `/api/rankings` | board, admin |
-| GET | `/api/rankings/history?seriesId=` | board, editor, mangaka (own) |
-
-## VIII. PUBLISHING SCHEDULES
-
-| Method | Endpoint | Role |
-|--------|----------|------|
-| GET/POST | `/api/series/{seriesId}/schedules` | xem: author/editor/board; tạo: board, editor, admin |
-| PUT/DELETE | `/api/schedules/{id}` | board, editor, admin |
-
-## IIIb. CHAPTERS — `/api/chapters`
-
-| Method | Endpoint | Role |
-|--------|----------|------|
-| GET | `/{id}` | theo quyền series |
-| PUT | `/{id}` | author / editor / admin |
-| PUT | `/{id}/status` | luồng chapter status |
-
-### Luồng trạng thái (status)
-
-```mermaid
-stateDiagram-v2
-    [*] --> draft: Tạo series
-    draft --> pending_review: Mangaka gửi duyệt
-    pending_review --> approved: Editor / Board / Admin
-    approved --> publishing: Editor / Board / Admin
-    publishing --> hiatus: Mangaka / Editor / Board / Admin
-    publishing --> completed: Editor / Board / Admin
-    hiatus --> pending_review: Mangaka
+```text
+DAL/Migrations/20260606014612_AddMangakaAssistants.cs
+DAL/Migrations/20260606020311_AddAssistantInvitationStatus.cs
 ```
 
-Xem `PRN232v1.http` để test.
+Áp dụng migration:
+
+```bash
+dotnet ef database update --project DAL --startup-project BE
+```
+
+Ứng dụng cũng đảm bảo bảng `mangaka_assistants` tồn tại khi backend khởi động để tương thích với database hiện tại.

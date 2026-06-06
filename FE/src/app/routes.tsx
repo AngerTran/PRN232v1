@@ -30,6 +30,7 @@ import SeriesRankingPage from '../pages/mangaka/SeriesRankingPage';
 import SubmissionHistoryPage from '../pages/mangaka/SubmissionHistoryPage';
 import RankingOverviewPage from '../pages/mangaka/RankingOverviewPage';
 import ChaptersOverviewPage from '../pages/mangaka/ChaptersOverviewPage';
+import AssistantsPage from '../pages/mangaka/AssistantsPage';
 
 // Assistant pages
 import AssistantDashboardPage from '../pages/assistant/AssistantDashboardPage';
@@ -40,6 +41,7 @@ import RevisionTasksPage from '../pages/assistant/RevisionTasksPage';
 import ApprovedTasksPage from '../pages/assistant/ApprovedTasksPage';
 import IncomePage from '../pages/assistant/IncomePage';
 import WorkCalendarPage from '../pages/assistant/WorkCalendarPage';
+import StudioInvitationsPage from '../pages/assistant/StudioInvitationsPage';
 
 // Editor pages
 import EditorDashboardPage from '../pages/editor/EditorDashboardPage';
@@ -122,6 +124,7 @@ export const router = createBrowserRouter([
       // Tasks
       { path: '/mangaka/tasks', element: <TaskManagementPage /> },
       { path: '/mangaka/tasks/:taskId/review', element: <TaskReviewPage /> },
+      { path: '/mangaka/assistants', element: <AssistantsPage /> },
 
       // Submissions
       { path: '/mangaka/submissions', element: <SubmissionHistoryPage /> },
@@ -138,6 +141,7 @@ export const router = createBrowserRouter([
       { path: '/assistant/approved', element: <ApprovedTasksPage /> },
       { path: '/assistant/income', element: <IncomePage /> },
       { path: '/assistant/calendar', element: <WorkCalendarPage /> },
+      { path: '/assistant/invitations', element: <StudioInvitationsPage /> },
 
       // Editor
       { path: '/editor/dashboard', element: <EditorDashboardPage /> },

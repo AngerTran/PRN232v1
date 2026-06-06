@@ -7,17 +7,21 @@ using BLL.Services.Workflow;
 using BLL.Dtos.Auth;
 using BLL.Dtos.Profiles;
 using BLL.Services.Profiles;
+using Microsoft.EntityFrameworkCore;
+using BLL.Services.Notifications;
 
 namespace BLL.Services.Profiles;
 
 public class ProfileService
 {
     private readonly UnitOfWork _unitOfWork;
+    private readonly NotificationService _notificationService;
     private Repository<Profile> Repository => _unitOfWork.Repository<Profile>();
 
-    public ProfileService(UnitOfWork unitOfWork)
+    public ProfileService(UnitOfWork unitOfWork, NotificationService notificationService)
     {
         _unitOfWork = unitOfWork;
+        _notificationService = notificationService;
     }
 
     public async Task<UserInfoResponse?> GetUserInfoAsync(
@@ -55,6 +59,167 @@ public class ProfileService
             p => p.Role == ParseRoleOrThrow(targetRole) && p.IsActive != false,
             cancellationToken: cancellationToken);
         return profiles.Select(MapToDto).ToList();
+    }
+
+    public async Task<IReadOnlyList<ProfileResponse>> ListMyAssistantsAsync(
+        Guid callerId,
+        CancellationToken cancellationToken = default)
+    {
+        await EnsureRoleAsync(callerId, ProfileRoles.Mangaka, cancellationToken);
+
+        var profiles = await _unitOfWork.Context.MangakaAssistants
+            .AsNoTracking()
+            .Where(link => link.MangakaId == callerId
+                && link.Status == "accepted"
+                && link.Assistant.Role == ProfileRole.Assistant
+                && link.Assistant.IsActive != false)
+            .OrderBy(link => link.Assistant.FullName)
+            .Select(link => link.Assistant)
+            .ToListAsync(cancellationToken);
+
+        return profiles.Select(MapToDto).ToList();
+    }
+
+    public async Task<AssistantInvitationResponse> InviteAssistantAsync(
+        Guid callerId,
+        AddAssistantRequest request,
+        CancellationToken cancellationToken = default)
+    {
+        await EnsureRoleAsync(callerId, ProfileRoles.Mangaka, cancellationToken);
+
+        var normalizedEmail = request.Email.Trim().ToLowerInvariant();
+        var assistant = await _unitOfWork.Context.Profiles
+            .FirstOrDefaultAsync(
+                p => p.Email.ToLower() == normalizedEmail
+                    && p.Role == ProfileRole.Assistant
+                    && p.IsActive != false,
+                cancellationToken)
+            ?? throw new ArgumentException("No active assistant profile was found with this email.");
+
+        var invitation = await _unitOfWork.Context.MangakaAssistants
+            .Include(link => link.Mangaka)
+            .Include(link => link.Assistant)
+            .FirstOrDefaultAsync(
+                link => link.MangakaId == callerId && link.AssistantId == assistant.Id,
+                cancellationToken);
+
+        var shouldNotify = false;
+        if (invitation is null)
+        {
+            invitation = new MangakaAssistant
+            {
+                MangakaId = callerId,
+                AssistantId = assistant.Id,
+                Status = "pending",
+                CreatedAt = DateTime.UtcNow
+            };
+            await _unitOfWork.Context.MangakaAssistants.AddAsync(invitation, cancellationToken);
+            shouldNotify = true;
+        }
+        else if (invitation.Status == "rejected")
+        {
+            invitation.Status = "pending";
+            invitation.CreatedAt = DateTime.UtcNow;
+            invitation.RespondedAt = null;
+            shouldNotify = true;
+        }
+
+        await _unitOfWork.SaveChangesAsync(cancellationToken);
+
+        invitation.Mangaka ??= await Repository.GetByIdAsync(callerId, cancellationToken: cancellationToken)
+            ?? throw new ProfileForbiddenException("Caller profile not found.");
+        invitation.Assistant ??= assistant;
+
+        if (shouldNotify)
+        {
+            await _notificationService.CreateAsync(
+                assistant.Id,
+                "Lời mời tham gia studio",
+                $"{invitation.Mangaka.FullName} đã mời bạn tham gia studio với vai trò trợ lý.",
+                cancellationToken);
+        }
+
+        return MapInvitation(invitation);
+    }
+
+    public async Task<IReadOnlyList<AssistantInvitationResponse>> ListSentInvitationsAsync(
+        Guid callerId,
+        CancellationToken cancellationToken = default)
+    {
+        await EnsureRoleAsync(callerId, ProfileRoles.Mangaka, cancellationToken);
+        var invitations = await InvitationQuery()
+            .Where(link => link.MangakaId == callerId)
+            .OrderByDescending(link => link.CreatedAt)
+            .ToListAsync(cancellationToken);
+        return invitations.Select(MapInvitation).ToList();
+    }
+
+    public async Task<IReadOnlyList<AssistantInvitationResponse>> ListMyInvitationsAsync(
+        Guid callerId,
+        CancellationToken cancellationToken = default)
+    {
+        await EnsureRoleAsync(callerId, ProfileRoles.Assistant, cancellationToken);
+        var invitations = await InvitationQuery()
+            .Where(link => link.AssistantId == callerId)
+            .OrderByDescending(link => link.CreatedAt)
+            .ToListAsync(cancellationToken);
+        return invitations.Select(MapInvitation).ToList();
+    }
+
+    public async Task<AssistantInvitationResponse?> RespondToInvitationAsync(
+        Guid callerId,
+        Guid mangakaId,
+        bool accept,
+        CancellationToken cancellationToken = default)
+    {
+        await EnsureRoleAsync(callerId, ProfileRoles.Assistant, cancellationToken);
+        var invitation = await InvitationQuery(asNoTracking: false)
+            .FirstOrDefaultAsync(
+                link => link.MangakaId == mangakaId && link.AssistantId == callerId,
+                cancellationToken);
+        if (invitation is null)
+        {
+            return null;
+        }
+
+        if (invitation.Status != "pending")
+        {
+            throw new ArgumentException("This invitation has already been answered.");
+        }
+
+        invitation.Status = accept ? "accepted" : "rejected";
+        invitation.RespondedAt = DateTime.UtcNow;
+        await _unitOfWork.SaveChangesAsync(cancellationToken);
+
+        await _notificationService.CreateAsync(
+            mangakaId,
+            accept ? "Trợ lý đã chấp nhận lời mời" : "Trợ lý đã từ chối lời mời",
+            $"{invitation.Assistant.FullName} đã {(accept ? "chấp nhận" : "từ chối")} lời mời tham gia studio.",
+            cancellationToken);
+
+        return MapInvitation(invitation);
+    }
+
+    public async Task<bool> RemoveMyAssistantAsync(
+        Guid callerId,
+        Guid assistantId,
+        CancellationToken cancellationToken = default)
+    {
+        await EnsureRoleAsync(callerId, ProfileRoles.Mangaka, cancellationToken);
+
+        var link = await _unitOfWork.Context.MangakaAssistants
+            .FirstOrDefaultAsync(
+                item => item.MangakaId == callerId && item.AssistantId == assistantId,
+                cancellationToken);
+
+        if (link is null)
+        {
+            return false;
+        }
+
+        _unitOfWork.Context.MangakaAssistants.Remove(link);
+        await _unitOfWork.SaveChangesAsync(cancellationToken);
+        return true;
     }
 
     public async Task<ProfileResponse?> GetByIdForCallerAsync(
@@ -288,4 +453,24 @@ public class ProfileService
             profile.IsActive,
             profile.CreatedAt,
             profile.UpdatedAt);
+
+    private IQueryable<MangakaAssistant> InvitationQuery(bool asNoTracking = true)
+    {
+        var query = _unitOfWork.Context.MangakaAssistants
+            .Include(link => link.Mangaka)
+            .Include(link => link.Assistant);
+        return asNoTracking ? query.AsNoTracking() : query;
+    }
+
+    private static AssistantInvitationResponse MapInvitation(MangakaAssistant invitation) =>
+        new(
+            invitation.MangakaId,
+            invitation.Mangaka.FullName,
+            invitation.Mangaka.Email,
+            invitation.AssistantId,
+            invitation.Assistant.FullName,
+            invitation.Assistant.Email,
+            invitation.Status,
+            invitation.CreatedAt,
+            invitation.RespondedAt);
 }

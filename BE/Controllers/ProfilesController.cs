@@ -82,12 +82,72 @@ public class ProfilesController : ControllerBase
             return Unauthorized();
         }
 
-        var profiles = await _profileService.ListByRoleAsync(
-            callerId,
-            ProfileRoles.Mangaka,
-            ProfileRoles.Assistant,
-            cancellationToken);
+        var profiles = await _profileService.ListMyAssistantsAsync(callerId, cancellationToken);
         return Ok(profiles);
+    }
+
+    [HttpPost("assistants")]
+    [SwaggerOperation(Summary = "Invite assistant", Description = "Sends an invitation to an existing active assistant profile by email.")]
+    [ProducesResponseType(typeof(AssistantInvitationResponse), StatusCodes.Status201Created)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    public async Task<ActionResult<AssistantInvitationResponse>> AddAssistant(
+        [FromBody] AddAssistantRequest request,
+        CancellationToken cancellationToken)
+    {
+        if (!this.TryGetUserId(out var callerId))
+        {
+            return Unauthorized();
+        }
+
+        var invitation = await _profileService.InviteAssistantAsync(callerId, request, cancellationToken);
+        return Created(string.Empty, invitation);
+    }
+
+    [HttpGet("assistants/invitations/sent")]
+    public async Task<ActionResult<IReadOnlyList<AssistantInvitationResponse>>> SentInvitations(CancellationToken cancellationToken)
+    {
+        if (!this.TryGetUserId(out var callerId)) return Unauthorized();
+        return Ok(await _profileService.ListSentInvitationsAsync(callerId, cancellationToken));
+    }
+
+    [HttpGet("assistants/invitations/mine")]
+    public async Task<ActionResult<IReadOnlyList<AssistantInvitationResponse>>> MyInvitations(CancellationToken cancellationToken)
+    {
+        if (!this.TryGetUserId(out var callerId)) return Unauthorized();
+        return Ok(await _profileService.ListMyInvitationsAsync(callerId, cancellationToken));
+    }
+
+    [HttpPatch("assistants/invitations/{mangakaId:guid}/accept")]
+    public async Task<ActionResult<AssistantInvitationResponse>> AcceptInvitation(Guid mangakaId, CancellationToken cancellationToken)
+    {
+        if (!this.TryGetUserId(out var callerId)) return Unauthorized();
+        var invitation = await _profileService.RespondToInvitationAsync(callerId, mangakaId, true, cancellationToken);
+        return invitation is null ? NotFound() : Ok(invitation);
+    }
+
+    [HttpPatch("assistants/invitations/{mangakaId:guid}/reject")]
+    public async Task<ActionResult<AssistantInvitationResponse>> RejectInvitation(Guid mangakaId, CancellationToken cancellationToken)
+    {
+        if (!this.TryGetUserId(out var callerId)) return Unauthorized();
+        var invitation = await _profileService.RespondToInvitationAsync(callerId, mangakaId, false, cancellationToken);
+        return invitation is null ? NotFound() : Ok(invitation);
+    }
+
+    [HttpDelete("assistants/{assistantId:guid}")]
+    [SwaggerOperation(Summary = "Remove my assistant", Description = "Removes an assistant from the authenticated mangaka's studio.")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> RemoveAssistant(Guid assistantId, CancellationToken cancellationToken)
+    {
+        if (!this.TryGetUserId(out var callerId))
+        {
+            return Unauthorized();
+        }
+
+        var removed = await _profileService.RemoveMyAssistantAsync(callerId, assistantId, cancellationToken);
+        return removed ? NoContent() : NotFound();
     }
 
     /// <summary>Danh sách editor — Admin.</summary>

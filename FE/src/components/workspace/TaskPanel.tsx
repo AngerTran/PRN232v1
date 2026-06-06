@@ -132,9 +132,14 @@ export default function TaskPanel({
               <option key={a.id} value={a.id}>{a.name}</option>
             ))}
             {assistants.length === 0 && (
-              <option value="">Chưa có assistant từ backend</option>
+              <option value="">Chưa có trợ lý trong studio</option>
             )}
           </select>
+          {assistants.length === 0 && (
+            <p className="text-xs text-amber-400 mt-2">
+              Hãy thêm trợ lý tại mục Trợ lý trước khi giao nhiệm vụ.
+            </p>
+          )}
         </div>
 
         {/* Description */}

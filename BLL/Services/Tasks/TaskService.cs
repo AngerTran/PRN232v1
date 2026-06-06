@@ -206,11 +206,7 @@ public class TaskService
 
         if (request.AssignedTo is not null)
         {
-            var assignee = await ProfileRepository.GetByIdAsync(request.AssignedTo.Value, cancellationToken: cancellationToken);
-            if (assignee is null || assignee.Role != ProfileRole.Assistant)
-            {
-                throw new ArgumentException("AssignedTo must reference an active assistant profile.");
-            }
+            await EnsureCanAssignAssistantAsync(caller, request.AssignedTo.Value, cancellationToken);
         }
 
         var now = DateTime.UtcNow;
@@ -274,11 +270,7 @@ public class TaskService
 
         if (request.AssignedTo is not null)
         {
-            var assignee = await ProfileRepository.GetByIdAsync(request.AssignedTo.Value, cancellationToken: cancellationToken);
-            if (assignee is null || assignee.Role != ProfileRole.Assistant)
-            {
-                throw new ArgumentException("AssignedTo must reference an assistant profile.");
-            }
+            await EnsureCanAssignAssistantAsync(caller, request.AssignedTo.Value, cancellationToken);
 
             task.AssignedTo = request.AssignedTo;
         }
@@ -501,6 +493,33 @@ public class TaskService
         }
 
         return false;
+    }
+
+    private async Task EnsureCanAssignAssistantAsync(
+        Profile caller,
+        Guid assistantId,
+        CancellationToken cancellationToken)
+    {
+        var assignee = await ProfileRepository.GetByIdAsync(assistantId, cancellationToken: cancellationToken);
+        if (assignee is null || assignee.Role != ProfileRole.Assistant || assignee.IsActive == false)
+        {
+            throw new ArgumentException("AssignedTo must reference an active assistant profile.");
+        }
+
+        if (PageAccessService.IsMangaka(caller.Role))
+        {
+            var belongsToMangaka = await _unitOfWork.Context.MangakaAssistants
+                .AnyAsync(
+                    link => link.MangakaId == caller.Id
+                        && link.AssistantId == assistantId
+                        && link.Status == "accepted",
+                    cancellationToken);
+
+            if (!belongsToMangaka)
+            {
+                throw new WorkflowForbiddenException("Mangaka can only assign tasks to assistants in their studio.");
+            }
+        }
     }
 
     private static KanbanColumnItemResponse MapKanbanItem(EditorTask t) =>
