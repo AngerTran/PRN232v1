@@ -25,7 +25,7 @@ PRN232v1/
 
 ## Chạy backend
 
-Tạo `BE/appsettings.Development.json` từ file example và cấu hình Supabase.
+Cấu hình `BE/appsettings.json` (tham khảo `BE/appsettings.example.json` nếu cần).
 
 ```bash
 dotnet restore

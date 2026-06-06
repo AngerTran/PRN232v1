@@ -8,7 +8,7 @@ Controller -> Service -> UnitOfWork/Repository -> AppDbContext
 
 ## Cấu hình và chạy
 
-Tạo `BE/appsettings.Development.json` từ `BE/appsettings.Development.example.json`, sau đó cấu hình connection string và Supabase.
+Tạo `BE/appsettings.json` từ `BE/appsettings.example.json` (hoặc chỉnh trực tiếp `BE/appsettings.json`) rồi cấu hình connection string và Supabase.
 
 ```bash
 dotnet restore
@@ -146,3 +146,18 @@ dotnet ef database update --project DAL --startup-project BE
 ```
 
 Ứng dụng cũng đảm bảo bảng `mangaka_assistants` tồn tại khi backend khởi động để tương thích với database hiện tại.
+
+## K. ACTIVITY & GIÁM SÁT — `/api/activity-logs`
+
+| Method | Endpoint | Role |
+|--------|----------|------|
+| GET | `/` | admin, editor, board — lọc `userId`, `action`, `entityType`, `entityId`, `from`, `to`, `page`, `limit` |
+| GET | `/me` | đã login — nhật ký của mình |
+| GET | `/stats` | admin, editor, board — thống kê 24h / 7 ngày / theo action |
+| GET | `/series/{seriesId}` | staff hoặc author/editor của series |
+| GET | `/{id}` | staff hoặc owner log |
+| POST | `/` | admin, editor, board — ghi log thủ công |
+
+`ActivityLogService.LogAsync` dùng nội bộ để các module khác ghi audit sau này.
+
+Xem `PRN232v1.http` để test.

@@ -295,3 +295,32 @@ Content-Type: application/json
   "frequency": "weekly",
   "issueNumber": 10
 }
+
+### K. ACTIVITY — GET / (staff)
+GET {{host}}/api/activity-logs?page=1&limit=20
+Authorization: Bearer {{token}}
+
+### K. ACTIVITY — GET /me
+GET {{host}}/api/activity-logs/me
+Authorization: Bearer {{token}}
+
+### K. ACTIVITY — GET /stats
+GET {{host}}/api/activity-logs/stats
+Authorization: Bearer {{token}}
+
+### K. ACTIVITY — GET /series/{seriesId}
+GET {{host}}/api/activity-logs/series/00000000-0000-0000-0000-000000000000
+Authorization: Bearer {{token}}
+
+### K. ACTIVITY — POST
+POST {{host}}/api/activity-logs
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "action": "status_change",
+  "entityType": "series",
+  "entityId": "00000000-0000-0000-0000-000000000000",
+  "oldData": "{\"status\":\"draft\"}",
+  "newData": "{\"status\":\"pending_review\"}"
+}

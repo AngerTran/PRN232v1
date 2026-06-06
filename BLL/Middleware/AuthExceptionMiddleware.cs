@@ -1,13 +1,13 @@
 using System.Net;
 using System.Text.Json;
 using Npgsql;
+using BLL.Services.ActivityLogs;
 using BLL.Services.Auth;
 using BLL.Services.Profiles;
 using BLL.Services.Series;
 using BLL.Services.Workflow;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Logging;
-using DAL.Services.Workflow;
 
 namespace BLL.Middleware;
 
@@ -53,6 +53,13 @@ public class AuthExceptionMiddleware
         catch (SeriesForbiddenException ex)
         {
             _logger.LogWarning(ex, "Series forbidden: {Message}", ex.Message);
+            context.Response.StatusCode = StatusCodes.Status403Forbidden;
+            context.Response.ContentType = "application/json";
+            await context.Response.WriteAsync(JsonSerializer.Serialize(new { message = ex.Message }));
+        }
+        catch (ActivityLogForbiddenException ex)
+        {
+            _logger.LogWarning(ex, "Activity log forbidden: {Message}", ex.Message);
             context.Response.StatusCode = StatusCodes.Status403Forbidden;
             context.Response.ContentType = "application/json";
             await context.Response.WriteAsync(JsonSerializer.Serialize(new { message = ex.Message }));

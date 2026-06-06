@@ -8,6 +8,7 @@ import LandingPage from '../pages/LandingPage';
 import LoginPage from '../pages/auth/LoginPage';
 import RegisterPage from '../pages/auth/RegisterPage';
 import ForgotPasswordPage from '../pages/auth/ForgotPasswordPage';
+import GoogleCallbackPage from '../pages/auth/GoogleCallbackPage';
 
 // Common pages
 import ProfilePage from '../pages/common/ProfilePage';
@@ -91,6 +92,7 @@ export const router = createBrowserRouter([
   { path: '/login', element: <LoginPage /> },
   { path: '/register', element: <RegisterPage /> },
   { path: '/forgot-password', element: <ForgotPasswordPage /> },
+  { path: '/auth/google/callback', element: <GoogleCallbackPage /> },
 
   // Protected routes with MainLayout
   {

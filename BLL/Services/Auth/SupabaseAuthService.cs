@@ -9,7 +9,7 @@ using DAL.Common;
 using BLL.Dtos.Tasks;
 using DAL.Models;
 using DAL.Repositories;
-using DAL.Services.Workflow;
+using BLL.Services.Workflow;
 using BLL.Services.Workflow;
 using BLL.Services.Profiles;
 using BLL.Configuration;
@@ -182,10 +182,14 @@ public class SupabaseAuthService
     public GoogleAuthUrlResponse GetSupabaseGoogleAuthorizationUrl()
     {
         EnsureSupabaseConfigured();
-        EnsureGoogleConfigured();
 
-        var redirectTo = Uri.EscapeDataString(_google.RedirectUri);
-        var url = $"{_supabase.Url.TrimEnd('/')}/auth/v1/authorize?provider=google&redirect_to={redirectTo}";
+        var redirectUri = !string.IsNullOrWhiteSpace(_google.RedirectUri)
+            ? _google.RedirectUri
+            : $"{(_google.FrontendBaseUrl ?? "http://localhost:5173").TrimEnd('/')}/auth/google/callback";
+
+        var redirectTo = Uri.EscapeDataString(redirectUri);
+        var url =
+            $"{_supabase.Url.TrimEnd('/')}/auth/v1/authorize?provider=google&redirect_to={redirectTo}&apikey={Uri.EscapeDataString(_supabase.AnonKey)}";
         return new GoogleAuthUrlResponse(url);
     }
 

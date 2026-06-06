@@ -1,6 +1,8 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Options;
 using DAL.Common;
+using BLL.Configuration;
 using BLL.Dtos.Auth;
 using BLL.Dtos.Profiles;
 using BLL.Services.Auth;
@@ -16,11 +18,16 @@ public class AuthController : ControllerBase
 {
     private readonly SupabaseAuthService _authService;
     private readonly ProfileService _profileService;
+    private readonly GoogleAuthOptions _googleOptions;
 
-    public AuthController(SupabaseAuthService authService, ProfileService profileService)
+    public AuthController(
+        SupabaseAuthService authService,
+        ProfileService profileService,
+        IOptions<GoogleAuthOptions> googleOptions)
     {
         _authService = authService;
         _profileService = profileService;
+        _googleOptions = googleOptions.Value;
     }
 
     [HttpPost("register")]
@@ -209,14 +216,40 @@ public class AuthController : ControllerBase
     [AllowAnonymous]
     [SwaggerOperation(
         Summary = "Google OAuth callback",
-        Description = "Exchanges a Google authorization code from the callback query string for a Supabase session.")]
-    [ProducesResponseType(typeof(AuthTokenResponse), StatusCodes.Status200OK)]
-    public async Task<ActionResult<AuthTokenResponse>> GoogleCallback(
-        [FromQuery] string code,
+        Description = "Legacy BE callback: exchanges code and redirects to FE with session tokens in URL hash.")]
+    public async Task<IActionResult> GoogleCallback(
+        [FromQuery] string? code,
+        [FromQuery] string? error,
         CancellationToken cancellationToken)
     {
-        var result = await _authService.LoginWithGoogleCodeAsync(code, cancellationToken);
-        return Ok(result);
+        var frontendBase = (_googleOptions.FrontendBaseUrl ?? "http://localhost:5173").TrimEnd('/');
+
+        if (!string.IsNullOrWhiteSpace(error))
+        {
+            return Redirect($"{frontendBase}/auth/google/callback?error={Uri.EscapeDataString(error)}");
+        }
+
+        if (string.IsNullOrWhiteSpace(code))
+        {
+            return Redirect($"{frontendBase}/auth/google/callback?error={Uri.EscapeDataString("Missing authorization code.")}");
+        }
+
+        try
+        {
+            var result = await _authService.LoginWithGoogleCodeAsync(code, cancellationToken);
+            var fragment = string.Join("&", new[]
+            {
+                $"access_token={Uri.EscapeDataString(result.AccessToken)}",
+                $"refresh_token={Uri.EscapeDataString(result.RefreshToken)}",
+                $"expires_in={result.ExpiresIn}",
+                $"token_type={Uri.EscapeDataString(result.TokenType)}"
+            });
+            return Redirect($"{frontendBase}/auth/google/callback#{fragment}");
+        }
+        catch (AuthServiceException ex)
+        {
+            return Redirect($"{frontendBase}/auth/google/callback?error={Uri.EscapeDataString(ex.Message)}");
+        }
     }
 
     [HttpPost("google")]

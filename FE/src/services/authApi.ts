@@ -73,6 +73,41 @@ function persistSession(token: ApiAuthToken): User {
   return user;
 }
 
+export async function getGoogleAuthUrl(): Promise<string> {
+  const response = await apiRequest<{ authorizationUrl: string }>('/api/auth/google/supabase-url', { auth: false });
+  return response.authorizationUrl;
+}
+
+export async function startGoogleLogin(): Promise<void> {
+  const url = await getGoogleAuthUrl();
+  window.location.assign(url);
+}
+
+export async function loginWithGoogleCode(code: string): Promise<User> {
+  const token = await apiRequest<ApiAuthToken>('/api/auth/google/code', {
+    auth: false,
+    method: 'POST',
+    body: JSON.stringify({ code }),
+  });
+  return persistSession(token);
+}
+
+export async function loginWithGoogleHashTokens(
+  accessToken: string,
+  refreshToken: string,
+): Promise<User> {
+  localStorage.setItem('inkflow_access_token', accessToken);
+  localStorage.setItem('inkflow_refresh_token', refreshToken);
+
+  const profile = await apiRequest<ApiProfile>('/api/auth/sync', {
+    method: 'POST',
+    body: JSON.stringify({}),
+  });
+  const user = mapProfileToUser(profile);
+  localStorage.setItem('inkflow_user', JSON.stringify(user));
+  return user;
+}
+
 /**
  * Đăng ký tài khoản. BE có thể yêu cầu xác nhận email; khi đó accessToken trống
  * và caller nên điều hướng người dùng sang trang đăng nhập.

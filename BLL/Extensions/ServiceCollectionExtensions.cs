@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.IdentityModel.Tokens;
 using BLL.Configuration;
 using DAL.Repositories;
+using BLL.Services.ActivityLogs;
 using BLL.Services.Annotations;
 using BLL.Services.Auth;
 using BLL.Services.Board;
@@ -27,6 +28,7 @@ public static class ServiceCollectionExtensions
     {
         services.AddScoped<UnitOfWork>();
         services.AddScoped<ProfileService>();
+        services.AddScoped<ActivityLogService>();
         services.AddScoped<NotificationService>();
         services.AddScoped<PageService>();
         services.AddScoped<PageAccessService>();
