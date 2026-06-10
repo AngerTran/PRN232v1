@@ -1,4 +1,4 @@
-import type { Series } from '../../../../data/mockData';
+import type { Series } from '../../../../types/domain';
 import { Card, CardContent } from '../card';
 import { Badge } from '../badge';
 import { TrendingUp, TrendingDown } from 'lucide-react';

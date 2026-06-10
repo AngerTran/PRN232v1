@@ -6,7 +6,7 @@ import { Button } from '../../app/components/ui/button';
 import { Badge } from '../../app/components/ui/badge';
 import { Textarea } from '../../app/components/ui/textarea';
 import { SubmissionStatusBadge } from '../../app/components/ui/board';
-import type { BoardSubmissionStatus, Series } from '../../data/mockData';
+import type { BoardSubmissionStatus, Series } from '../../types/domain';
 import { getSeries, getSeriesChapters } from '../../services/seriesApi';
 import { listBoardVotes, castBoardVote, getBoardVoteProgress, type BoardDecision, type BoardVote, type BoardVoteProgress } from '../../services/boardApi';
 import { getStoredUser } from '../../services/authApi';
@@ -318,6 +318,9 @@ export default function SubmissionDetailPage() {
                   <p className="text-xs text-muted-foreground mt-1">
                     Quyết định: <span className="font-semibold">{myDecision === 'approve' ? 'Phê Duyệt' : 'Từ Chối'}</span>
                   </p>
+                  <Button variant="outline" className="mt-4" onClick={() => setSubmitted(false)}>
+                    Thay đổi phiếu
+                  </Button>
                 </div>
               ) : (
                 <>

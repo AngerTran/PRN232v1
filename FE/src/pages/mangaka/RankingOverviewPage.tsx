@@ -5,7 +5,7 @@ import RankingTrend from '../../components/ui/RankingTrend';
 import EmptyState from '../../components/ui/EmptyState';
 import Button from '../../components/ui/Button';
 import { usePageMeta } from '../../hooks/usePageMeta';
-import type { Series, SeriesRanking } from '../../data/mockData';
+import type { Series, SeriesRanking } from '../../types/domain';
 import { getMySeries, getSeriesRanking, getSeriesRankingTrend } from '../../services/seriesApi';
 
 export default function RankingOverviewPage() {

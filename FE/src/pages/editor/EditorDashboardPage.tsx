@@ -3,7 +3,8 @@ import { useNavigate } from 'react-router';
 import { usePageMeta } from '../../hooks/usePageMeta';
 import { Card, CardContent, CardHeader, CardTitle } from '../../app/components/ui/card';
 import { SeriesSummaryCard, ChapterReviewCard } from '../../app/components/ui/editor';
-import { getLoggedInUser, type Chapter, type Series } from '../../data/mockData';
+import type { Chapter, Series } from '../../types/domain';
+import { getStoredUser } from '../../services/authApi';
 import { getSeriesChapters, getVisibleSeries } from '../../services/seriesApi';
 import {
   BookOpen,
@@ -16,7 +17,7 @@ import {
 export default function EditorDashboardPage() {
   usePageMeta({ title: 'Editor Dashboard' });
   const navigate = useNavigate();
-  const editor = getLoggedInUser();
+  const editor = getStoredUser();
   const [assignedSeries, setAssignedSeries] = useState<Series[]>([]);
   const [chapters, setChapters] = useState<Chapter[]>([]);
   const [isLoading, setIsLoading] = useState(true);

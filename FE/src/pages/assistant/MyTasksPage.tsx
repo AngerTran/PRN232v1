@@ -20,7 +20,7 @@ import {
   TableRow,
 } from '../../app/components/ui/table';
 import { TaskStatusBadge } from '../../app/components/ui/assistant';
-import type { Task } from '../../data/mockData';
+import type { Task } from '../../types/domain';
 import { getMyTasks } from '../../services/tasksApi';
 import { Search, Eye } from 'lucide-react';
 import { format } from 'date-fns';

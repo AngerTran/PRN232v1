@@ -12,7 +12,7 @@ import {
   TableHeader,
   TableRow,
 } from '../../app/components/ui/table';
-import type { Series } from '../../data/mockData';
+import type { Series } from '../../types/domain';
 import { getVisibleSeries, getSeriesRanking } from '../../services/seriesApi';
 import { TrendingUp, TrendingDown, Minus, Eye, Shield } from 'lucide-react';
 

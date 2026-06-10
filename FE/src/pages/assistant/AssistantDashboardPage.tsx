@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router';
 import { Card, CardContent, CardHeader, CardTitle } from '../../app/components/ui/card';
 import { IncomeSummaryCard, DeadlineCard, TaskCard } from '../../app/components/ui/assistant';
-import type { AssistantCalendarEvent, Task } from '../../data/mockData';
+import type { AssistantCalendarEvent, Task } from '../../types/domain';
 import { getMyTasks } from '../../services/tasksApi';
 import { getMyEarnings, type AssistantEarnings } from '../../services/submissionsApi';
 import { getStoredUser } from '../../services/authApi';

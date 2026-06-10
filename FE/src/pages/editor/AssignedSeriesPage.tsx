@@ -11,7 +11,7 @@ import {
   SelectValue,
 } from '../../app/components/ui/select';
 import { SeriesSummaryCard } from '../../app/components/ui/editor';
-import type { Series } from '../../data/mockData';
+import type { Series } from '../../types/domain';
 import { getVisibleSeries } from '../../services/seriesApi';
 import { Search } from 'lucide-react';
 

@@ -5,7 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '../../app/components/u
 import { Button } from '../../app/components/ui/button';
 import { Textarea } from '../../app/components/ui/textarea';
 import { UploadResultBox } from '../../app/components/ui/assistant';
-import type { Task } from '../../data/mockData';
+import type { Task } from '../../types/domain';
 import { getTask } from '../../services/tasksApi';
 import { submitTaskWork } from '../../services/submissionsApi';
 import { ArrowLeft, Send, Save } from 'lucide-react';

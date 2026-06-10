@@ -6,7 +6,7 @@ import ChapterCard from '../../components/ui/ChapterCard';
 import EmptyState from '../../components/ui/EmptyState';
 import { usePageMeta } from '../../hooks/usePageMeta';
 import { useConfirm } from '../../components/ui/ConfirmDialog';
-import type { Chapter, Series } from '../../data/mockData';
+import type { Chapter, Series } from '../../types/domain';
 import { getSeries, getSeriesChapters, deleteChapter } from '../../services/seriesApi';
 import { FileText } from 'lucide-react';
 

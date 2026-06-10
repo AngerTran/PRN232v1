@@ -1,8 +1,9 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router';
 import { Search, Bell, ChevronDown } from 'lucide-react';
 import { clsx } from 'clsx';
-import { getLoggedInUser, notifications } from '../../data/mockData';
+import { getStoredUser } from '../../services/authApi';
+import { getNotifications } from '../../services/notificationsApi';
 
 interface TopbarProps {
   title: string;
@@ -11,9 +12,13 @@ interface TopbarProps {
 
 export default function Topbar({ title, breadcrumb }: TopbarProps) {
   const navigate = useNavigate();
-  const user = getLoggedInUser();
+  const user = getStoredUser();
   const [searchFocused, setSearchFocused] = useState(false);
-  const unreadCount = notifications.filter(n => !n.read).length;
+  const [unreadCount, setUnreadCount] = useState(0);
+
+  useEffect(() => {
+    getNotifications(true).then(items => setUnreadCount(items.length)).catch(() => setUnreadCount(0));
+  }, []);
 
   const initials = user?.name.split(' ').map(n => n[0]).join('').toUpperCase() ?? 'TH';
 

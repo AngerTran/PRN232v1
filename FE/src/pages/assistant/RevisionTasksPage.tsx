@@ -11,7 +11,7 @@ import {
   TableHeader,
   TableRow,
 } from '../../app/components/ui/table';
-import type { Task } from '../../data/mockData';
+import type { Task } from '../../types/domain';
 import { getMyTasks } from '../../services/tasksApi';
 import { Eye, AlertCircle } from 'lucide-react';
 import { format } from 'date-fns';

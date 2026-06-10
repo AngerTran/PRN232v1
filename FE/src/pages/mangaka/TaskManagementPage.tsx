@@ -9,7 +9,7 @@ import SearchInput from '../../components/ui/SearchInput';
 import FilterDropdown from '../../components/ui/FilterDropdown';
 import EmptyState from '../../components/ui/EmptyState';
 import { usePageMeta } from '../../hooks/usePageMeta';
-import type { Task, TaskStatus, TaskType } from '../../data/mockData';
+import type { Task, TaskStatus, TaskType } from '../../types/domain';
 import { getMangakaTasks } from '../../services/tasksApi';
 import { getAssistants, type ProfileSummary } from '../../services/profilesApi';
 import { format } from 'date-fns';

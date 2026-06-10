@@ -41,3 +41,13 @@ public record LeaderboardItemResponse(
     int? LatestRank,
     int TotalVotes,
     decimal PopularityScore);
+
+public record DecideDangerSeriesRequest(
+    [Required] string Decision,
+    string? Reason);
+
+public record DangerSeriesDecisionResponse(
+    Guid SeriesId,
+    string Decision,
+    string Status,
+    string? PublishingFrequency);

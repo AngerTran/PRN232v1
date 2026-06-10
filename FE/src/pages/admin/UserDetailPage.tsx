@@ -6,11 +6,13 @@ import { usePageMeta } from '../../hooks/usePageMeta';
 import {
   getAdminUserById,
   getSystemActivities,
-  getRoleDefinitionById,
+  getRoleDefinitions,
+  setAdminUserActive,
   type AdminUser,
   type RoleName,
+  type SystemActivity,
   type UserStatus,
-} from '../../data/adminMockData';
+} from '../../services/adminApi';
 
 const STATUS_COLORS: Record<UserStatus, string> = {
   Active: 'bg-green-100 text-green-700',
@@ -90,10 +92,18 @@ export default function UserDetailPage() {
   const navigate = useNavigate();
   const { userId } = useParams<{ userId: string }>();
   const [activeTab, setActiveTab] = useState<TabId>('overview');
-  const [user, setUser] = useState<AdminUser | null>(
-    userId ? (getAdminUserById(userId) ?? null) : null
-  );
+  const [user, setUser] = useState<AdminUser | null>(null);
+  const [activities, setActivities] = useState<SystemActivity[]>([]);
   const [passwordReset, setPasswordReset] = useState(false);
+
+  useEffect(() => {
+    if (!userId) return;
+    void Promise.all([getAdminUserById(userId), getSystemActivities(userId)])
+      .then(([profile, logs]) => {
+        setUser(profile);
+        setActivities(logs);
+      });
+  }, [userId]);
 
   if (!user) {
     return (
@@ -113,14 +123,10 @@ export default function UserDetailPage() {
     );
   }
 
-  const activities = getSystemActivities().filter(a => a.userId === user.id);
-  const roleDef = getRoleDefinitionById(user.role);
+  const roleDef = getRoleDefinitions([user]).find(role => role.id === user.role);
 
-  function handleToggleLock() {
-    setUser(prev => prev
-      ? { ...prev, status: prev.status === 'Locked' ? 'Active' : 'Locked' }
-      : prev
-    );
+  async function handleToggleLock() {
+    setUser(await setAdminUserActive(user.id, user.status === 'Inactive'));
   }
 
   function handleResetPassword() {
@@ -316,10 +322,10 @@ export default function UserDetailPage() {
             <div className="flex items-center justify-between p-4 bg-gray-50 rounded-xl">
               <div>
                 <p className="text-sm font-medium text-gray-800">
-                  {user.status === 'Locked' ? 'Mở khóa tài khoản' : 'Khóa tài khoản'}
+                  {user.status === 'Inactive' ? 'Kích hoạt tài khoản' : 'Vô hiệu hóa tài khoản'}
                 </p>
                 <p className="text-xs text-gray-500 mt-0.5">
-                  {user.status === 'Locked'
+                  {user.status === 'Inactive'
                     ? 'Tài khoản đang bị khóa. Nhấn để mở khóa.'
                     : 'Tạm thời vô hiệu hóa quyền đăng nhập của người dùng này.'}
                 </p>
@@ -327,13 +333,13 @@ export default function UserDetailPage() {
               <button
                 onClick={handleToggleLock}
                 className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-                  user.status === 'Locked'
+                  user.status === 'Inactive'
                     ? 'bg-green-100 text-green-700 hover:bg-green-200'
                     : 'bg-red-100 text-red-700 hover:bg-red-200'
                 }`}
               >
-                {user.status === 'Locked' ? <Unlock size={14} /> : <Lock size={14} />}
-                {user.status === 'Locked' ? 'Mở khóa' : 'Khóa tài khoản'}
+                {user.status === 'Inactive' ? <Unlock size={14} /> : <Lock size={14} />}
+                {user.status === 'Inactive' ? 'Kích hoạt' : 'Vô hiệu hóa'}
               </button>
             </div>
 

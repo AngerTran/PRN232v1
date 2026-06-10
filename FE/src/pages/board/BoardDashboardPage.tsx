@@ -4,7 +4,7 @@ import { usePageMeta } from '../../hooks/usePageMeta';
 import { Card, CardContent } from '../../app/components/ui/card';
 import { Button } from '../../app/components/ui/button';
 import { Badge } from '../../app/components/ui/badge';
-import type { Series } from '../../data/mockData';
+import type { Series } from '../../types/domain';
 import { getVisibleSeries } from '../../services/seriesApi';
 import { getPendingSeries, getLeaderboard, type PendingSeriesItem, type LeaderboardItem } from '../../services/boardApi';
 import { getStoredUser } from '../../services/authApi';

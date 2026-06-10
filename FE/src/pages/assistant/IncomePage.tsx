@@ -19,7 +19,7 @@ import {
   TableRow,
 } from '../../app/components/ui/table';
 import { IncomeSummaryCard } from '../../app/components/ui/assistant';
-import type { Task } from '../../data/mockData';
+import type { Task } from '../../types/domain';
 import { getMyTasks } from '../../services/tasksApi';
 import { getMyEarnings, type AssistantEarnings } from '../../services/submissionsApi';
 import { FileCheck, ClipboardCheck, Clock, CheckCircle, Eye } from 'lucide-react';

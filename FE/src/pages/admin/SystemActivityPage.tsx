@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '../../app/components/ui/card';
 import { usePageMeta } from '../../hooks/usePageMeta';
-import { getSystemActivities, type RoleName, type SystemActivity } from '../../data/adminMockData';
+import { getSystemActivities, type RoleName, type SystemActivity } from '../../services/adminApi';
 
 const ROLE_COLORS: Record<RoleName, string> = {
   admin: 'bg-red-100 text-red-700',
@@ -50,7 +50,10 @@ export default function SystemActivityPage() {
   const [actionFilter, setActionFilter] = useState('All');
   const [statusFilter, setStatusFilter] = useState<'all' | SystemActivity['status']>('all');
 
-  const all = getSystemActivities();
+  const [all, setAll] = useState<SystemActivity[]>([]);
+  useEffect(() => {
+    void getSystemActivities().then(setAll);
+  }, []);
 
   const filtered = all.filter(a => {
     const matchRole = roleFilter === 'all' || a.userRole === roleFilter;

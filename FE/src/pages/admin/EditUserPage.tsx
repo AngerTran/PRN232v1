@@ -3,7 +3,7 @@ import { useNavigate, useParams } from 'react-router';
 import { ArrowLeft } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '../../app/components/ui/card';
 import { usePageMeta } from '../../hooks/usePageMeta';
-import { getAdminUserById, type RoleName, type UserStatus } from '../../data/adminMockData';
+import { getAdminUserById, updateAdminUser, type AdminUser, type RoleName, type UserStatus } from '../../services/adminApi';
 
 export default function EditUserPage() {
   const { setPageMeta } = usePageMeta();
@@ -11,16 +11,27 @@ export default function EditUserPage() {
   const navigate = useNavigate();
   const { userId } = useParams<{ userId: string }>();
 
-  const original = userId ? getAdminUserById(userId) : undefined;
-
-  const [name, setName] = useState(original?.name ?? '');
-  const [email, setEmail] = useState(original?.email ?? '');
-  const [phone, setPhone] = useState(original?.phone ?? '');
-  const [role, setRole] = useState<RoleName>(original?.role ?? 'mangaka');
-  const [status, setStatus] = useState<UserStatus>(original?.status ?? 'Active');
-  const [note, setNote] = useState(original?.note ?? '');
+  const [original, setOriginal] = useState<AdminUser | null>(null);
+  const [name, setName] = useState('');
+  const [email, setEmail] = useState('');
+  const [phone, setPhone] = useState('');
+  const [role, setRole] = useState<RoleName>('mangaka');
+  const [status, setStatus] = useState<UserStatus>('Active');
+  const [note, setNote] = useState('');
   const [loading, setLoading] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
+
+  useEffect(() => {
+    if (!userId) return;
+    void getAdminUserById(userId).then(user => {
+      setOriginal(user);
+      setName(user.name);
+      setEmail(user.email);
+      setRole(user.role);
+      setStatus(user.status);
+      setNote(user.note ?? '');
+    });
+  }, [userId]);
 
   if (!original) {
     return (
@@ -48,7 +59,7 @@ export default function EditUserPage() {
     return e;
   }
 
-  function handleSubmit(e: FormEvent) {
+  async function handleSubmit(e: FormEvent) {
     e.preventDefault();
     const errs = validate();
     if (Object.keys(errs).length > 0) {
@@ -57,10 +68,19 @@ export default function EditUserPage() {
     }
     setErrors({});
     setLoading(true);
-    setTimeout(() => {
+    try {
+      await updateAdminUser(userId!, {
+        fullName: name,
+        role,
+        bio: [phone, note].filter(Boolean).join('\n'),
+        isActive: status === 'Active',
+      });
       setLoading(false);
       navigate(`/admin/users/${userId}`);
-    }, 600);
+    } catch (error) {
+      setLoading(false);
+      setErrors({ submit: error instanceof Error ? error.message : 'Không thể cập nhật người dùng.' });
+    }
   }
 
   return (
@@ -158,7 +178,6 @@ export default function EditUserPage() {
                   <option value="Active">Hoạt động</option>
                   <option value="Inactive">Không hoạt động</option>
                   <option value="Pending">Chờ xử lý</option>
-                  <option value="Locked">Đã khóa</option>
                 </select>
               </div>
             </div>
@@ -176,6 +195,7 @@ export default function EditUserPage() {
             </div>
 
             <div className="flex gap-3 pt-2">
+              {errors.submit && <p className="text-xs text-red-500">{errors.submit}</p>}
               <button
                 type="button"
                 onClick={() => navigate(`/admin/users/${userId}`)}

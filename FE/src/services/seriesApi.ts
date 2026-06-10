@@ -1,6 +1,6 @@
 import { apiRequest, API_BASE_URL } from './apiClient';
 import { getChapterTaskStats } from './workspaceApi';
-import type { Chapter, ChapterStatus, Series, SeriesRanking, SeriesStatus } from '../data/mockData';
+import type { Chapter, ChapterStatus, Series, SeriesRanking, SeriesStatus } from '../types/domain';
 
 type ApiEnvelope<T> = T | { data: T };
 
@@ -167,7 +167,7 @@ export function mapChapter(item: ApiChapter): Chapter {
     seriesId: item.seriesId,
     number: item.chapterNumber,
     title: item.title || `Chapter ${item.chapterNumber}`,
-    deadline: dateOnly(item.deadline),
+    deadline: item.deadline ? dateOnly(item.deadline) : '',
     progress: mapChapterStatus(item.status) === 'Published' ? 100 : 0,
     status: mapChapterStatus(item.status),
     pagesCount: 0,
@@ -220,6 +220,11 @@ export async function getApprovedSeries(): Promise<Series[]> {
   return items
     .filter(item => APPROVED_SERIES_STATUSES.has(item.status?.toLowerCase() ?? ''))
     .map(item => mapSeries(item));
+}
+
+export async function getDangerZoneSeries(): Promise<Series[]> {
+  const items = unwrap(await apiRequest<ApiEnvelope<ApiSeries[]>>('/api/series/danger-zone'));
+  return items.map(item => mapSeries(item));
 }
 
 export async function getSeries(id: string): Promise<Series> {
@@ -486,6 +491,36 @@ export async function getRankingHistory(seriesId: string): Promise<RankingIssue[
     popularityScore: Number(issue.popularityScore ?? 0),
     createdAt: issue.createdAt ?? undefined,
   }));
+}
+
+export async function createRanking(input: {
+  seriesId: string;
+  issueNumber: number;
+  rankPosition: number;
+  voteCount?: number;
+  popularityScore?: number;
+}): Promise<RankingIssue> {
+  const item = unwrap(await apiRequest<ApiEnvelope<{
+    id: string;
+    seriesId: string;
+    issueNumber: number;
+    rankPosition: number;
+    voteCount?: number | null;
+    popularityScore?: number | null;
+    createdAt?: string | null;
+  }>>('/api/rankings', {
+    method: 'POST',
+    body: JSON.stringify(input),
+  }));
+  return {
+    id: item.id,
+    seriesId: item.seriesId,
+    issueNumber: item.issueNumber,
+    rankPosition: item.rankPosition,
+    voteCount: item.voteCount ?? 0,
+    popularityScore: Number(item.popularityScore ?? 0),
+    createdAt: item.createdAt ?? undefined,
+  };
 }
 
 export interface PublishingScheduleItem {

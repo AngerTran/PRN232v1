@@ -10,7 +10,7 @@ import {
   Users, UserPlus, ShieldCheck, Activity, SlidersHorizontal, Mail,
 } from 'lucide-react';
 import { clsx } from 'clsx';
-import { getLoggedInUser } from '../../data/mockData';
+import { getStoredUser } from '../../services/authApi';
 import { logoutWithApi } from '../../services/authApi';
 
 interface NavItem {
@@ -133,7 +133,7 @@ const BOTTOM_NAV: NavItem[] = [
 export default function Sidebar() {
   const navigate = useNavigate();
   const location = useLocation();
-  const user = getLoggedInUser();
+  const user = getStoredUser();
   const [collapsed, setCollapsed] = useState(false);
 
   const GROUPS = user?.role === 'admin'

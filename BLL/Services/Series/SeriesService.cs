@@ -298,6 +298,14 @@ public class SeriesService
       throw new SeriesForbiddenException($"Role '{caller.Role}' cannot set status to '{SeriesStatuses.ToDbValue(newStatus)}' for this series.");
     }
 
+    if (newStatus == SeriesStatus.PendingReview && series.Status != SeriesStatus.PendingReview)
+    {
+      var oldVotes = await _unitOfWork.Context.BoardVotes
+        .Where(v => v.SeriesId == series.Id)
+        .ToListAsync(cancellationToken);
+      _unitOfWork.Context.BoardVotes.RemoveRange(oldVotes);
+    }
+
     series.Status = newStatus;
     series.UpdatedAt = DateTime.UtcNow;
     SeriesRepository.Update(series);
@@ -676,6 +684,16 @@ public class SeriesService
     }
 
     var now = DateTime.UtcNow;
+    var deadline = request.Deadline;
+    if (series.PublishingFrequency == PublishingFrequency.Weekly && request.ChapterNumber > 0)
+    {
+      var latestDeadline = await _unitOfWork.Context.Chapters
+        .AsNoTracking()
+        .Where(c => c.SeriesId == seriesId && c.ChapterNumber > 0 && c.Deadline != null)
+        .MaxAsync(c => c.Deadline, cancellationToken);
+      deadline = latestDeadline?.AddDays(7) ?? now.Date.AddDays(7);
+    }
+
     var chapter = new Chapter
     {
       Id = Guid.NewGuid(),
@@ -684,7 +702,7 @@ public class SeriesService
       Title = request.Title?.Trim(),
       ManuscriptUrl = request.ManuscriptUrl,
       Status = ChapterStatus.Draft,
-      Deadline = request.Deadline,
+      Deadline = deadline,
       ReleaseDate = request.ReleaseDate,
       CreatedAt = now,
       UpdatedAt = now
@@ -707,14 +725,22 @@ public class SeriesService
     }
 
     var rankings = await _unitOfWork.Context.Rankings.AsNoTracking().ToListAsync(cancellationToken);
-    var atRiskSeriesIds = rankings
+    var latestDangerRankings = rankings
       .GroupBy(r => r.SeriesId)
-      .Select(g => new
-      {
-        SeriesId = g.Key,
-        RankPosition = g.OrderByDescending(r => r.IssueNumber).First().RankPosition
-      })
-      .Where(x => x.RankPosition >= DangerRankPositionThreshold)
+      .Select(g => g.OrderByDescending(r => r.IssueNumber).First())
+      .Where(r => r.RankPosition >= DangerRankPositionThreshold)
+      .ToList();
+    var dangerSeriesIds = latestDangerRankings.Select(r => r.SeriesId).ToList();
+    var handledDecisions = await _unitOfWork.Context.ActivityLogs
+      .AsNoTracking()
+      .Where(log => log.Action == ActivityActions.DangerDecision
+        && log.EntityType == ActivityEntityTypes.Series
+        && log.EntityId != null
+        && dangerSeriesIds.Contains(log.EntityId.Value))
+      .ToListAsync(cancellationToken);
+    var atRiskSeriesIds = latestDangerRankings
+      .Where(r => !handledDecisions.Any(log => log.EntityId == r.SeriesId
+        && log.CreatedAt >= r.CreatedAt))
       .Select(x => x.SeriesId)
       .ToHashSet();
 
@@ -825,7 +851,7 @@ public class SeriesService
 
   private static bool CanChangeStatus(Profile caller, SeriesEntity series, SeriesStatus newStatus)
   {
-    if (IsAdmin(caller.Role) || IsBoard(caller.Role))
+    if (IsAdmin(caller.Role))
     {
       return true;
     }

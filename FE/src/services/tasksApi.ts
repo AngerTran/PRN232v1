@@ -1,7 +1,7 @@
 import { apiRequest } from './apiClient';
 import { fromApiTaskType } from './workspaceApi';
 import { getMySeries, getSeriesChapters } from './seriesApi';
-import type { Task, TaskStatus } from '../data/mockData';
+import type { Task, TaskStatus } from '../types/domain';
 
 type ApiEnvelope<T> = T | { data: T };
 

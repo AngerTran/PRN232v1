@@ -31,6 +31,7 @@ export interface WorkspacePageItem {
   chapterId: string;
   pageNumber: number;
   status: PageStatus;
+  imageUrl?: string;
   thumbnailUrl?: string;
   tasksCount?: number;
   completedTasksCount?: number;
@@ -268,10 +269,10 @@ function mapPage(page: ApiPage): WorkspacePageItem {
     chapterId: page.chapterId,
     pageNumber: page.pageNumber,
     status: mapPageStatus(page.status),
+    imageUrl: page.imageUrl ?? undefined,
     thumbnailUrl: page.thumbnailUrl ?? page.imageUrl ?? undefined,
     tasksCount: 0,
     completedTasksCount: 0,
-    panelLayout: (page.pageNumber - 1) % 4,
   };
 }
 

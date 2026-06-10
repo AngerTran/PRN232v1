@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router';
 import { usePageMeta } from '../../hooks/usePageMeta';
 import { Card, CardContent, CardHeader, CardTitle } from '../../app/components/ui/card';
 import { DeadlineCard } from '../../app/components/ui/assistant';
-import type { AssistantCalendarEvent } from '../../data/mockData';
+import type { AssistantCalendarEvent } from '../../types/domain';
 import { getMyTasks } from '../../services/tasksApi';
 import { Calendar } from 'lucide-react';
 

@@ -8,7 +8,7 @@ import MangaPageCard from '../../components/ui/MangaPageCard';
 import EmptyState from '../../components/ui/EmptyState';
 import { usePageMeta } from '../../hooks/usePageMeta';
 import { useConfirm } from '../../components/ui/ConfirmDialog';
-import type { Chapter, Series } from '../../data/mockData';
+import type { Chapter, Series } from '../../types/domain';
 import { getChapter, getSeries } from '../../services/seriesApi';
 import { getChapterPages, uploadChapterPage, deleteChapterPage, type WorkspacePageItem } from '../../services/workspaceApi';
 import { format } from 'date-fns';

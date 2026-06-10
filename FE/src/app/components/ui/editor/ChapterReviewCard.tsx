@@ -1,4 +1,4 @@
-import type { Chapter, EditorReview } from '../../../../data/mockData';
+import type { Chapter, EditorReview } from '../../../../types/domain';
 import { Card, CardContent } from '../card';
 import { ReviewStatusBadge } from './ReviewStatusBadge';
 import { Button } from '../button';

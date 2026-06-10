@@ -1,4 +1,4 @@
-import { ReviewStatus } from '../../../../data/mockData';
+import { ReviewStatus } from '../../../../types/domain';
 import { Badge } from '../badge';
 
 interface ReviewStatusBadgeProps {

@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router';
 import { ArrowLeft, CheckCircle } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '../../app/components/ui/card';
 import { usePageMeta } from '../../hooks/usePageMeta';
-import type { RoleName, UserStatus } from '../../data/adminMockData';
+import { createAdminUser, type RoleName, type UserStatus } from '../../services/adminApi';
 
 export default function CreateUserPage() {
   const { setPageMeta } = usePageMeta();
@@ -31,7 +31,7 @@ export default function CreateUserPage() {
     return e;
   }
 
-  function handleSubmit(e: FormEvent) {
+  async function handleSubmit(e: FormEvent) {
     e.preventDefault();
     const errs = validate();
     if (Object.keys(errs).length > 0) {
@@ -40,11 +40,22 @@ export default function CreateUserPage() {
     }
     setErrors({});
     setLoading(true);
-    setTimeout(() => {
+    try {
+      await createAdminUser({
+        email,
+        password: tempPassword,
+        fullName: name,
+        role,
+        bio: [phone, note].filter(Boolean).join('\n'),
+        isActive: status === 'Active',
+      });
       setLoading(false);
       setSuccess(true);
       setTimeout(() => navigate('/admin/users'), 1500);
-    }, 700);
+    } catch (error) {
+      setLoading(false);
+      setErrors({ submit: error instanceof Error ? error.message : 'Không thể tạo người dùng.' });
+    }
   }
 
   if (success) {
@@ -148,7 +159,6 @@ export default function CreateUserPage() {
                   <option value="Active">Hoạt động</option>
                   <option value="Inactive">Không hoạt động</option>
                   <option value="Pending">Chờ xử lý</option>
-                  <option value="Locked">Đã khóa</option>
                 </select>
               </div>
 
@@ -181,6 +191,7 @@ export default function CreateUserPage() {
             </div>
 
             <div className="flex gap-3 pt-2">
+              {errors.submit && <p className="text-xs text-red-500">{errors.submit}</p>}
               <button
                 type="button"
                 onClick={() => navigate('/admin/users')}

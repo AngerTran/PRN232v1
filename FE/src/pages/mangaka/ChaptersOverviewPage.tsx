@@ -5,7 +5,7 @@ import FilterDropdown from '../../components/ui/FilterDropdown';
 import ChapterCard from '../../components/ui/ChapterCard';
 import EmptyState from '../../components/ui/EmptyState';
 import { usePageMeta } from '../../hooks/usePageMeta';
-import type { Chapter, ChapterStatus, Series } from '../../data/mockData';
+import type { Chapter, ChapterStatus, Series } from '../../types/domain';
 import { getMySeries, getSeriesChapters } from '../../services/seriesApi';
 
 const STATUS_OPTIONS: ChapterStatus[] = ['Draft', 'In Progress', 'Review', 'Approved', 'Published'];

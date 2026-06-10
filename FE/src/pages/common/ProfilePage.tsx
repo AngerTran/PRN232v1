@@ -3,7 +3,7 @@ import { Camera, BookOpen, FileText, Star, Award } from 'lucide-react';
 import Card, { CardHeader, CardTitle } from '../../components/ui/Card';
 import Button from '../../components/ui/Button';
 import Badge from '../../components/ui/Badge';
-import type { Series, User } from '../../data/mockData';
+import type { Series, User } from '../../types/domain';
 import { getMe, getStoredUser, updateMyProfile } from '../../services/authApi';
 import { getMySeries } from '../../services/seriesApi';
 import { usePageMeta } from '../../hooks/usePageMeta';

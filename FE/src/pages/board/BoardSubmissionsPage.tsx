@@ -6,7 +6,7 @@ import { Button } from '../../app/components/ui/button';
 import { Input } from '../../app/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../../app/components/ui/select';
 import { SubmissionStatusBadge } from '../../app/components/ui/board';
-import type { BoardSubmissionStatus } from '../../data/mockData';
+import type { BoardSubmissionStatus } from '../../types/domain';
 import { getPendingSeries, type PendingSeriesItem } from '../../services/boardApi';
 import { Search, Eye } from 'lucide-react';
 

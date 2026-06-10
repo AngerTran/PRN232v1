@@ -14,6 +14,7 @@ export default function CreateChapterPage() {
   const { setPageMeta } = usePageMeta();
 
   const [seriesTitle, setSeriesTitle] = useState('');
+  const [isWeekly, setIsWeekly] = useState(false);
   const [form, setForm] = useState({
     number: '1',
     title: '',
@@ -38,15 +39,21 @@ export default function CreateChapterPage() {
   useEffect(() => {
     if (!seriesId) return;
     let isActive = true;
-    getSeries(seriesId)
-      .then(s => {
-        if (isActive) setSeriesTitle(s.title);
-      })
-      .catch(() => undefined);
-    getSeriesChapters(seriesId)
-      .then(chapters => {
+    Promise.all([getSeries(seriesId), getSeriesChapters(seriesId)])
+      .then(([series, chapters]) => {
+        if (!isActive) return;
+        setSeriesTitle(series.title);
+        const weekly = series.publishingType === 'Weekly';
+        setIsWeekly(weekly);
         const next = Math.max(0, ...chapters.map(c => c.number)) + 1;
-        if (isActive) setForm(f => ({ ...f, number: String(next) }));
+        const latestDeadline = chapters.map(chapter => chapter.deadline).filter(Boolean).sort().at(-1);
+        const base = latestDeadline ? new Date(`${latestDeadline}T00:00:00`) : new Date();
+        base.setDate(base.getDate() + 7);
+        setForm(f => ({
+          ...f,
+          number: String(next),
+          deadline: weekly ? base.toISOString().slice(0, 10) : f.deadline,
+        }));
       })
       .catch(() => undefined);
     return () => {
@@ -124,7 +131,13 @@ export default function CreateChapterPage() {
             </div>
             <div>
               <label className="block text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-1.5">Hạn nộp *</label>
-              <input type="date" value={form.deadline} onChange={update('deadline')} required className={inputClass} />
+              <input type="date" value={form.deadline} onChange={update('deadline')} required disabled={isWeekly}
+                className={`${inputClass} disabled:cursor-not-allowed disabled:opacity-70`} />
+              {isWeekly && (
+                <p className="mt-1.5 text-xs text-muted-foreground">
+                  Series weekly: hệ thống tự đặt hạn chương kế tiếp cách hạn gần nhất 7 ngày.
+                </p>
+              )}
             </div>
           </div>
         </Card>

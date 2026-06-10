@@ -4,7 +4,7 @@ import { Bell, BellOff, ExternalLink, AlertTriangle, CheckCircle, Clock, Trendin
 import { clsx } from 'clsx';
 import Card from '../../components/ui/Card';
 import Button from '../../components/ui/Button';
-import type { Notification, NotifType } from '../../data/mockData';
+import type { Notification, NotifType } from '../../types/domain';
 import { getNotifications, markAllNotificationsRead, markNotificationRead } from '../../services/notificationsApi';
 import { usePageMeta } from '../../hooks/usePageMeta';
 import { formatDistanceToNow } from 'date-fns';

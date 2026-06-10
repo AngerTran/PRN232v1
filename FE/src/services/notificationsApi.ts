@@ -1,5 +1,5 @@
 import { apiRequest } from './apiClient';
-import type { Notification, NotifType } from '../data/mockData';
+import type { Notification, NotifType } from '../types/domain';
 
 type ApiEnvelope<T> = T | { data: T };
 

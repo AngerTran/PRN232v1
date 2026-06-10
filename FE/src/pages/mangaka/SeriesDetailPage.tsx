@@ -10,7 +10,7 @@ import RankingTrend from '../../components/ui/RankingTrend';
 import EmptyState from '../../components/ui/EmptyState';
 import { usePageMeta } from '../../hooks/usePageMeta';
 import { useConfirm } from '../../components/ui/ConfirmDialog';
-import type { Chapter, Series } from '../../data/mockData';
+import type { Chapter, Series } from '../../types/domain';
 import { getSeries, getSeriesChapters, submitSeriesForReview } from '../../services/seriesApi';
 
 export default function SeriesDetailPage() {
@@ -174,6 +174,9 @@ export default function SeriesDetailPage() {
               )}
               <Button variant="outline" size="sm" onClick={() => navigate(`/mangaka/series/${series.id}/chapters`)}>
                 <FileText size={14} /> Chương
+              </Button>
+              <Button variant="outline" size="sm" onClick={() => navigate(`/mangaka/series/${series.id}/read`)}>
+                <BookOpen size={14} /> Đọc toàn bộ
               </Button>
               <Button variant="primary" size="sm" onClick={() => navigate(`/mangaka/series/${series.id}/chapters/create`)}>
                 <Plus size={14} /> Chương mới

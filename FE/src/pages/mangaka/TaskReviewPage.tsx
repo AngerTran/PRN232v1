@@ -8,7 +8,7 @@ import Card, { CardHeader, CardTitle } from '../../components/ui/Card';
 import EmptyState from '../../components/ui/EmptyState';
 import MangaPanelPreview from '../../components/workspace/MangaPanelPreview';
 import { usePageMeta } from '../../hooks/usePageMeta';
-import type { Task } from '../../data/mockData';
+import type { Task } from '../../types/domain';
 import { getTask } from '../../services/tasksApi';
 import { getTaskSubmissions, reviewSubmission, type SubmissionItem } from '../../services/submissionsApi';
 import { format } from 'date-fns';
@@ -156,7 +156,11 @@ export default function TaskReviewPage() {
                 <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Trang gốc</p>
               </div>
               <div className="relative bg-[#F0EBE0] aspect-[3/4]">
-                <MangaPanelPreview layout={(task.pageNumber - 1) % 4} />
+                {task.pageImageUrl ? (
+                  <img src={task.pageImageUrl} alt={`Trang ${task.pageNumber}`} className="w-full h-full object-cover" />
+                ) : (
+                  <MangaPanelPreview layout={(task.pageNumber - 1) % 4} />
+                )}
                 {/* Highlight assigned region */}
                 <div
                   className="absolute border-2 border-primary bg-primary/15"

@@ -2,7 +2,7 @@ import { useNavigate } from 'react-router';
 import { BookOpen, TrendingUp, TrendingDown, Minus, Star, ChevronRight, Trash2 } from 'lucide-react';
 import { clsx } from 'clsx';
 import Badge from './Badge';
-import type { Series } from '../../data/mockData';
+import type { Series } from '../../types/domain';
 
 interface SeriesCardProps {
   series: Series;

@@ -5,7 +5,7 @@ import { Card } from '../../app/components/ui/card';
 import { Button } from '../../app/components/ui/button';
 import { Input } from '../../app/components/ui/input';
 import { Badge } from '../../app/components/ui/badge';
-import type { Series, SeriesStatus } from '../../data/mockData';
+import type { Series, SeriesStatus } from '../../types/domain';
 import { getApprovedSeries, getSeriesSchedules } from '../../services/seriesApi';
 import { PublishingTypeBadge } from '../../app/components/ui/board';
 import { Search, CalendarDays, CalendarPlus } from 'lucide-react';

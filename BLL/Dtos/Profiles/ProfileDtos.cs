@@ -18,7 +18,8 @@ public record UpdateProfileRequest(
     [MaxLength(255)] string? FullName,
     string? AvatarUrl,
     string? Bio,
-    [MaxLength(50)] string? Role);
+    [MaxLength(50)] string? Role,
+    bool? IsActive);
 
 public record AddAssistantRequest(
     [Required, EmailAddress, MaxLength(255)] string Email);
