@@ -6,7 +6,7 @@ RUN npm ci
 
 COPY . .
 
-ARG VITE_API_BASE_URL=http://localhost:3001
+ARG VITE_API_BASE_URL=http://146.190.94.40:3001
 ENV VITE_API_BASE_URL=$VITE_API_BASE_URL
 
 RUN npm run build
