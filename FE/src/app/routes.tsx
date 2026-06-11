@@ -75,6 +75,14 @@ import SeriesDecisionDetailPage from '../pages/board/SeriesDecisionDetailPage';
 import BoardReportsPage from '../pages/board/BoardReportsPage';
 
 function RootRedirect() {
+  const hashParams = new URLSearchParams(window.location.hash.replace(/^#/, ''));
+  const hasSupabaseAuthHash =
+    hashParams.has('access_token') ||
+    hashParams.has('refresh_token') ||
+    hashParams.has('error');
+
+  if (hasSupabaseAuthHash) return <GoogleCallbackPage />;
+
   const user = getStoredUser();
   if (!user) return <LandingPage />;
 
