@@ -5,6 +5,13 @@ using DAL.Data;
 using BLL.Extensions;
 using BLL.Middleware;
 
+var port = Environment.GetEnvironmentVariable("PORT");
+if (!string.IsNullOrWhiteSpace(port) &&
+    string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable("ASPNETCORE_URLS")))
+{
+    Environment.SetEnvironmentVariable("ASPNETCORE_URLS", $"http://+:{port}");
+}
+
 var builder = WebApplication.CreateBuilder(args);
 
 var connectionString = builder.Configuration.GetConnectionString("SupabaseConnection");
@@ -48,13 +55,21 @@ builder.Services.AddAppSwagger();
 
 var app = builder.Build();
 
-if (app.Environment.IsDevelopment())
+var isRunningInContainer = string.Equals(
+    Environment.GetEnvironmentVariable("DOTNET_RUNNING_IN_CONTAINER"),
+    "true",
+    StringComparison.OrdinalIgnoreCase);
+var swaggerEnabled = app.Environment.IsDevelopment() ||
+    string.Equals(builder.Configuration["Swagger:Enabled"], "true", StringComparison.OrdinalIgnoreCase);
+
+if (swaggerEnabled)
 {
     app.UseAppSwagger();
 }
 
 app.UseMiddleware<AuthExceptionMiddleware>();
-if (!app.Environment.IsDevelopment())
+
+if (!app.Environment.IsDevelopment() && !isRunningInContainer)
 {
     app.UseHttpsRedirection();
 }
