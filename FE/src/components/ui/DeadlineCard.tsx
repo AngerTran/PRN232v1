@@ -3,7 +3,7 @@ import { Calendar, AlertTriangle } from 'lucide-react';
 import { clsx } from 'clsx';
 import ProgressBar from './ProgressBar';
 import Badge from './Badge';
-import type { Chapter, Series } from '../../data/mockData';
+import type { Chapter, Series } from '../../types/domain';
 import { format, differenceInDays } from 'date-fns';
 
 interface DeadlineCardProps {

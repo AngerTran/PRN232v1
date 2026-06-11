@@ -1,13 +1,16 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { Users, CheckCircle } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '../../app/components/ui/card';
 import { usePageMeta } from '../../hooks/usePageMeta';
-import { getRoleDefinitions } from '../../data/adminMockData';
+import { getAdminUsers, getRoleDefinitions, type RoleDefinition } from '../../services/adminApi';
 
 export default function RoleManagementPage() {
   const { setPageMeta } = usePageMeta();
   useEffect(() => { setPageMeta({ title: 'Quản lý vai trò' }); }, []);
-  const roles = getRoleDefinitions();
+  const [roles, setRoles] = useState<RoleDefinition[]>([]);
+  useEffect(() => {
+    void getAdminUsers().then(users => setRoles(getRoleDefinitions(users)));
+  }, []);
 
   return (
     <div className="p-6 space-y-6">

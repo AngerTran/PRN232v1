@@ -21,7 +21,7 @@ public class BoardController : ControllerBase
     }
 
     [HttpPost("votes")]
-    [SwaggerOperation(Summary = "Cast board vote", Description = "Creates or updates a board vote for a series decision. Requires board or admin role.")]
+    [SwaggerOperation(Summary = "Cast board vote", Description = "Creates or updates a board vote for a pending-review series. Requires board role.")]
     [ProducesResponseType(typeof(BoardVoteResponse), StatusCodes.Status200OK)]
     public async Task<ActionResult<BoardVoteResponse>> Vote(
         [FromBody] CreateBoardVoteRequest request,
@@ -92,5 +92,21 @@ public class BoardController : ControllerBase
         }
 
         return Ok(await _boardService.GetLeaderboardAsync(userId, metric, cancellationToken));
+    }
+
+    [HttpPost("danger-series/{seriesId:guid}/decision")]
+    [SwaggerOperation(Summary = "Decide danger-zone series", Description = "Continues, changes to monthly, pauses, or cancels a publishing danger-zone series. Requires board role.")]
+    [ProducesResponseType(typeof(DangerSeriesDecisionResponse), StatusCodes.Status200OK)]
+    public async Task<ActionResult<DangerSeriesDecisionResponse>> DecideDangerSeries(
+        Guid seriesId,
+        [FromBody] DecideDangerSeriesRequest request,
+        CancellationToken cancellationToken)
+    {
+        if (!this.TryGetUserId(out var userId))
+        {
+            return Unauthorized();
+        }
+
+        return Ok(await _boardService.DecideDangerSeriesAsync(userId, seriesId, request, cancellationToken));
     }
 }

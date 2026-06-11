@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router';
 import { Search, UserPlus, Eye, Edit, Lock, Unlock } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '../../app/components/ui/card';
 import { usePageMeta } from '../../hooks/usePageMeta';
-import { getAdminUsers, type AdminUser, type RoleName, type UserStatus } from '../../data/adminMockData';
+import { getAdminUsers, setAdminUserActive, type AdminUser, type RoleName, type UserStatus } from '../../services/adminApi';
 
 const STATUS_COLORS: Record<UserStatus, string> = {
   Active: 'bg-green-100 text-green-700',
@@ -67,7 +67,11 @@ export default function UserManagementPage() {
   const [search, setSearch] = useState('');
   const [roleFilter, setRoleFilter] = useState<'all' | RoleName>('all');
   const [statusFilter, setStatusFilter] = useState<'all' | UserStatus>('all');
-  const [localUsers, setLocalUsers] = useState<AdminUser[]>(getAdminUsers());
+  const [localUsers, setLocalUsers] = useState<AdminUser[]>([]);
+
+  useEffect(() => {
+    void getAdminUsers().then(setLocalUsers);
+  }, []);
 
   const filtered = localUsers.filter(u => {
     const matchSearch =
@@ -78,13 +82,11 @@ export default function UserManagementPage() {
     return matchSearch && matchRole && matchStatus;
   });
 
-  function handleToggleLock(id: string) {
-    setLocalUsers(prev =>
-      prev.map(u => {
-        if (u.id !== id) return u;
-        return { ...u, status: u.status === 'Locked' ? 'Active' : 'Locked' };
-      })
-    );
+  async function handleToggleLock(id: string) {
+    const current = localUsers.find(user => user.id === id);
+    if (!current) return;
+    const updated = await setAdminUserActive(id, current.status === 'Inactive');
+    setLocalUsers(prev => prev.map(user => user.id === id ? updated : user));
   }
 
   const roles: Array<{ value: 'all' | RoleName; label: string }> = [
@@ -99,7 +101,6 @@ export default function UserManagementPage() {
     { value: 'all', label: 'Tất cả trạng thái' },
     { value: 'Active', label: 'Hoạt động' },
     { value: 'Inactive', label: 'Không hoạt động' },
-    { value: 'Locked', label: 'Đã khóa' },
     { value: 'Pending', label: 'Chờ xử lý' },
   ];
 
@@ -203,14 +204,14 @@ export default function UserManagementPage() {
                           </button>
                           <button
                             onClick={() => handleToggleLock(u.id)}
-                            title={u.status === 'Locked' ? 'Mở khóa' : 'Khóa'}
+                            title={u.status === 'Inactive' ? 'Kích hoạt' : 'Vô hiệu hóa'}
                             className={`p-1.5 rounded-lg transition-colors ${
-                              u.status === 'Locked'
+                              u.status === 'Inactive'
                                 ? 'text-green-600 hover:bg-green-50'
                                 : 'text-red-500 hover:bg-red-50'
                             }`}
                           >
-                            {u.status === 'Locked' ? <Unlock size={15} /> : <Lock size={15} />}
+                            {u.status === 'Inactive' ? <Unlock size={15} /> : <Lock size={15} />}
                           </button>
                         </div>
                       </td>

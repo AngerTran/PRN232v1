@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router';
 import { Users, UserCheck, Lock, BookOpen, UserPlus, LayoutDashboard } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '../../app/components/ui/card';
@@ -9,7 +9,9 @@ import {
   getSystemActivities,
   type RoleName,
   type UserStatus,
-} from '../../data/adminMockData';
+  type AdminUser,
+  type SystemActivity,
+} from '../../services/adminApi';
 
 const STATUS_COLORS: Record<UserStatus, string> = {
   Active: 'bg-green-100 text-green-700',
@@ -76,9 +78,17 @@ export default function AdminDashboardPage() {
   const { setPageMeta } = usePageMeta();
   useEffect(() => { setPageMeta({ title: 'Admin Dashboard' }); }, []);
   const navigate = useNavigate();
-  const stats = getAdminStats();
-  const recentUsers = getAdminUsers().slice(-5).reverse();
-  const recentActivities = getSystemActivities().slice(0, 5);
+  const [stats, setStats] = useState({ totalUsers: 0, activeUsers: 0, inactiveUsers: 0, lockedUsers: 0, pendingUsers: 0, publishingSeries: 0, newUsersThisMonth: 0, roleDistribution: { admin: 0, mangaka: 0, assistant: 0, editor: 0, board: 0 } as Record<RoleName, number> });
+  const [recentUsers, setRecentUsers] = useState<AdminUser[]>([]);
+  const [recentActivities, setRecentActivities] = useState<SystemActivity[]>([]);
+
+  useEffect(() => {
+    void Promise.all([getAdminUsers(), getSystemActivities(undefined, 5)]).then(async ([users, activities]) => {
+      setRecentUsers([...users].sort((a, b) => b.createdAt.localeCompare(a.createdAt)).slice(0, 5));
+      setRecentActivities(activities);
+      setStats(await getAdminStats(users));
+    });
+  }, []);
 
   const statCards = [
     { label: 'Tổng người dùng', value: stats.totalUsers, icon: <Users size={20} />, color: 'text-blue-600', bg: 'bg-blue-50' },

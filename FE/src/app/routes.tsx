@@ -1,7 +1,7 @@
-import { createBrowserRouter, Navigate } from 'react-router';
+import { createBrowserRouter, Navigate, Outlet } from 'react-router';
 
 import MainLayout from '../components/layout/MainLayout';
-import { getLoggedInUser } from '../data/mockData';
+import { getStoredUser } from '../services/authApi';
 import LandingPage from '../pages/LandingPage';
 
 // Auth pages
@@ -32,6 +32,7 @@ import SubmissionHistoryPage from '../pages/mangaka/SubmissionHistoryPage';
 import RankingOverviewPage from '../pages/mangaka/RankingOverviewPage';
 import ChaptersOverviewPage from '../pages/mangaka/ChaptersOverviewPage';
 import AssistantsPage from '../pages/mangaka/AssistantsPage';
+import SeriesReaderPage from '../pages/mangaka/SeriesReaderPage';
 
 // Assistant pages
 import AssistantDashboardPage from '../pages/assistant/AssistantDashboardPage';
@@ -74,7 +75,7 @@ import SeriesDecisionDetailPage from '../pages/board/SeriesDecisionDetailPage';
 import BoardReportsPage from '../pages/board/BoardReportsPage';
 
 function RootRedirect() {
-  const user = getLoggedInUser();
+  const user = getStoredUser();
   if (!user) return <LandingPage />;
 
   if (user.role === 'admin') return <Navigate to="/admin/dashboard" replace />;
@@ -82,6 +83,13 @@ function RootRedirect() {
   if (user.role === 'editor') return <Navigate to="/editor/dashboard" replace />;
   if (user.role === 'board') return <Navigate to="/board/dashboard" replace />;
   return <Navigate to="/mangaka/dashboard" replace />;
+}
+
+function BoardOnlyRoutes() {
+  const user = getStoredUser();
+  if (!user) return <Navigate to="/login" replace />;
+  if (user.role !== 'board') return <Navigate to={`/${user.role}/dashboard`} replace />;
+  return <Outlet />;
 }
 
 export const router = createBrowserRouter([
@@ -110,6 +118,7 @@ export const router = createBrowserRouter([
       { path: '/mangaka/series', element: <SeriesListPage /> },
       { path: '/mangaka/series/create', element: <CreateSeriesPage /> },
       { path: '/mangaka/series/:seriesId', element: <SeriesDetailPage /> },
+      { path: '/mangaka/series/:seriesId/read', element: <SeriesReaderPage /> },
       { path: '/mangaka/series/:seriesId/chapters', element: <ChapterListPage /> },
       { path: '/mangaka/series/:seriesId/chapters/create', element: <CreateChapterPage /> },
       { path: '/mangaka/series/:seriesId/ranking', element: <SeriesRankingPage /> },
@@ -164,16 +173,21 @@ export const router = createBrowserRouter([
       { path: '/admin/settings', element: <AdminSettingsPage /> },
 
       // Board
-      { path: '/board/dashboard', element: <BoardDashboardPage /> },
-      { path: '/board/submissions', element: <BoardSubmissionsPage /> },
-      { path: '/board/submissions/:submissionId', element: <SubmissionDetailPage /> },
-      { path: '/board/approved-series', element: <BoardApprovedSeriesPage /> },
-      { path: '/board/publishing-schedule', element: <PublishingSchedulePage /> },
-      { path: '/board/vote-input', element: <VoteInputPage /> },
-      { path: '/board/rankings', element: <BoardRankingPage /> },
-      { path: '/board/series-decisions', element: <SeriesDecisionPage /> },
-      { path: '/board/series-decisions/:decisionId', element: <SeriesDecisionDetailPage /> },
-      { path: '/board/reports', element: <BoardReportsPage /> },
+      {
+        element: <BoardOnlyRoutes />,
+        children: [
+          { path: '/board/dashboard', element: <BoardDashboardPage /> },
+          { path: '/board/submissions', element: <BoardSubmissionsPage /> },
+          { path: '/board/submissions/:submissionId', element: <SubmissionDetailPage /> },
+          { path: '/board/approved-series', element: <BoardApprovedSeriesPage /> },
+          { path: '/board/publishing-schedule', element: <PublishingSchedulePage /> },
+          { path: '/board/vote-input', element: <VoteInputPage /> },
+          { path: '/board/rankings', element: <BoardRankingPage /> },
+          { path: '/board/series-decisions', element: <SeriesDecisionPage /> },
+          { path: '/board/series-decisions/:decisionId', element: <SeriesDecisionDetailPage /> },
+          { path: '/board/reports', element: <BoardReportsPage /> },
+        ],
+      },
     ],
   },
 

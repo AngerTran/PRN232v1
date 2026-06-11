@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router';
 import { usePageMeta } from '../../hooks/usePageMeta';
 import { Card } from '../../app/components/ui/card';
 import { ChapterReviewCard } from '../../app/components/ui/editor';
-import type { Chapter, Series } from '../../data/mockData';
+import type { Chapter, Series } from '../../types/domain';
 import { getSeriesChapters, getVisibleSeries } from '../../services/seriesApi';
 
 export default function ChapterReviewsPage() {

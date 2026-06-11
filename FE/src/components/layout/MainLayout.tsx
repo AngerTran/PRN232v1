@@ -2,11 +2,11 @@ import { type ReactNode } from 'react';
 import { Navigate, Outlet } from 'react-router';
 import Sidebar from './Sidebar';
 import Topbar from './Topbar';
-import { getLoggedInUser } from '../../data/mockData';
+import { getStoredUser } from '../../services/authApi';
 import { usePageMeta } from '../../hooks/usePageMeta';
 
 export default function MainLayout() {
-  const user = getLoggedInUser();
+  const user = getStoredUser();
   if (!user) return <Navigate to="/login" replace />;
 
   return (

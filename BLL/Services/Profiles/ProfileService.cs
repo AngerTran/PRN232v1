@@ -413,6 +413,11 @@ public class ProfileService
         {
             profile.Role = ParseRoleOrThrow(request.Role);
         }
+
+        if (callerIsAdmin && request.IsActive.HasValue)
+        {
+            profile.IsActive = request.IsActive.Value;
+        }
     }
 
     private async Task EnsureRoleAsync(Guid callerId, string requiredRole, CancellationToken cancellationToken)

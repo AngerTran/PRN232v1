@@ -2,7 +2,7 @@ import { useState, type FormEvent } from 'react';
 import { useNavigate, Link } from 'react-router';
 import { Eye, EyeOff, AlertCircle } from 'lucide-react';
 import { ImageWithFallback } from '@/app/components/figma/ImageWithFallback';
-import { loginUserWithApi, MOCK_CREDENTIALS } from '../../data/mockData';
+import { login } from '../../services/authApi';
 import GoogleSignInButton from '../../components/auth/GoogleSignInButton';
 import inkflowLogo from '@/imports/image-10.png';
 import workspacePhoto from '@/imports/image-4.png';
@@ -20,7 +20,7 @@ export default function LoginPage() {
     setError('');
     setLoading(true);
     try {
-      const user = await loginUserWithApi(email, password);
+      const user = await login(email, password);
       if (user) {
         if (user.role === 'admin') navigate('/admin/dashboard');
         else if (user.role === 'assistant') navigate('/assistant/dashboard');
@@ -35,31 +35,6 @@ export default function LoginPage() {
     } finally {
       setLoading(false);
     }
-  };
-
-  const fillMangakaDemo = () => {
-    setEmail(MOCK_CREDENTIALS.mangaka.email);
-    setPassword(MOCK_CREDENTIALS.mangaka.password);
-  };
-
-  const fillAssistantDemo = () => {
-    setEmail(MOCK_CREDENTIALS.assistant.email);
-    setPassword(MOCK_CREDENTIALS.assistant.password);
-  };
-
-  const fillEditorDemo = () => {
-    setEmail(MOCK_CREDENTIALS.editor.email);
-    setPassword(MOCK_CREDENTIALS.editor.password);
-  };
-
-  const fillBoardDemo = () => {
-    setEmail(MOCK_CREDENTIALS.board.email);
-    setPassword(MOCK_CREDENTIALS.board.password);
-  };
-
-  const fillAdminDemo = () => {
-    setEmail(MOCK_CREDENTIALS.admin.email);
-    setPassword(MOCK_CREDENTIALS.admin.password);
   };
 
   return (
@@ -171,45 +146,6 @@ export default function LoginPage() {
           </div>
 
           <GoogleSignInButton label="Đăng nhập với Google" />
-
-          {/* Demo accounts */}
-          <div className="mt-5 space-y-1.5">
-            <p className="text-[10px] text-gray-400 uppercase tracking-widest font-medium text-center mb-2">
-              Tài khoản demo
-            </p>
-            <div className="grid grid-cols-2 gap-1.5">
-              <button
-                onClick={fillMangakaDemo}
-                className="px-3 py-1.5 text-xs text-gray-500 border border-dashed border-gray-200 rounded-lg hover:bg-gray-50 transition-colors"
-              >
-                Mangaka
-              </button>
-              <button
-                onClick={fillAssistantDemo}
-                className="px-3 py-1.5 text-xs text-gray-500 border border-dashed border-gray-200 rounded-lg hover:bg-gray-50 transition-colors"
-              >
-                Assistant
-              </button>
-              <button
-                onClick={fillEditorDemo}
-                className="px-3 py-1.5 text-xs text-gray-500 border border-dashed border-gray-200 rounded-lg hover:bg-gray-50 transition-colors"
-              >
-                Editor
-              </button>
-              <button
-                onClick={fillBoardDemo}
-                className="px-3 py-1.5 text-xs text-gray-500 border border-dashed border-gray-200 rounded-lg hover:bg-gray-50 transition-colors"
-              >
-                Board
-              </button>
-              <button
-                onClick={fillAdminDemo}
-                className="col-span-2 px-3 py-1.5 text-xs text-red-600 border border-dashed border-red-200 rounded-lg hover:bg-red-50 transition-colors font-medium"
-              >
-                Demo Admin (Sato Kenji)
-              </button>
-            </div>
-          </div>
 
           <p className="text-center text-xs text-gray-400 mt-5">
             Chưa có tài khoản?{' '}

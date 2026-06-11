@@ -3,7 +3,7 @@ import { Calendar, FileText, ChevronRight, Trash2 } from 'lucide-react';
 import { clsx } from 'clsx';
 import Badge from './Badge';
 import ProgressBar from './ProgressBar';
-import type { Chapter } from '../../data/mockData';
+import type { Chapter } from '../../types/domain';
 import { format, isPast, differenceInDays } from 'date-fns';
 
 interface ChapterCardProps {

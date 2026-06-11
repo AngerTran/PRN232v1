@@ -1,5 +1,5 @@
 import { clsx } from 'clsx';
-import type { SeriesStatus, TaskStatus, ChapterStatus, SubmissionStatus } from '../../data/mockData';
+import type { SeriesStatus, TaskStatus, ChapterStatus, SubmissionStatus } from '../../types/domain';
 
 type AnyStatus = SeriesStatus | TaskStatus | ChapterStatus | SubmissionStatus | string;
 

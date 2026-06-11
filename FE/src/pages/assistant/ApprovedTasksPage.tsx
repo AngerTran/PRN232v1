@@ -12,7 +12,7 @@ import {
   TableHeader,
   TableRow,
 } from '../../app/components/ui/table';
-import { assistantIncome, type Task } from '../../data/mockData';
+import type { Task } from '../../types/domain';
 import { getMyTasks } from '../../services/tasksApi';
 import { Eye, CheckCircle } from 'lucide-react';
 import { format } from 'date-fns';
@@ -42,15 +42,13 @@ export default function ApprovedTasksPage() {
     };
   }, []);
 
-  // Trạng thái thanh toán chưa có ở BE → tạm suy ra từ dữ liệu mock (mặc định chờ thanh toán).
+  // Backend chưa có trạng thái thanh toán, nên hiển thị chờ thanh toán.
   const getPaymentStatus = (taskId: string) => {
-    const income = assistantIncome.find(i => i.taskId === taskId);
-    return income?.paymentStatus || 'Pending';
+    return 'Pending';
   };
 
   const getApprovedDate = (taskId: string) => {
-    const income = assistantIncome.find(i => i.taskId === taskId);
-    return income?.approvedDate || new Date().toISOString().split('T')[0];
+    return approvedTasks.find(task => task.id === taskId)?.createdAt || new Date().toISOString().split('T')[0];
   };
 
   return (

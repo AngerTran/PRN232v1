@@ -1,4 +1,4 @@
-import { Task } from '../../../../data/mockData';
+import { Task } from '../../../../types/domain';
 
 interface MangaPagePreviewProps {
   task: Task;
@@ -6,17 +6,20 @@ interface MangaPagePreviewProps {
 }
 
 export function MangaPagePreview({ task, imageUrl }: MangaPagePreviewProps) {
-  // Mock manga page URL nếu không có
-  const defaultImageUrl = 'https://images.unsplash.com/photo-1618519764620-7403abdbdfe9?w=600&h=850&fit=crop&auto=format';
-
   return (
     <div className="relative w-full max-w-md mx-auto">
       <div className="relative aspect-[3/4] bg-muted rounded-lg overflow-hidden">
-        <img
-          src={imageUrl || defaultImageUrl}
-          alt={`Trang ${task.pageNumber}`}
-          className="w-full h-full object-cover"
-        />
+        {imageUrl ? (
+          <img
+            src={imageUrl}
+            alt={`Trang ${task.pageNumber}`}
+            className="w-full h-full object-cover"
+          />
+        ) : (
+          <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
+            Trang chưa có ảnh từ backend
+          </div>
+        )}
 
         {/* Region Overlay - vùng được giao */}
         <div

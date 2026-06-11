@@ -9,7 +9,7 @@ import Button from '../../components/ui/Button';
 import EmptyState from '../../components/ui/EmptyState';
 import { usePageMeta } from '../../hooks/usePageMeta';
 import { useConfirm } from '../../components/ui/ConfirmDialog';
-import type { Series, SeriesStatus } from '../../data/mockData';
+import type { Series, SeriesStatus } from '../../types/domain';
 import { deleteSeries, getMySeries } from '../../services/seriesApi';
 import { BookOpen } from 'lucide-react';
 

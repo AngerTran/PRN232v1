@@ -1,4 +1,4 @@
-import { TaskStatus } from '../../../../data/mockData';
+import { TaskStatus } from '../../../../types/domain';
 import { Badge } from '../badge';
 
 interface TaskStatusBadgeProps {

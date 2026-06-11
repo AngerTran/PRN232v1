@@ -4,7 +4,7 @@ import { ChevronLeft, TrendingUp, TrendingDown, Minus, AlertTriangle } from 'luc
 import Card, { CardHeader, CardTitle } from '../../components/ui/Card';
 import EmptyState from '../../components/ui/EmptyState';
 import { usePageMeta } from '../../hooks/usePageMeta';
-import type { Series, SeriesRanking } from '../../data/mockData';
+import type { Series, SeriesRanking } from '../../types/domain';
 import { getSeries, getSeriesRankingTrend } from '../../services/seriesApi';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar } from 'recharts';
 import { clsx } from 'clsx';

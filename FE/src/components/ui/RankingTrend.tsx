@@ -1,7 +1,7 @@
 import { TrendingUp, TrendingDown, Minus, AlertTriangle } from 'lucide-react';
 import { clsx } from 'clsx';
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
-import type { SeriesRanking } from '../../data/mockData';
+import type { SeriesRanking } from '../../types/domain';
 
 interface RankingTrendProps {
   ranking: SeriesRanking;

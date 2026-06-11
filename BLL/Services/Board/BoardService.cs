@@ -11,9 +11,19 @@ namespace BLL.Services.Board;
 
 public class BoardService
 {
+    private const int DangerRankPositionThreshold = 30;
+    private static readonly IReadOnlySet<string> DangerDecisions = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+    {
+        "continue",
+        "monthly",
+        "hiatus",
+        "cancel"
+    };
+
     private readonly UnitOfWork _unitOfWork;
     private Repository<BoardVote> VoteRepository => _unitOfWork.Repository<BoardVote>();
     private Repository<DAL.Models.Series> SeriesRepository => _unitOfWork.Repository<DAL.Models.Series>();
+    private Repository<ActivityLog> ActivityLogRepository => _unitOfWork.Repository<ActivityLog>();
 
     public BoardService(UnitOfWork unitOfWork)
     {
@@ -30,9 +40,14 @@ public class BoardService
             throw new ArgumentException($"Invalid decision. Allowed: {string.Join(", ", VoteDecisions.All)}.");
         }
 
-        var caller = await RequireBoardMemberAsync(callerId, cancellationToken);
+        var caller = await RequireBoardMemberAsync(callerId, allowAdmin: false, cancellationToken);
         var series = await SeriesRepository.GetByIdAsync(request.SeriesId, asNoTracking: false, cancellationToken)
             ?? throw new ArgumentException("Series not found.");
+
+        if (series.Status != SeriesStatus.PendingReview)
+        {
+            throw new WorkflowForbiddenException("Only series pending board review can receive votes.");
+        }
 
         var existing = await _unitOfWork.Context.BoardVotes
             .FirstOrDefaultAsync(
@@ -188,6 +203,82 @@ public class BoardService
             x.Popularity)).ToList();
     }
 
+    public async Task<DangerSeriesDecisionResponse> DecideDangerSeriesAsync(
+        Guid callerId,
+        Guid seriesId,
+        DecideDangerSeriesRequest request,
+        CancellationToken cancellationToken = default)
+    {
+        _ = await RequireBoardMemberAsync(callerId, allowAdmin: false, cancellationToken);
+        var decision = request.Decision.Trim().ToLowerInvariant();
+        if (!DangerDecisions.Contains(decision))
+        {
+            throw new ArgumentException($"Invalid danger-series decision. Allowed: {string.Join(", ", DangerDecisions)}.");
+        }
+
+        var series = await SeriesRepository.GetByIdAsync(seriesId, asNoTracking: false, cancellationToken)
+            ?? throw new ArgumentException("Series not found.");
+        var latestRanking = await _unitOfWork.Context.Rankings
+            .AsNoTracking()
+            .Where(r => r.SeriesId == seriesId)
+            .OrderByDescending(r => r.IssueNumber)
+            .FirstOrDefaultAsync(cancellationToken);
+
+        if (series.Status != SeriesStatus.Publishing
+            || latestRanking is null
+            || latestRanking.RankPosition < DangerRankPositionThreshold)
+        {
+            throw new WorkflowForbiddenException("Only publishing series in the danger zone can receive this decision.");
+        }
+
+        var alreadyHandled = await _unitOfWork.Context.ActivityLogs
+            .AsNoTracking()
+            .AnyAsync(log => log.Action == ActivityActions.DangerDecision
+                && log.EntityType == ActivityEntityTypes.Series
+                && log.EntityId == seriesId
+                && log.CreatedAt >= latestRanking.CreatedAt,
+                cancellationToken);
+        if (alreadyHandled)
+        {
+            throw new WorkflowForbiddenException("The current danger-zone ranking has already received a board decision.");
+        }
+
+        switch (decision)
+        {
+            case "monthly":
+                series.PublishingFrequency = PublishingFrequency.Monthly;
+                break;
+            case "hiatus":
+                series.Status = SeriesStatus.Hiatus;
+                break;
+            case "cancel":
+                series.Status = SeriesStatus.Cancelled;
+                break;
+        }
+
+        series.UpdatedAt = DateTime.UtcNow;
+        SeriesRepository.Update(series);
+        await ActivityLogRepository.AddAsync(new ActivityLog
+        {
+            Id = Guid.NewGuid(),
+            UserId = callerId,
+            Action = ActivityActions.DangerDecision,
+            EntityType = ActivityEntityTypes.Series,
+            EntityId = series.Id,
+            NewData = string.IsNullOrWhiteSpace(request.Reason)
+                ? decision
+                : $"{decision}: {request.Reason.Trim()}",
+            CreatedAt = DateTime.UtcNow
+        }, cancellationToken);
+        await _unitOfWork.SaveChangesAsync(cancellationToken);
+
+        return new DangerSeriesDecisionResponse(
+            series.Id,
+            decision,
+            SeriesStatuses.ToDbValue(series.Status),
+            series.PublishingFrequency is null ? null : PublishingFrequencies.ToDbValue(series.PublishingFrequency.Value));
+    }
+
     private async Task TryAutoUpdateSeriesStatusAsync(
         DAL.Models.Series series,
         Guid seriesId,
@@ -220,7 +311,7 @@ public class BoardService
             series.UpdatedAt = DateTime.UtcNow;
             SeriesRepository.Update(series);
         }
-        else if (rejects > approves)
+        else
         {
             series.Status = SeriesStatus.Cancelled;
             series.UpdatedAt = DateTime.UtcNow;
@@ -251,14 +342,18 @@ public class BoardService
             .ToListAsync(cancellationToken);
     }
 
-    private async Task<Profile> RequireBoardMemberAsync(Guid callerId, CancellationToken cancellationToken)
+    private async Task<Profile> RequireBoardMemberAsync(
+        Guid callerId,
+        bool allowAdmin,
+        CancellationToken cancellationToken)
     {
         var caller = await _unitOfWork.Repository<Profile>().GetByIdAsync(callerId, cancellationToken: cancellationToken)
             ?? throw new WorkflowForbiddenException("Caller profile not found.");
 
-        if (!PageAccessService.IsBoard(caller.Role) && !PageAccessService.IsAdmin(caller.Role))
+        if (!PageAccessService.IsBoard(caller.Role)
+            && !(allowAdmin && PageAccessService.IsAdmin(caller.Role)))
         {
-            throw new WorkflowForbiddenException("Requires board or admin role.");
+            throw new WorkflowForbiddenException(allowAdmin ? "Requires board or admin role." : "Requires board role.");
         }
 
         return caller;
@@ -266,7 +361,7 @@ public class BoardService
 
     private async Task RequireBoardOrAdminAsync(Guid callerId, CancellationToken cancellationToken)
     {
-        _ = await RequireBoardMemberAsync(callerId, cancellationToken);
+        _ = await RequireBoardMemberAsync(callerId, allowAdmin: true, cancellationToken);
     }
 
     private static BoardVoteResponse MapVote(BoardVote v, string? seriesTitle, string? memberName) =>

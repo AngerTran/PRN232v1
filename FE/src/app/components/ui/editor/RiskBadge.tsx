@@ -1,4 +1,4 @@
-import { RiskLevel } from '../../../../data/mockData';
+import { RiskLevel } from '../../../../types/domain';
 import { Badge } from '../badge';
 
 interface RiskBadgeProps {

@@ -1,5 +1,5 @@
 import { Badge } from '../badge';
-import { type BoardSubmissionStatus, type PublishingScheduleStatus } from '../../../../data/mockData';
+import { type BoardSubmissionStatus, type PublishingScheduleStatus } from '../../../../types/domain';
 
 const submissionColors: Record<BoardSubmissionStatus, 'default' | 'secondary' | 'destructive' | 'outline'> = {
   'Pending Review': 'default',

@@ -9,7 +9,7 @@ import {
   MangaPagePreview,
   FeedbackBox,
 } from '../../app/components/ui/assistant';
-import { type Task } from '../../data/mockData';
+import { type Task } from '../../types/domain';
 import { getTask, startTask } from '../../services/tasksApi';
 import {
   Calendar,

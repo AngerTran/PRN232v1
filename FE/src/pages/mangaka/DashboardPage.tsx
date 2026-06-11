@@ -6,7 +6,7 @@ import DeadlineCard from '../../components/ui/DeadlineCard';
 import Badge from '../../components/ui/Badge';
 import Button from '../../components/ui/Button';
 import { usePageMeta } from '../../hooks/usePageMeta';
-import type { Chapter, Series } from '../../data/mockData';
+import type { Chapter, Series } from '../../types/domain';
 import { getMySeries, getSeriesChapters } from '../../services/seriesApi';
 
 type ChapterWithSeries = Chapter & { series?: Series };

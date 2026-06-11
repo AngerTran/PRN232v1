@@ -5,7 +5,6 @@ using BLL.Dtos.Tasks;
 using DAL.Models;
 using DAL.Repositories;
 using BLL.Services.Workflow;
-using BLL.Services.Workflow;
 using BLL.Services.Storage;
 using BLL.Services.Tasks;
 using BLL.Configuration;
@@ -24,6 +23,7 @@ public class SubmissionService
     private readonly SupabaseOptions _supabaseOptions;
     private Repository<Submission> SubmissionRepository => _unitOfWork.Repository<Submission>();
     private Repository<EditorTask> TaskRepository => _unitOfWork.Repository<EditorTask>();
+    private Repository<Page> PageRepository => _unitOfWork.Repository<Page>();
 
     public SubmissionService(
         UnitOfWork unitOfWork,
@@ -172,6 +172,17 @@ public class SubmissionService
         task.Status = submission.Status;
         task.CompletedAt = now;
         task.UpdatedAt = now;
+
+        if (request.Approve)
+        {
+            var page = await PageRepository.GetByIdAsync(task.PageId, asNoTracking: false, cancellationToken)
+                ?? throw new WorkflowForbiddenException("Page not found.");
+
+            page.ImageUrl = submission.FileUrl;
+            page.ThumbnailUrl = submission.PreviewImageUrl ?? submission.FileUrl;
+            page.UpdatedAt = now;
+            PageRepository.Update(page);
+        }
 
         SubmissionRepository.Update(submission);
         TaskRepository.Update(task);

@@ -1,5 +1,5 @@
 import { API_BASE_URL, apiRequest } from './apiClient';
-import type { User } from '../data/mockData';
+import type { User } from '../types/domain';
 
 interface ApiUserInfo {
   id: string;
@@ -81,6 +81,15 @@ export async function getGoogleAuthUrl(): Promise<string> {
 export async function startGoogleLogin(): Promise<void> {
   const url = await getGoogleAuthUrl();
   window.location.assign(url);
+}
+
+export async function login(email: string, password: string): Promise<User> {
+  const token = await apiRequest<ApiAuthToken>('/api/auth/login', {
+    auth: false,
+    method: 'POST',
+    body: JSON.stringify({ email: email.trim(), password }),
+  });
+  return persistSession(token);
 }
 
 export async function loginWithGoogleCode(code: string): Promise<User> {

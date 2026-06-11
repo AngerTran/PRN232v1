@@ -1,4 +1,4 @@
-import { Task } from '../../../../data/mockData';
+import { Task } from '../../../../types/domain';
 import { Card, CardContent, CardHeader, CardTitle } from '../card';
 import { TaskStatusBadge } from './TaskStatusBadge';
 import { Calendar, DollarSign } from 'lucide-react';

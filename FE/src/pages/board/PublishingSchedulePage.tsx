@@ -7,7 +7,7 @@ import { Input } from '../../app/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../../app/components/ui/select';
 import { Textarea } from '../../app/components/ui/textarea';
 import { PublishingTypeBadge } from '../../app/components/ui/board';
-import type { Series } from '../../data/mockData';
+import type { Series } from '../../types/domain';
 import {
   getVisibleSeries,
   getSeriesSchedules,

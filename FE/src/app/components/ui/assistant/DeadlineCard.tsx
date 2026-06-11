@@ -1,4 +1,4 @@
-import { AssistantCalendarEvent } from '../../../../data/mockData';
+import { AssistantCalendarEvent } from '../../../../types/domain';
 import { Card, CardContent } from '../card';
 import { Calendar, Clock } from 'lucide-react';
 import { format } from 'date-fns';

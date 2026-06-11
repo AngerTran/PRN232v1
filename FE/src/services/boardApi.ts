@@ -66,6 +66,7 @@ interface ApiLeaderboardItem {
 }
 
 export type BoardDecision = 'approve' | 'reject';
+export type DangerSeriesDecision = 'continue' | 'monthly' | 'hiatus' | 'cancel';
 
 export interface BoardVote {
   id: string;
@@ -160,4 +161,15 @@ export async function castBoardVote(
     })
   );
   return mapVote(item);
+}
+
+export async function decideDangerSeries(
+  seriesId: string,
+  decision: DangerSeriesDecision,
+  reason?: string
+): Promise<void> {
+  await apiRequest(`/api/board/danger-series/${seriesId}/decision`, {
+    method: 'POST',
+    body: JSON.stringify({ decision, reason }),
+  });
 }
