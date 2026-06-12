@@ -27,6 +27,8 @@ public partial class AppDbContext : DbContext
 
     public virtual DbSet<MangakaAssistant> MangakaAssistants { get; set; }
 
+    public virtual DbSet<SeriesEditorInvitation> SeriesEditorInvitations { get; set; }
+
     public virtual DbSet<Page> Pages { get; set; }
 
     public virtual DbSet<Profile> Profiles { get; set; }
@@ -309,6 +311,37 @@ public partial class AppDbContext : DbContext
                 .HasForeignKey(d => d.AssistantId)
                 .OnDelete(DeleteBehavior.Cascade)
                 .HasConstraintName("mangaka_assistants_assistant_id_fkey");
+        });
+
+        modelBuilder.Entity<SeriesEditorInvitation>(entity =>
+        {
+            entity.HasKey(e => new { e.SeriesId, e.EditorId })
+                .HasName("series_editor_invitations_pkey");
+
+            entity.ToTable("series_editor_invitations");
+
+            entity.HasIndex(e => e.EditorId, "idx_series_editor_invitations_editor");
+
+            entity.Property(e => e.SeriesId).HasColumnName("series_id");
+            entity.Property(e => e.EditorId).HasColumnName("editor_id");
+            entity.Property(e => e.Status)
+                .HasMaxLength(20)
+                .HasDefaultValue("pending")
+                .HasColumnName("status");
+            entity.Property(e => e.CreatedAt)
+                .HasDefaultValueSql("now()")
+                .HasColumnName("created_at");
+            entity.Property(e => e.RespondedAt).HasColumnName("responded_at");
+
+            entity.HasOne(d => d.Series).WithMany()
+                .HasForeignKey(d => d.SeriesId)
+                .OnDelete(DeleteBehavior.Cascade)
+                .HasConstraintName("series_editor_invitations_series_id_fkey");
+
+            entity.HasOne(d => d.Editor).WithMany()
+                .HasForeignKey(d => d.EditorId)
+                .OnDelete(DeleteBehavior.Cascade)
+                .HasConstraintName("series_editor_invitations_editor_id_fkey");
         });
 
         modelBuilder.Entity<Page>(entity =>

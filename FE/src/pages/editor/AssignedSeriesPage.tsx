@@ -12,7 +12,7 @@ import {
 } from '../../app/components/ui/select';
 import { SeriesSummaryCard } from '../../app/components/ui/editor';
 import type { Series } from '../../types/domain';
-import { getVisibleSeries } from '../../services/seriesApi';
+import { getEditorAssignedSeries } from '../../services/editorApi';
 import { Search } from 'lucide-react';
 
 export default function AssignedSeriesPage() {
@@ -33,7 +33,7 @@ export default function AssignedSeriesPage() {
       setError(null);
 
       try {
-        const series = await getVisibleSeries();
+        const series = await getEditorAssignedSeries();
         if (isActive) {
           setAllSeries(series);
         }
@@ -93,6 +93,7 @@ export default function AssignedSeriesPage() {
             <SelectItem value="Draft">Draft</SelectItem>
             <SelectItem value="In Progress">In Progress</SelectItem>
             <SelectItem value="Approved">Approved</SelectItem>
+            <SelectItem value="Completed">Completed</SelectItem>
             <SelectItem value="Published">Published</SelectItem>
             <SelectItem value="At Risk">At Risk</SelectItem>
           </SelectContent>

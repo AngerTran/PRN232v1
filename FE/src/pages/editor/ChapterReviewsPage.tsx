@@ -4,7 +4,8 @@ import { usePageMeta } from '../../hooks/usePageMeta';
 import { Card } from '../../app/components/ui/card';
 import { ChapterReviewCard } from '../../app/components/ui/editor';
 import type { Chapter, Series } from '../../types/domain';
-import { getSeriesChapters, getVisibleSeries } from '../../services/seriesApi';
+import { getSeriesChapters } from '../../services/seriesApi';
+import { getEditorAssignedSeries } from '../../services/editorApi';
 
 export default function ChapterReviewsPage() {
   usePageMeta({ title: 'Chapter Reviews' });
@@ -22,7 +23,7 @@ export default function ChapterReviewsPage() {
       setError(null);
 
       try {
-        const series = await getVisibleSeries();
+        const series = await getEditorAssignedSeries();
         const chapterGroups = await Promise.all(
           series.map(item => getSeriesChapters(item.id).catch(() => []))
         );

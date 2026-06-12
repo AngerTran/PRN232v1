@@ -180,6 +180,79 @@ public class SeriesController : ControllerBase
         return updated is null ? NotFound() : Ok(updated);
     }
 
+    [HttpPost("{seriesId:guid}/editor-invitations")]
+    [SwaggerOperation(Summary = "Invite editor", Description = "Mangaka sends an editor invitation for an approved series. Editor must accept before assignment.")]
+    [ProducesResponseType(typeof(SeriesEditorInvitationResponse), StatusCodes.Status201Created)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    public async Task<ActionResult<SeriesEditorInvitationResponse>> InviteEditor(
+        Guid seriesId,
+        [FromBody] InviteSeriesEditorRequest request,
+        CancellationToken cancellationToken)
+    {
+        if (!this.TryGetUserId(out var userId))
+        {
+            return Unauthorized();
+        }
+
+        var invitation = await _seriesService.InviteEditorAsync(userId, seriesId, request, cancellationToken);
+        return CreatedAtAction(nameof(GetById), new { id = seriesId }, invitation);
+    }
+
+    [HttpGet("editor-invitations/sent")]
+    [SwaggerOperation(Summary = "List sent editor invitations", Description = "Lists editor invitations sent by the authenticated mangaka.")]
+    [ProducesResponseType(typeof(IReadOnlyList<SeriesEditorInvitationResponse>), StatusCodes.Status200OK)]
+    public async Task<ActionResult<IReadOnlyList<SeriesEditorInvitationResponse>>> SentEditorInvitations(
+        CancellationToken cancellationToken)
+    {
+        if (!this.TryGetUserId(out var userId))
+        {
+            return Unauthorized();
+        }
+
+        return Ok(await _seriesService.ListSentEditorInvitationsAsync(userId, cancellationToken));
+    }
+
+    [HttpGet("editor-invitations/mine")]
+    [SwaggerOperation(Summary = "List my editor invitations", Description = "Lists editor invitations received by the authenticated editor.")]
+    [ProducesResponseType(typeof(IReadOnlyList<SeriesEditorInvitationResponse>), StatusCodes.Status200OK)]
+    public async Task<ActionResult<IReadOnlyList<SeriesEditorInvitationResponse>>> MyEditorInvitations(
+        CancellationToken cancellationToken)
+    {
+        if (!this.TryGetUserId(out var userId))
+        {
+            return Unauthorized();
+        }
+
+        return Ok(await _seriesService.ListMyEditorInvitationsAsync(userId, cancellationToken));
+    }
+
+    [HttpPatch("editor-invitations/{seriesId:guid}/{action}")]
+    [SwaggerOperation(Summary = "Respond to editor invitation", Description = "Editor accepts or rejects a series assignment invitation.")]
+    [ProducesResponseType(typeof(SeriesEditorInvitationResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<ActionResult<SeriesEditorInvitationResponse>> RespondEditorInvitation(
+        Guid seriesId,
+        string action,
+        CancellationToken cancellationToken)
+    {
+        if (!this.TryGetUserId(out var userId))
+        {
+            return Unauthorized();
+        }
+
+        if (action is not ("accept" or "reject"))
+        {
+            return BadRequest("Action must be 'accept' or 'reject'.");
+        }
+
+        var invitation = await _seriesService.RespondToEditorInvitationAsync(
+            userId,
+            seriesId,
+            action == "accept",
+            cancellationToken);
+        return invitation is null ? NotFound() : Ok(invitation);
+    }
+
     [HttpPut("{id:guid}/status")]
     [SwaggerOperation(Summary = "Update series status", Description = "Changes series workflow status according to role rules for admin, board, assigned editor, or author.")]
     [ProducesResponseType(typeof(SeriesResponse), StatusCodes.Status200OK)]

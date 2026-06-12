@@ -149,7 +149,7 @@ export default function CreateSeriesPage() {
           {saved ? '✓ Đã lưu bản nháp' : 'Lưu bản nháp'}
         </Button>
         <Button type="submit" variant="primary" loading={submitting} className="w-full">
-          Gửi đến Hội Đồng
+          Tạo series
         </Button>
       </div>
     </>

@@ -9,6 +9,7 @@ using SeriesEntity = DAL.Models.Series;
 using BLL.Services.Storage;
 using BLL.Configuration;
 using BLL.Dtos.Series;
+using BLL.Services.Notifications;
 using Microsoft.AspNetCore.Http;
 
 namespace BLL.Services.Series;
@@ -20,6 +21,7 @@ public class SeriesService
   private readonly UnitOfWork _unitOfWork;
   private readonly SupabaseStorageService _storage;
   private readonly SupabaseOptions _supabaseOptions;
+  private readonly NotificationService _notificationService;
   private Repository<SeriesEntity> SeriesRepository => _unitOfWork.Repository<SeriesEntity>();
   private Repository<Chapter> ChapterRepository => _unitOfWork.Repository<Chapter>();
   private Repository<Profile> ProfileRepository => _unitOfWork.Repository<Profile>();
@@ -27,11 +29,13 @@ public class SeriesService
   public SeriesService(
     UnitOfWork unitOfWork,
     SupabaseStorageService storage,
-    IOptions<SupabaseOptions> supabaseOptions)
+    IOptions<SupabaseOptions> supabaseOptions,
+    NotificationService notificationService)
   {
     _unitOfWork = unitOfWork;
     _storage = storage;
     _supabaseOptions = supabaseOptions.Value;
+    _notificationService = notificationService;
   }
 
   public async Task<SeriesListResponse> ListCatalogAsync(
@@ -201,15 +205,17 @@ public class SeriesService
       throw new ArgumentException($"Invalid publishing frequency. Allowed: {string.Join(", ", PublishingFrequencies.All)}.");
     }
 
-    if (request.EditorId is not null && !IsAdmin(caller.Role))
+    if (request.EditorId is not null)
     {
-      throw new SeriesForbiddenException("Only admin can assign or change the editor.");
-    }
+      if (!IsAdmin(caller.Role))
+      {
+        throw new SeriesForbiddenException("Chỉ admin mới có thể gán editor trực tiếp. Mangaka hãy gửi lời mời editor.");
+      }
 
-    if (request.EditorId is not null
-        && !await ProfileRepository.AnyAsync(p => p.Id == request.EditorId && p.Role == ProfileRole.Editor, cancellationToken))
-    {
-      throw new ArgumentException("EditorId must reference a profile with role 'editor'.");
+      if (!await ProfileRepository.AnyAsync(p => p.Id == request.EditorId && p.Role == ProfileRole.Editor, cancellationToken))
+      {
+        throw new ArgumentException("EditorId must reference a profile with role 'editor'.");
+      }
     }
 
     if (!string.IsNullOrWhiteSpace(request.Title))
@@ -252,6 +258,180 @@ public class SeriesService
     await _unitOfWork.SaveChangesAsync(cancellationToken);
 
     return await GetByIdAsync(callerId, id, cancellationToken);
+  }
+
+  public async Task<SeriesEditorInvitationResponse> InviteEditorAsync(
+    Guid callerId,
+    Guid seriesId,
+    InviteSeriesEditorRequest request,
+    CancellationToken cancellationToken = default)
+  {
+    var caller = await RequireCallerAsync(callerId, cancellationToken);
+    var series = await SeriesRepository.GetByIdAsync(seriesId, asNoTracking: false, cancellationToken)
+      ?? throw new SeriesForbiddenException("Series not found.");
+
+    if (!IsMangaka(caller.Role) || series.AuthorId != caller.Id)
+    {
+      throw new SeriesForbiddenException("Only the series author can invite an editor.");
+    }
+
+    if (!SeriesWorkflowRules.AllowsStudioProduction(series.Status))
+    {
+      throw new SeriesForbiddenException("Chỉ có thể mời editor sau khi series được hội đồng phê duyệt.");
+    }
+
+    if (series.EditorId is not null)
+    {
+      throw new SeriesForbiddenException("Series đã có editor phụ trách.");
+    }
+
+    if (!await ProfileRepository.AnyAsync(
+        p => p.Id == request.EditorId && p.Role == ProfileRole.Editor && p.IsActive != false,
+        cancellationToken))
+    {
+      throw new ArgumentException("EditorId must reference an active profile with role 'editor'.");
+    }
+
+    var invitation = await _unitOfWork.Context.SeriesEditorInvitations
+      .Include(i => i.Series)
+      .ThenInclude(s => s.Author)
+      .Include(i => i.Editor)
+      .FirstOrDefaultAsync(
+        i => i.SeriesId == seriesId && i.EditorId == request.EditorId,
+        cancellationToken);
+
+    var shouldNotify = false;
+    if (invitation is null)
+    {
+      invitation = new SeriesEditorInvitation
+      {
+        SeriesId = seriesId,
+        EditorId = request.EditorId,
+        Status = "pending",
+        CreatedAt = DateTime.UtcNow
+      };
+      await _unitOfWork.Context.SeriesEditorInvitations.AddAsync(invitation, cancellationToken);
+      invitation.Series = series;
+      invitation.Editor = await ProfileRepository.GetByIdAsync(request.EditorId, cancellationToken: cancellationToken)
+        ?? throw new ArgumentException("Editor profile not found.");
+      shouldNotify = true;
+    }
+    else if (invitation.Status == "rejected")
+    {
+      invitation.Status = "pending";
+      invitation.CreatedAt = DateTime.UtcNow;
+      invitation.RespondedAt = null;
+      shouldNotify = true;
+    }
+    else if (invitation.Status == "pending")
+    {
+      throw new ArgumentException("Lời mời đang chờ editor phản hồi.");
+    }
+    else
+    {
+      throw new ArgumentException("Editor đã chấp nhận lời mời cho series này.");
+    }
+
+    await _unitOfWork.SaveChangesAsync(cancellationToken);
+
+    if (shouldNotify)
+    {
+      await _notificationService.CreateAsync(
+        request.EditorId,
+        "Lời mời phụ trách series",
+        $"{caller.FullName} đã mời bạn phụ trách series \"{series.Title}\".",
+        cancellationToken);
+    }
+
+    return MapEditorInvitation(invitation);
+  }
+
+  public async Task<IReadOnlyList<SeriesEditorInvitationResponse>> ListSentEditorInvitationsAsync(
+    Guid callerId,
+    CancellationToken cancellationToken = default)
+  {
+    var caller = await RequireCallerAsync(callerId, cancellationToken);
+    if (!IsMangaka(caller.Role))
+    {
+      throw new SeriesForbiddenException("Requires mangaka role.");
+    }
+
+    var invitations = await EditorInvitationQuery()
+      .Where(i => i.Series.AuthorId == callerId)
+      .OrderByDescending(i => i.CreatedAt)
+      .ToListAsync(cancellationToken);
+
+    return invitations.Select(MapEditorInvitation).ToList();
+  }
+
+  public async Task<IReadOnlyList<SeriesEditorInvitationResponse>> ListMyEditorInvitationsAsync(
+    Guid callerId,
+    CancellationToken cancellationToken = default)
+  {
+    var caller = await RequireCallerAsync(callerId, cancellationToken);
+    if (!IsEditor(caller.Role))
+    {
+      throw new SeriesForbiddenException("Requires editor role.");
+    }
+
+    var invitations = await EditorInvitationQuery()
+      .Where(i => i.EditorId == callerId)
+      .OrderByDescending(i => i.CreatedAt)
+      .ToListAsync(cancellationToken);
+
+    return invitations.Select(MapEditorInvitation).ToList();
+  }
+
+  public async Task<SeriesEditorInvitationResponse?> RespondToEditorInvitationAsync(
+    Guid callerId,
+    Guid seriesId,
+    bool accept,
+    CancellationToken cancellationToken = default)
+  {
+    var caller = await RequireCallerAsync(callerId, cancellationToken);
+    if (!IsEditor(caller.Role))
+    {
+      throw new SeriesForbiddenException("Requires editor role.");
+    }
+
+    var invitation = await EditorInvitationQuery(asNoTracking: false)
+      .FirstOrDefaultAsync(i => i.SeriesId == seriesId && i.EditorId == callerId, cancellationToken);
+    if (invitation is null)
+    {
+      return null;
+    }
+
+    if (invitation.Status != "pending")
+    {
+      throw new ArgumentException("Lời mời này đã được phản hồi.");
+    }
+
+    invitation.Status = accept ? "accepted" : "rejected";
+    invitation.RespondedAt = DateTime.UtcNow;
+
+    if (accept)
+    {
+      var series = await SeriesRepository.GetByIdAsync(seriesId, asNoTracking: false, cancellationToken)
+        ?? throw new SeriesForbiddenException("Series not found.");
+      if (series.EditorId is not null && series.EditorId != callerId)
+      {
+        throw new SeriesForbiddenException("Series đã có editor phụ trách.");
+      }
+
+      series.EditorId = callerId;
+      series.UpdatedAt = DateTime.UtcNow;
+      SeriesRepository.Update(series);
+    }
+
+    await _unitOfWork.SaveChangesAsync(cancellationToken);
+
+    await _notificationService.CreateAsync(
+      invitation.Series.AuthorId,
+      accept ? "Editor đã chấp nhận lời mời" : "Editor đã từ chối lời mời",
+      $"{caller.FullName} đã {(accept ? "chấp nhận" : "từ chối")} phụ trách series \"{invitation.Series.Title}\".",
+      cancellationToken);
+
+    return MapEditorInvitation(invitation);
   }
 
   public async Task<bool> DeleteAsync(Guid callerId, Guid id, CancellationToken cancellationToken = default)
@@ -676,6 +856,18 @@ public class SeriesService
       throw new SeriesForbiddenException("Only the series author (mangaka) or admin can create chapters.");
     }
 
+    if (!IsAdmin(caller.Role))
+    {
+      try
+      {
+        SeriesWorkflowRules.EnsureAllowsChapterCreation(series.Status, request.ChapterNumber);
+      }
+      catch (InvalidOperationException ex)
+      {
+        throw new SeriesForbiddenException(ex.Message);
+      }
+    }
+
     if (await ChapterRepository.AnyAsync(
         c => c.SeriesId == seriesId && c.ChapterNumber == request.ChapterNumber,
         cancellationToken))
@@ -856,13 +1048,11 @@ public class SeriesService
       return true;
     }
 
-    if (IsEditor(caller.Role) && (series.EditorId == caller.Id || series.EditorId is null))
+    if (IsEditor(caller.Role) && series.EditorId == caller.Id)
     {
-      return newStatus is SeriesStatus.Approved
-        or SeriesStatus.Publishing
+      return newStatus is SeriesStatus.Publishing
         or SeriesStatus.Completed
-        or SeriesStatus.Hiatus
-        or SeriesStatus.PendingReview;
+        or SeriesStatus.Hiatus;
     }
 
     if (series.AuthorId == caller.Id && IsMangaka(caller.Role))
@@ -874,6 +1064,29 @@ public class SeriesService
 
     return false;
   }
+
+  private IQueryable<SeriesEditorInvitation> EditorInvitationQuery(bool asNoTracking = true)
+  {
+    var query = _unitOfWork.Context.SeriesEditorInvitations
+      .Include(i => i.Series)
+      .ThenInclude(s => s.Author)
+      .Include(i => i.Editor)
+      .AsQueryable();
+
+    return asNoTracking ? query.AsNoTracking() : query;
+  }
+
+  private static SeriesEditorInvitationResponse MapEditorInvitation(SeriesEditorInvitation invitation) =>
+    new(
+      invitation.SeriesId,
+      invitation.Series.Title,
+      invitation.Series.AuthorId,
+      invitation.Series.Author.FullName,
+      invitation.EditorId,
+      invitation.Editor.FullName,
+      invitation.Status,
+      invitation.CreatedAt,
+      invitation.RespondedAt);
 
   private async Task<Profile> RequireCallerAsync(Guid callerId, CancellationToken cancellationToken) =>
     await ProfileRepository.GetByIdAsync(callerId, cancellationToken: cancellationToken)

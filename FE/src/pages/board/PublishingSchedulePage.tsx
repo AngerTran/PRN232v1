@@ -10,10 +10,12 @@ import { PublishingTypeBadge } from '../../app/components/ui/board';
 import type { Series } from '../../types/domain';
 import {
   getVisibleSeries,
+  getCompletedSeries,
   getSeriesSchedules,
   createSchedule,
   updateSchedule,
   deleteSchedule,
+  canSchedulePublishing,
   type PublishingScheduleItem,
 } from '../../services/seriesApi';
 import { Plus, X, CalendarDays, Trash2, Pencil } from 'lucide-react';
@@ -38,6 +40,7 @@ export default function PublishingSchedulePage() {
   const focusSeriesId = searchParams.get('seriesId') ?? '';
 
   const [series, setSeries] = useState<Series[]>([]);
+  const [schedulableSeries, setSchedulableSeries] = useState<Series[]>([]);
   const [rows, setRows] = useState<ScheduleRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -56,7 +59,7 @@ export default function PublishingSchedulePage() {
     setLoading(true);
     setError('');
     try {
-      const list = await getVisibleSeries();
+      const [list, completed] = await Promise.all([getVisibleSeries(), getCompletedSeries()]);
       const groups = await Promise.all(
         list.map(async s => {
           const schedules = await getSeriesSchedules(s.id).catch(() => []);
@@ -64,6 +67,7 @@ export default function PublishingSchedulePage() {
         })
       );
       setSeries(list);
+      setSchedulableSeries(completed);
       setRows(groups.flat());
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Không thể tải lịch xuất bản.');
@@ -81,7 +85,7 @@ export default function PublishingSchedulePage() {
   useEffect(() => {
     if (!focusSeriesId || !focusSeries || loading) return;
 
-    if (visibleRows.length === 0) {
+    if (visibleRows.length === 0 && canSchedulePublishing(focusSeries.status)) {
       setEditingId(null);
       setForm({
         ...emptyForm,
@@ -180,6 +184,12 @@ export default function PublishingSchedulePage() {
         <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{error}</div>
       )}
 
+      {focusSeries && !canSchedulePublishing(focusSeries.status) && (
+        <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+          Series &quot;{focusSeries.title}&quot; chưa được editor đánh dấu hoàn thành — chưa thể tạo lịch xuất bản mới.
+        </div>
+      )}
+
       {showForm && (
         <Card className="shadow-sm border-primary/20">
           <CardHeader className="pb-4">
@@ -201,7 +211,7 @@ export default function PublishingSchedulePage() {
                     <SelectValue placeholder="Chọn series..." />
                   </SelectTrigger>
                   <SelectContent>
-                    {series.map(s => (
+                    {(isEditing ? series : schedulableSeries).map(s => (
                       <SelectItem key={s.id} value={s.id}>{s.title}</SelectItem>
                     ))}
                   </SelectContent>

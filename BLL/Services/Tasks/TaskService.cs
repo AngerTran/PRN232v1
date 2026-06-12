@@ -204,6 +204,18 @@ public class TaskService
             throw new WorkflowForbiddenException("Only mangaka, assigned editor, or admin can create tasks.");
         }
 
+        if (!PageAccessService.IsAdmin(caller.Role))
+        {
+            try
+            {
+                SeriesWorkflowRules.EnsureAllowsStudioProduction(ctx.Series.Status);
+            }
+            catch (InvalidOperationException ex)
+            {
+                throw new WorkflowForbiddenException(ex.Message);
+            }
+        }
+
         if (request.AssignedTo is not null)
         {
             await EnsureCanAssignAssistantAsync(caller, request.AssignedTo.Value, cancellationToken);

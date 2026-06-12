@@ -5,7 +5,8 @@ import { Card, CardContent, CardHeader, CardTitle } from '../../app/components/u
 import { SeriesSummaryCard, ChapterReviewCard } from '../../app/components/ui/editor';
 import type { Chapter, Series } from '../../types/domain';
 import { getStoredUser } from '../../services/authApi';
-import { getSeriesChapters, getVisibleSeries } from '../../services/seriesApi';
+import { getSeriesChapters } from '../../services/seriesApi';
+import { getEditorAssignedSeries } from '../../services/editorApi';
 import {
   BookOpen,
   FileText,
@@ -31,7 +32,7 @@ export default function EditorDashboardPage() {
       setError(null);
 
       try {
-        const series = await getVisibleSeries();
+        const series = await getEditorAssignedSeries();
         const chapterGroups = await Promise.all(
           series.map(item => getSeriesChapters(item.id).catch(() => []))
         );

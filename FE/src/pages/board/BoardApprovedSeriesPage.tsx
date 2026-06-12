@@ -6,7 +6,7 @@ import { Button } from '../../app/components/ui/button';
 import { Input } from '../../app/components/ui/input';
 import { Badge } from '../../app/components/ui/badge';
 import type { Series, SeriesStatus } from '../../types/domain';
-import { getApprovedSeries, getSeriesSchedules } from '../../services/seriesApi';
+import { getApprovedSeries, getSeriesSchedules, canSchedulePublishing } from '../../services/seriesApi';
 import { PublishingTypeBadge } from '../../app/components/ui/board';
 import { Search, CalendarDays, CalendarPlus } from 'lucide-react';
 
@@ -19,8 +19,10 @@ function statusLabel(status: SeriesStatus): { text: string; className: string } 
   switch (status) {
     case 'In Progress':
       return { text: 'Đang xuất bản', className: 'text-blue-700 bg-blue-100' };
+    case 'Completed':
+      return { text: 'Đã hoàn thành', className: 'text-teal-700 bg-teal-100' };
     case 'Published':
-      return { text: 'Hoàn thành', className: 'text-slate-700 bg-slate-100' };
+      return { text: 'Đã xuất bản', className: 'text-slate-700 bg-slate-100' };
     case 'Approved':
     default:
       return { text: 'Đã duyệt', className: 'text-green-700 bg-green-100' };
@@ -169,18 +171,24 @@ export default function BoardApprovedSeriesPage() {
                         </span>
                       </td>
                       <td className="px-4 py-3">
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={() => navigate(`/board/publishing-schedule?seriesId=${series.id}`)}
-                        >
-                          {series.hasSchedule ? (
-                            <CalendarDays className="h-3.5 w-3.5 mr-1" />
-                          ) : (
-                            <CalendarPlus className="h-3.5 w-3.5 mr-1" />
-                          )}
-                          {series.hasSchedule ? 'Xem lịch' : 'Lên lịch'}
-                        </Button>
+                        {canSchedulePublishing(series.status) ? (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => navigate(`/board/publishing-schedule?seriesId=${series.id}`)}
+                          >
+                            {series.hasSchedule ? (
+                              <CalendarDays className="h-3.5 w-3.5 mr-1" />
+                            ) : (
+                              <CalendarPlus className="h-3.5 w-3.5 mr-1" />
+                            )}
+                            {series.hasSchedule ? 'Xem lịch' : 'Lên lịch'}
+                          </Button>
+                        ) : (
+                          <span className="text-xs text-muted-foreground" title="Chờ editor đánh dấu hoàn thành">
+                            Chờ hoàn thành
+                          </span>
+                        )}
                       </td>
                     </tr>
                   );

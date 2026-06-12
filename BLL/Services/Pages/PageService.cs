@@ -79,6 +79,8 @@ public class PageService
             throw new WorkflowForbiddenException("Only the series author (mangaka), assistant, or admin can upload pages.");
         }
 
+        EnsurePageProductionAllowed(caller, chapter);
+
         if (await PageRepository.AnyAsync(
             p => p.ChapterId == chapterId && p.PageNumber == request.PageNumber,
             cancellationToken))
@@ -334,6 +336,28 @@ public class PageService
         PageAccessService.IsAdmin(caller.Role)
         || (PageAccessService.IsMangaka(caller.Role) && chapter.Series.AuthorId == caller.Id)
         || PageAccessService.IsAssistant(caller.Role);
+
+    private static void EnsurePageProductionAllowed(Profile caller, Chapter chapter)
+    {
+        if (PageAccessService.IsAdmin(caller.Role))
+        {
+            return;
+        }
+
+        if (chapter.ChapterNumber == 0 && SeriesWorkflowRules.AllowsProposalChapter(chapter.Series.Status))
+        {
+            return;
+        }
+
+        try
+        {
+            SeriesWorkflowRules.EnsureAllowsStudioProduction(chapter.Series.Status);
+        }
+        catch (InvalidOperationException ex)
+        {
+            throw new WorkflowForbiddenException(ex.Message);
+        }
+    }
 
     private static PageResponse MapToDto(Page page) =>
         new(

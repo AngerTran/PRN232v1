@@ -5,7 +5,7 @@ import Button from '../../components/ui/Button';
 import Card, { CardHeader, CardTitle } from '../../components/ui/Card';
 import { MultiUploadBox } from '../../components/ui/UploadBox';
 import { usePageMeta } from '../../hooks/usePageMeta';
-import { createChapter, getSeries, getSeriesChapters } from '../../services/seriesApi';
+import { createChapter, getSeries, getSeriesChapters, canMangakaProduceOnSeries, SERIES_PRODUCTION_LOCK_HINT } from '../../services/seriesApi';
 import { uploadChapterPage } from '../../services/workspaceApi';
 
 export default function CreateChapterPage() {
@@ -24,6 +24,7 @@ export default function CreateChapterPage() {
   const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [productionBlocked, setProductionBlocked] = useState<string | null>(null);
 
   useEffect(() => {
     setPageMeta({
@@ -43,6 +44,11 @@ export default function CreateChapterPage() {
       .then(([series, chapters]) => {
         if (!isActive) return;
         setSeriesTitle(series.title);
+        if (!canMangakaProduceOnSeries(series.status)) {
+          setProductionBlocked(SERIES_PRODUCTION_LOCK_HINT[series.status] ?? 'Series chưa được phê duyệt — không thể tạo chương.');
+        } else {
+          setProductionBlocked(null);
+        }
         const weekly = series.publishingType === 'Weekly';
         setIsWeekly(weekly);
         const next = Math.max(0, ...chapters.map(c => c.number)) + 1;
@@ -66,7 +72,7 @@ export default function CreateChapterPage() {
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
-    if (!seriesId) return;
+    if (!seriesId || productionBlocked) return;
     setError(null);
     setLoading(true);
     try {
@@ -108,6 +114,12 @@ export default function CreateChapterPage() {
           <p className="text-sm text-muted-foreground">{seriesTitle}</p>
         </div>
       </div>
+
+      {productionBlocked && (
+        <div className="mb-5 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+          {productionBlocked}
+        </div>
+      )}
 
       <form onSubmit={handleSubmit} className="space-y-5">
         <Card>
@@ -154,7 +166,7 @@ export default function CreateChapterPage() {
 
         <div className="flex gap-3 justify-end">
           <Button type="button" variant="outline" onClick={() => navigate(`/mangaka/series/${seriesId}/chapters`)}>Hủy</Button>
-          <Button type="submit" variant="primary" loading={loading}>Tạo Chương</Button>
+          <Button type="submit" variant="primary" loading={loading} disabled={Boolean(productionBlocked)}>Tạo Chương</Button>
         </div>
       </form>
     </div>

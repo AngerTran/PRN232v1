@@ -41,6 +41,12 @@ export async function getAssistants(): Promise<ProfileSummary[]> {
   return items.map(mapProfile);
 }
 
+/** Danh sách editor để mangaka mời phụ trách series. */
+export async function getEditors(): Promise<ProfileSummary[]> {
+  const items = unwrap(await apiRequest<ApiEnvelope<ApiProfile[]>>('/api/profiles/editors'));
+  return items.map(mapProfile);
+}
+
 export interface AssistantInvitation {
   mangakaId: string;
   mangakaName: string;

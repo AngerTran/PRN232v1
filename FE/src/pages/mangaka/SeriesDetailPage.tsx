@@ -1,6 +1,8 @@
 import { useState, useEffect } from 'react';
-import { useParams, useNavigate } from 'react-router';
-import { ArrowLeft, BookOpen, FileText, BarChart2, Send, Plus, ExternalLink } from 'lucide-react';
+import { useParams, useNavigate, useLocation } from 'react-router';
+import { ArrowLeft, BookOpen, FileText, BarChart2, Send, Plus, UserPlus, CheckCircle2 } from 'lucide-react';
+import { getStoredUser } from '../../services/authApi';
+import { getEditors, type ProfileSummary } from '../../services/profilesApi';
 import { Tabs, TabsList, Tab, TabPanel } from '../../components/ui/Tabs';
 import Badge from '../../components/ui/Badge';
 import Button from '../../components/ui/Button';
@@ -11,24 +13,52 @@ import EmptyState from '../../components/ui/EmptyState';
 import { usePageMeta } from '../../hooks/usePageMeta';
 import { useConfirm } from '../../components/ui/ConfirmDialog';
 import type { Chapter, Series } from '../../types/domain';
-import { getSeries, getSeriesChapters, submitSeriesForReview } from '../../services/seriesApi';
+import {
+  getSeries,
+  getSeriesChapters,
+  getSeriesStats,
+  isSeriesSubmitted,
+  canMangakaProduceOnSeries,
+  SERIES_PRODUCTION_LOCK_HINT,
+  SERIES_SUBMISSION_STATUS_HINT,
+  submitSeriesForReview,
+  inviteSeriesEditor,
+  getSentEditorInvitations,
+  markSeriesCompleted,
+  type SeriesEditorInvitation,
+  type SeriesStats,
+} from '../../services/seriesApi';
 
 export default function SeriesDetailPage() {
   const { seriesId } = useParams<{ seriesId: string }>();
   const navigate = useNavigate();
+  const location = useLocation();
   const { setPageMeta } = usePageMeta();
   const confirm = useConfirm();
+  const user = getStoredUser();
+  const isEditorView = user?.role === 'editor' && location.pathname.startsWith('/editor/');
+  const isMangakaView = !isEditorView;
+
   const [tab, setTab] = useState('chapters');
   const [series, setSeries] = useState<Series | null>(null);
   const [chapters, setChapters] = useState<Chapter[]>([]);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
+  const [completing, setCompleting] = useState(false);
+  const [invitingEditor, setInvitingEditor] = useState(false);
+  const [pendingEditorInvite, setPendingEditorInvite] = useState<SeriesEditorInvitation | null>(null);
+  const [editors, setEditors] = useState<ProfileSummary[]>([]);
+  const [selectedEditorId, setSelectedEditorId] = useState('');
   const [error, setError] = useState('');
+  const [submissionStats, setSubmissionStats] = useState<SeriesStats | null>(null);
+  const [submissionStatsLoading, setSubmissionStatsLoading] = useState(false);
 
-  // Series-level editorial submissions and ranking history are not yet exposed
-  // by the backend, so these sections render their empty states for now.
-  const submissions: never[] = [];
   const ranking = null;
+  const canProduce = series ? canMangakaProduceOnSeries(series.status) : false;
+  const productionLockHint = series ? SERIES_PRODUCTION_LOCK_HINT[series.status] : undefined;
+  const canInviteEditor = isMangakaView && series && canProduce && !series.editorId && !pendingEditorInvite;
+  const isAssignedEditor = Boolean(isEditorView && series && user && series.editorId === user.id);
+  const canMarkComplete = isAssignedEditor && canProduce;
 
   useEffect(() => {
     if (!seriesId) return;
@@ -77,6 +107,113 @@ export default function SeriesDetailPage() {
     }
   }, [series?.id]);
 
+  useEffect(() => {
+    if (!seriesId || !series || !isSeriesSubmitted(series.status) || tab !== 'submissions') {
+      setSubmissionStats(null);
+      return;
+    }
+
+    let active = true;
+    setSubmissionStatsLoading(true);
+    getSeriesStats(seriesId)
+      .then(stats => {
+        if (active) setSubmissionStats(stats);
+      })
+      .catch(() => {
+        if (active) setSubmissionStats(null);
+      })
+      .finally(() => {
+        if (active) setSubmissionStatsLoading(false);
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [seriesId, series?.status, tab]);
+
+  useEffect(() => {
+    if (!canInviteEditor) {
+      setEditors([]);
+      return;
+    }
+
+    let active = true;
+    getEditors()
+      .then(items => {
+        if (active) setEditors(items);
+      })
+      .catch(() => {
+        if (active) setEditors([]);
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [canInviteEditor]);
+
+  useEffect(() => {
+    if (!isMangakaView || !seriesId) {
+      setPendingEditorInvite(null);
+      return;
+    }
+
+    let active = true;
+    getSentEditorInvitations()
+      .then(items => {
+        if (!active) return;
+        const pending = items.find(item => item.seriesId === seriesId && item.status === 'pending') ?? null;
+        setPendingEditorInvite(pending);
+      })
+      .catch(() => {
+        if (active) setPendingEditorInvite(null);
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [isMangakaView, seriesId, series?.editorId]);
+
+  const handleInviteEditor = async () => {
+    if (!series || !selectedEditorId) return;
+    setInvitingEditor(true);
+    setError('');
+    try {
+      const invitation = await inviteSeriesEditor(series.id, selectedEditorId);
+      setPendingEditorInvite(invitation);
+      setSelectedEditorId('');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Không thể gửi lời mời editor.');
+    } finally {
+      setInvitingEditor(false);
+    }
+  };
+
+  const handleMarkComplete = async () => {
+    if (!series) return;
+    const confirmed = await confirm({
+      title: 'Hoàn thành sản xuất',
+      message: (
+        <>
+          Xác nhận series <span className="font-semibold text-foreground">{series.title}</span> đã hoàn thành?
+          Hội đồng chỉ có thể lên lịch xuất bản sau bước này.
+        </>
+      ),
+      confirmText: 'Đánh dấu hoàn thành',
+    });
+    if (!confirmed) return;
+
+    setCompleting(true);
+    setError('');
+    try {
+      const updated = await markSeriesCompleted(series.id);
+      setSeries(prev => prev ? { ...prev, status: updated.status } : prev);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Không thể cập nhật trạng thái series.');
+    } finally {
+      setCompleting(false);
+    }
+  };
+
   const handleSubmitForReview = async () => {
     if (!series) return;
     const confirmed = await confirm({
@@ -103,7 +240,7 @@ export default function SeriesDetailPage() {
   };
 
   if (loading) {
-    return <div className="p-6 text-sm text-muted-foreground">Dang tai series...</div>;
+    return <div className="p-6 text-sm text-muted-foreground">Đang tải series...</div>;
   }
 
   if (!series) {
@@ -122,15 +259,37 @@ export default function SeriesDetailPage() {
         </div>
       )}
 
+      {isMangakaView && productionLockHint && (
+        <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+          {productionLockHint}
+        </div>
+      )}
+
       {series.status === 'Submitted' && (
         <div className="rounded-xl border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-800">
-          Series đang chờ hội đồng xét duyệt.
+          Series đang chờ hội đồng xét duyệt — mọi thao tác sản xuất tạm khóa.
         </div>
       )}
 
       {series.status === 'Cancelled' && (
         <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
           Series đã bị hội đồng từ chối.
+        </div>
+      )}
+
+      {isEditorView && series && !series.editorId && (
+        <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+          Bạn chưa được gán phụ trách series này. Kiểm tra{' '}
+          <button type="button" className="font-semibold underline" onClick={() => navigate('/editor/invitations')}>
+            lời mời phụ trách
+          </button>
+          {' '}từ mangaka.
+        </div>
+      )}
+
+      {pendingEditorInvite && (
+        <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+          Đã gửi lời mời tới <span className="font-semibold">{pendingEditorInvite.editorName}</span> — chờ editor chấp nhận.
         </div>
       )}
 
@@ -167,20 +326,34 @@ export default function SeriesDetailPage() {
               <span className="font-bold text-lg text-foreground">{series.chaptersCount}</span>
             </div>
             <div className="flex gap-2 ml-auto flex-wrap">
-              {series.status === 'Draft' && (
+              {isMangakaView && series.status === 'Draft' && (
                 <Button variant="primary" size="sm" loading={submitting} onClick={handleSubmitForReview}>
                   <Send size={14} /> Gửi xét duyệt
                 </Button>
               )}
-              <Button variant="outline" size="sm" onClick={() => navigate(`/mangaka/series/${series.id}/chapters`)}>
-                <FileText size={14} /> Chương
-              </Button>
-              <Button variant="outline" size="sm" onClick={() => navigate(`/mangaka/series/${series.id}/read`)}>
-                <BookOpen size={14} /> Đọc toàn bộ
-              </Button>
-              <Button variant="primary" size="sm" onClick={() => navigate(`/mangaka/series/${series.id}/chapters/create`)}>
-                <Plus size={14} /> Chương mới
-              </Button>
+              {canMarkComplete && (
+                <Button variant="primary" size="sm" loading={completing} onClick={handleMarkComplete}>
+                  <CheckCircle2 size={14} /> Hoàn thành sản xuất
+                </Button>
+              )}
+              {isMangakaView && (
+                <>
+                  <Button variant="outline" size="sm" onClick={() => navigate(`/mangaka/series/${series.id}/chapters`)}>
+                    <FileText size={14} /> Chương
+                  </Button>
+                  <Button variant="outline" size="sm" onClick={() => navigate(`/mangaka/series/${series.id}/read`)}>
+                    <BookOpen size={14} /> Đọc toàn bộ
+                  </Button>
+                  <Button
+                    variant="primary"
+                    size="sm"
+                    disabled={!canProduce}
+                    onClick={() => navigate(`/mangaka/series/${series.id}/chapters/create`)}
+                  >
+                    <Plus size={14} /> Chương mới
+                  </Button>
+                </>
+              )}
             </div>
           </div>
         </div>
@@ -192,7 +365,7 @@ export default function SeriesDetailPage() {
           <Tab value="overview"><BookOpen size={14} className="inline mr-1.5" />Tổng quan</Tab>
           <Tab value="chapters"><FileText size={14} className="inline mr-1.5" />Chương ({chapters.length})</Tab>
           {ranking && <Tab value="ranking"><BarChart2 size={14} className="inline mr-1.5" />Xếp hạng</Tab>}
-          <Tab value="submissions"><Send size={14} className="inline mr-1.5" />Nộp bài ({submissions.length})</Tab>
+          <Tab value="submissions"><Send size={14} className="inline mr-1.5" />Nộp series</Tab>
         </TabsList>
 
         <TabPanel value="overview" className="mt-5">
@@ -212,6 +385,7 @@ export default function SeriesDetailPage() {
               <dl className="space-y-3">
                 {[
                   { label: 'Trạng thái', value: <Badge status={series.status} /> },
+                  { label: 'Editor phụ trách', value: series.editorName ?? 'Chưa mời' },
                   { label: 'Thể loại', value: series.genre },
                   { label: 'Đối tượng độc giả', value: series.targetAudience },
                   { label: 'Lịch xuất bản', value: series.publishingType },
@@ -225,18 +399,61 @@ export default function SeriesDetailPage() {
                 ))}
               </dl>
             </Card>
+            {canInviteEditor && (
+              <Card>
+                <CardHeader><CardTitle>Mời Editor phụ trách</CardTitle></CardHeader>
+                <p className="text-sm text-muted-foreground mb-3">
+                  Chọn editor giám sát quá trình sản xuất series sau khi được hội đồng phê duyệt.
+                </p>
+                {editors.length === 0 ? (
+                  <p className="text-sm text-muted-foreground">Không có editor khả dụng.</p>
+                ) : (
+                  <div className="flex flex-col sm:flex-row gap-2">
+                    <select
+                      className="flex-1 rounded-lg border border-border bg-background px-3 py-2 text-sm"
+                      value={selectedEditorId}
+                      onChange={e => setSelectedEditorId(e.target.value)}
+                    >
+                      <option value="">Chọn editor...</option>
+                      {editors.map(editor => (
+                        <option key={editor.id} value={editor.id}>{editor.name}</option>
+                      ))}
+                    </select>
+                    <Button
+                      variant="primary"
+                      size="sm"
+                      loading={invitingEditor}
+                      disabled={!selectedEditorId}
+                      onClick={handleInviteEditor}
+                    >
+                      <UserPlus size={14} /> Gửi lời mời
+                    </Button>
+                  </div>
+                )}
+              </Card>
+            )}
           </div>
         </TabPanel>
 
         <TabPanel value="chapters" className="mt-5">
           <div className="flex items-center justify-between mb-4">
             <p className="text-sm text-muted-foreground">{chapters.length} chương</p>
-            <Button variant="primary" size="sm" onClick={() => navigate(`/mangaka/series/${series.id}/chapters/create`)}>
-              <Plus size={14} /> Thêm chương
-            </Button>
+            {isMangakaView && (
+              <Button
+                variant="primary"
+                size="sm"
+                disabled={!canProduce}
+                onClick={() => navigate(`/mangaka/series/${series.id}/chapters/create`)}
+              >
+                <Plus size={14} /> Thêm chương
+              </Button>
+            )}
           </div>
           {chapters.length === 0 ? (
-            <EmptyState title="Chưa có chương nào" description="Tạo chương đầu tiên để bắt đầu." />
+            <EmptyState
+              title="Chưa có chương nào"
+              description={canProduce ? 'Tạo chương đầu tiên để bắt đầu.' : (productionLockHint ?? 'Chưa thể tạo chương.')}
+            />
           ) : (
             <div className="space-y-2">
               {chapters.sort((a, b) => a.number - b.number).map(ch => (
@@ -251,33 +468,64 @@ export default function SeriesDetailPage() {
         </TabPanel>
 
         <TabPanel value="submissions" className="mt-5">
-          {submissions.length === 0 ? (
-            <EmptyState title="Chưa có nộp bài" description="Chưa có bài nộp biên tập nào cho series này." />
+          {!isSeriesSubmitted(series.status) ? (
+            <EmptyState
+              title="Series chưa được nộp"
+              description="Gửi series lên hội đồng biên tập để bắt đầu quy trình duyệt."
+              action={
+                <Button variant="primary" size="sm" loading={submitting} onClick={handleSubmitForReview}>
+                  <Send size={14} /> Gửi xét duyệt
+                </Button>
+              }
+            />
           ) : (
-            <Card padding="none">
-              <div className="overflow-x-auto">
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="border-b border-border bg-muted/30">
-                      <th className="px-5 py-3 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wide">Ngày</th>
-                      <th className="px-5 py-3 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wide">Trạng thái</th>
-                      <th className="px-5 py-3 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wide">Quyết định</th>
-                      <th className="px-5 py-3 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wide hidden md:table-cell">Phản hồi</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-border">
-                    {submissions.map(sub => (
-                      <tr key={sub.id} className="hover:bg-muted/20 transition-colors">
-                        <td className="px-5 py-3 text-muted-foreground">{sub.submittedDate}</td>
-                        <td className="px-5 py-3"><Badge status={sub.status} /></td>
-                        <td className="px-5 py-3 text-sm font-medium">{sub.boardDecision ?? '—'}</td>
-                        <td className="px-5 py-3 text-muted-foreground text-xs max-w-xs truncate hidden md:table-cell">{sub.feedback ?? '—'}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </Card>
+            <div className="space-y-4">
+              <Card>
+                <CardHeader><CardTitle>Trạng thái nộp series</CardTitle></CardHeader>
+                <div className="space-y-4">
+                  <div className="flex items-center gap-3">
+                    <Badge status={series.status} size="md" />
+                    <p className="text-sm text-foreground/80">{SERIES_SUBMISSION_STATUS_HINT[series.status]}</p>
+                  </div>
+                  <dl className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm">
+                    <div>
+                      <dt className="text-muted-foreground font-medium">Ngày tạo</dt>
+                      <dd className="font-semibold mt-1">{series.createdAt}</dd>
+                    </div>
+                    <div>
+                      <dt className="text-muted-foreground font-medium">Cập nhật gần nhất</dt>
+                      <dd className="font-semibold mt-1">{series.updatedAt}</dd>
+                    </div>
+                  </dl>
+                </div>
+              </Card>
+
+              {submissionStatsLoading ? (
+                <p className="text-sm text-muted-foreground">Đang tải thống kê duyệt...</p>
+              ) : submissionStats ? (
+                <Card>
+                  <CardHeader><CardTitle>Thống kê hội đồng</CardTitle></CardHeader>
+                  <dl className="grid grid-cols-2 sm:grid-cols-4 gap-4 text-sm">
+                    <div>
+                      <dt className="text-muted-foreground font-medium">Tổng vote</dt>
+                      <dd className="font-bold text-lg mt-1">{submissionStats.boardVoteCount}</dd>
+                    </div>
+                    <div>
+                      <dt className="text-muted-foreground font-medium">Đồng ý</dt>
+                      <dd className="font-bold text-lg mt-1 text-green-700">{submissionStats.approveVotes}</dd>
+                    </div>
+                    <div>
+                      <dt className="text-muted-foreground font-medium">Từ chối</dt>
+                      <dd className="font-bold text-lg mt-1 text-red-700">{submissionStats.rejectVotes}</dd>
+                    </div>
+                    <div>
+                      <dt className="text-muted-foreground font-medium">Lịch xuất bản</dt>
+                      <dd className="font-bold text-lg mt-1">{submissionStats.scheduleCount}</dd>
+                    </div>
+                  </dl>
+                </Card>
+              ) : null}
+            </div>
           )}
         </TabPanel>
       </Tabs>

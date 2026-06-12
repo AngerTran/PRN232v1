@@ -49,6 +49,20 @@ public record UpdateSeriesRequest(
 public record UpdateSeriesStatusRequest(
     [Required, MaxLength(30)] string Status);
 
+public record InviteSeriesEditorRequest(
+    [Required] Guid EditorId);
+
+public record SeriesEditorInvitationResponse(
+    Guid SeriesId,
+    string SeriesTitle,
+    Guid MangakaId,
+    string MangakaName,
+    Guid EditorId,
+    string EditorName,
+    string Status,
+    DateTime CreatedAt,
+    DateTime? RespondedAt);
+
 public record SeriesListResponse(
     IReadOnlyList<SeriesResponse> Data,
     int Total,

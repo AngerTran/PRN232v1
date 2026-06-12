@@ -2,7 +2,7 @@
 
 export type SeriesStatus =
   | 'Draft' | 'Submitted' | 'Approved' | 'In Progress'
-  | 'Revision Required' | 'At Risk' | 'Published' | 'Cancelled';
+  | 'Revision Required' | 'At Risk' | 'Completed' | 'Published' | 'Cancelled';
 
 export type ChapterStatus = 'Draft' | 'In Progress' | 'Review' | 'Approved' | 'Published';
 export type PageStatus = 'Draft' | 'In Progress' | 'Completed' | 'Approved';
@@ -44,6 +44,8 @@ export interface Series {
   coverUrl: string;
   mangakaId: string;
   mangakaName?: string;
+  editorId?: string;
+  editorName?: string;
   mainCharacters?: string;
   createdAt: string;
   updatedAt: string;

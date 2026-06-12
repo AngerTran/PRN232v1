@@ -13,7 +13,8 @@ import {
   TableRow,
 } from '../../app/components/ui/table';
 import type { Series } from '../../types/domain';
-import { getVisibleSeries, getSeriesRanking } from '../../services/seriesApi';
+import { getSeriesRanking } from '../../services/seriesApi';
+import { getEditorAssignedSeries } from '../../services/editorApi';
 import { TrendingUp, TrendingDown, Minus, Eye, Shield } from 'lucide-react';
 
 export default function RankingWatchPage() {
@@ -32,7 +33,7 @@ export default function RankingWatchPage() {
 
       try {
         const [items, rankings] = await Promise.all([
-          getVisibleSeries(),
+          getEditorAssignedSeries(),
           getSeriesRanking().catch(() => []),
         ]);
         const rankById = new Map(rankings.map(r => [r.seriesId, r]));
@@ -178,7 +179,7 @@ export default function RankingWatchPage() {
                           <Button
                             variant="outline"
                             size="sm"
-                            onClick={() => navigate('/editor/series-defense')}
+                            onClick={() => navigate(`/editor/series-defense?seriesId=${s.id}`)}
                           >
                             <Shield className="h-4 w-4 mr-1" />
                             Defend

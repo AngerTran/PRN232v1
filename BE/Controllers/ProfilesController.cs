@@ -150,9 +150,9 @@ public class ProfilesController : ControllerBase
         return removed ? NoContent() : NotFound();
     }
 
-    /// <summary>Danh sách editor — Admin.</summary>
+    /// <summary>Danh sách editor — Mangaka (mời phụ trách) hoặc Admin.</summary>
     [HttpGet("editors")]
-    [SwaggerOperation(Summary = "List editors", Description = "Returns active editor profiles. Requires admin role.")]
+    [SwaggerOperation(Summary = "List editors", Description = "Returns active editor profiles. Mangaka and admin can list editors for assignment.")]
     [ProducesResponseType(typeof(IReadOnlyList<ProfileResponse>), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
     public async Task<ActionResult<IReadOnlyList<ProfileResponse>>> ListEditors(CancellationToken cancellationToken)
@@ -162,11 +162,7 @@ public class ProfilesController : ControllerBase
             return Unauthorized();
         }
 
-        var profiles = await _profileService.ListByRoleAsync(
-            callerId,
-            ProfileRoles.Admin,
-            ProfileRoles.Editor,
-            cancellationToken);
+        var profiles = await _profileService.ListEditorsForAssignmentAsync(callerId, cancellationToken);
         return Ok(profiles);
     }
 

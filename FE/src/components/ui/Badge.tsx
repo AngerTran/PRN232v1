@@ -11,14 +11,13 @@ const STATUS_STYLES: Record<string, string> = {
   'In Progress': 'bg-[#4B3F72]/12 text-[#4B3F72] border-[#4B3F72]/40',
   'Revision Required': 'bg-[#F97316]/12 text-[#C2410C] border-[#F97316]/40',
   'At Risk': 'bg-[#DC2626]/12 text-[#DC2626] border-[#DC2626]/40',
+  'Completed': 'bg-[#0D9488]/12 text-[#0F766E] border-[#0D9488]/40',
   'Published': 'bg-[#7C3AED]/12 text-[#6D28D9] border-[#7C3AED]/40',
   'Cancelled': 'bg-[#374151]/12 text-[#374151] border-[#374151]/40',
   // Task statuses
   'Pending': 'bg-[#9CA3AF]/15 text-[#4B5563] border-[#9CA3AF]/40',
   // Chapter statuses
   'Review': 'bg-[#F2C94C]/20 text-[#92400E] border-[#F2C94C]/50',
-  // Page statuses
-  'Completed': 'bg-[#16A34A]/12 text-[#15803D] border-[#16A34A]/40',
   // Submission statuses
   'Rejected': 'bg-[#374151]/12 text-[#374151] border-[#374151]/40',
 };
@@ -30,11 +29,11 @@ const STATUS_DOTS: Record<string, string> = {
   'In Progress': 'bg-[#4B3F72]',
   'Revision Required': 'bg-[#F97316]',
   'At Risk': 'bg-[#DC2626]',
+  'Completed': 'bg-[#0D9488]',
   'Published': 'bg-[#7C3AED]',
   'Cancelled': 'bg-[#374151]',
   'Pending': 'bg-[#9CA3AF]',
   'Review': 'bg-[#F2C94C]',
-  'Completed': 'bg-[#16A34A]',
   'Rejected': 'bg-[#374151]',
 };
 
@@ -45,11 +44,11 @@ const STATUS_LABELS: Record<string, string> = {
   'In Progress': 'Đang thực hiện',
   'Revision Required': 'Cần sửa đổi',
   'At Risk': 'Nguy cơ',
+  'Completed': 'Đã hoàn thành',
   'Published': 'Đã xuất bản',
   'Cancelled': 'Đã hủy',
   'Pending': 'Chờ duyệt',
   'Review': 'Đang xét duyệt',
-  'Completed': 'Hoàn thành',
   'Rejected': 'Bị từ chối',
 };
 

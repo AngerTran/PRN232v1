@@ -71,7 +71,7 @@ function mapSeriesStatus(status: string): SeriesStatus {
     case 'cancelled':
       return 'Cancelled';
     case 'completed':
-      return 'Published';
+      return 'Completed';
     case 'draft':
     default:
       return 'Draft';
@@ -155,6 +155,8 @@ export function mapSeries(item: ApiSeries, chaptersCount = 0): Series {
     coverUrl: item.coverImageUrl || 'https://images.unsplash.com/photo-1612036782180-6f0b6cd846fe?w=400&h=560&fit=crop',
     mangakaId: item.authorId,
     mangakaName: item.authorName ?? undefined,
+    editorId: item.editorId ?? undefined,
+    editorName: item.editorName ?? undefined,
     createdAt: dateOnly(item.createdAt),
     updatedAt: dateOnly(item.updatedAt),
     isAtRisk: item.status?.toLowerCase() === 'hiatus',
@@ -204,6 +206,48 @@ export async function getMySeries(): Promise<Series[]> {
   }));
 }
 
+/** Series đã gửi lên hội đồng (không còn ở trạng thái nháp). */
+export function isSeriesSubmitted(status: SeriesStatus): boolean {
+  return status !== 'Draft';
+}
+
+/** Mangaka chỉ được sản xuất (chương, trang, task) sau khi hội đồng duyệt. */
+export function canMangakaProduceOnSeries(status: SeriesStatus): boolean {
+  return status === 'Approved' || status === 'In Progress' || status === 'At Risk';
+}
+
+/** Hội đồng chỉ lên lịch xuất bản khi editor đánh dấu hoàn thành. */
+export function canSchedulePublishing(status: SeriesStatus): boolean {
+  return status === 'Completed';
+}
+
+export const SERIES_PRODUCTION_LOCK_HINT: Partial<Record<SeriesStatus, string>> = {
+  Draft: 'Hoàn tất hồ sơ và gửi hội đồng xét duyệt trước khi bắt đầu sản xuất.',
+  Submitted: 'Series đang chờ hội đồng — tạm khóa mọi thao tác sản xuất.',
+  Cancelled: 'Series đã bị từ chối — không thể tiếp tục sản xuất.',
+  Completed: 'Series đã hoàn thành — không thể thêm chương mới.',
+};
+
+export const SERIES_SUBMISSION_STATUS_HINT: Record<SeriesStatus, string> = {
+  Draft: 'Series chưa được gửi lên hội đồng biên tập.',
+  Submitted: 'Đang chờ hội đồng biên tập xét duyệt.',
+  Approved: 'Hội đồng đã phê duyệt series.',
+  'In Progress': 'Series đang trong quá trình xuất bản.',
+  'Revision Required': 'Hội đồng yêu cầu chỉnh sửa trước khi duyệt.',
+  'At Risk': 'Series đang có nguy cơ bị tạm dừng do xếp hạng thấp.',
+  Completed: 'Editor đã đánh dấu series hoàn thành sản xuất.',
+  Published: 'Series đã xuất bản.',
+  Cancelled: 'Hội đồng đã từ chối series.',
+};
+
+/** Lịch sử nộp series của mangaka — mọi series đã gửi duyệt, mới nhất trước. */
+export async function getSubmittedSeries(): Promise<Series[]> {
+  const items = await getMySeries();
+  return items
+    .filter(s => isSeriesSubmitted(s.status))
+    .sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime());
+}
+
 export async function getVisibleSeries(): Promise<Series[]> {
   const items = unwrap(await apiRequest<ApiEnvelope<ApiSeries[]>>('/api/series'));
   return Promise.all(items.map(async item => {
@@ -212,13 +256,21 @@ export async function getVisibleSeries(): Promise<Series[]> {
   }));
 }
 
-const APPROVED_SERIES_STATUSES = new Set(['approved', 'publishing', 'completed']);
+const APPROVED_SERIES_STATUSES = new Set(['approved', 'publishing', 'completed', 'hiatus']);
 
 /** Series đã qua hội đồng (approved trở đi), không tải chapter để nhẹ hơn. */
 export async function getApprovedSeries(): Promise<Series[]> {
   const items = unwrap(await apiRequest<ApiEnvelope<ApiSeries[]>>('/api/series'));
   return items
     .filter(item => APPROVED_SERIES_STATUSES.has(item.status?.toLowerCase() ?? ''))
+    .map(item => mapSeries(item));
+}
+
+/** Series editor đã đánh dấu hoàn thành — đủ điều kiện lên lịch xuất bản. */
+export async function getCompletedSeries(): Promise<Series[]> {
+  const items = unwrap(await apiRequest<ApiEnvelope<ApiSeries[]>>('/api/series'));
+  return items
+    .filter(item => item.status?.toLowerCase() === 'completed')
     .map(item => mapSeries(item));
 }
 
@@ -339,12 +391,63 @@ export async function createChapter(input: CreateChapterInput): Promise<Chapter>
   return mapChapter(created);
 }
 
+export async function updateSeries(id: string, input: { editorId?: string }): Promise<Series> {
+  const updated = unwrap(await apiRequest<ApiEnvelope<ApiSeries>>(`/api/series/${id}`, {
+    method: 'PUT',
+    body: JSON.stringify(input),
+  }));
+  return mapSeries(updated);
+}
+
+export interface SeriesEditorInvitation {
+  seriesId: string;
+  seriesTitle: string;
+  mangakaId: string;
+  mangakaName: string;
+  editorId: string;
+  editorName: string;
+  status: 'pending' | 'accepted' | 'rejected';
+  createdAt: string;
+  respondedAt?: string | null;
+}
+
+/** Mangaka gửi lời mời editor phụ trách series (chờ editor chấp nhận). */
+export async function inviteSeriesEditor(seriesId: string, editorId: string): Promise<SeriesEditorInvitation> {
+  return unwrap(await apiRequest<ApiEnvelope<SeriesEditorInvitation>>(`/api/series/${seriesId}/editor-invitations`, {
+    method: 'POST',
+    body: JSON.stringify({ editorId }),
+  }));
+}
+
+export async function getSentEditorInvitations(): Promise<SeriesEditorInvitation[]> {
+  return unwrap(await apiRequest<ApiEnvelope<SeriesEditorInvitation[]>>('/api/series/editor-invitations/sent'));
+}
+
+export async function getMyEditorInvitations(): Promise<SeriesEditorInvitation[]> {
+  return unwrap(await apiRequest<ApiEnvelope<SeriesEditorInvitation[]>>('/api/series/editor-invitations/mine'));
+}
+
+export async function respondToEditorInvitation(
+  seriesId: string,
+  action: 'accept' | 'reject'
+): Promise<SeriesEditorInvitation> {
+  return unwrap(await apiRequest<ApiEnvelope<SeriesEditorInvitation>>(
+    `/api/series/editor-invitations/${seriesId}/${action}`,
+    { method: 'PATCH' }
+  ));
+}
+
 export async function updateSeriesStatus(id: string, status: string): Promise<Series> {
   const updated = unwrap(await apiRequest<ApiEnvelope<ApiSeries>>(`/api/series/${id}/status`, {
     method: 'PUT',
     body: JSON.stringify({ status }),
   }));
   return mapSeries(updated);
+}
+
+/** Editor đánh dấu series hoàn thành sản xuất. */
+export async function markSeriesCompleted(id: string): Promise<Series> {
+  return updateSeriesStatus(id, 'completed');
 }
 
 /** Gửi series lên hội đồng xét duyệt (draft → pending_review). */

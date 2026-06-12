@@ -46,7 +46,15 @@ public class PublishingScheduleService
             throw new ArgumentException($"Invalid frequency. Allowed: {string.Join(", ", PublishingFrequencies.All)}.");
         }
 
-        await RequireScheduleManagerAsync(callerId, seriesId, cancellationToken);
+        var series = await RequireScheduleManagerAsync(callerId, seriesId, cancellationToken);
+        try
+        {
+            SeriesWorkflowRules.EnsureAllowsPublishingSchedule(series.Status);
+        }
+        catch (InvalidOperationException ex)
+        {
+            throw new WorkflowForbiddenException(ex.Message);
+        }
 
         var schedule = new PublishingSchedule
         {
@@ -153,7 +161,7 @@ public class PublishingScheduleService
         throw new WorkflowForbiddenException("You do not have permission to view schedules for this series.");
     }
 
-    private async Task RequireScheduleManagerAsync(Guid callerId, Guid seriesId, CancellationToken cancellationToken)
+    private async Task<DAL.Models.Series> RequireScheduleManagerAsync(Guid callerId, Guid seriesId, CancellationToken cancellationToken)
     {
         var caller = await _unitOfWork.Repository<Profile>().GetByIdAsync(callerId, cancellationToken: cancellationToken)
             ?? throw new WorkflowForbiddenException("Caller profile not found.");
@@ -165,7 +173,7 @@ public class PublishingScheduleService
             || PageAccessService.IsBoard(caller.Role)
             || (PageAccessService.IsEditor(caller.Role) && series.EditorId == caller.Id))
         {
-            return;
+            return series;
         }
 
         throw new WorkflowForbiddenException("Requires board, assigned editor, or admin.");
