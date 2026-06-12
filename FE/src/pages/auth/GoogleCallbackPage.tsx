@@ -2,6 +2,15 @@ import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router';
 import { AlertCircle, Loader2 } from 'lucide-react';
 import { loginWithGoogleCode, loginWithGoogleHashTokens } from '../../services/authApi';
+import type { User } from '../../types/domain';
+
+function getDashboardPath(user: User): string {
+  if (user.role === 'admin') return '/admin/dashboard';
+  if (user.role === 'assistant') return '/assistant/dashboard';
+  if (user.role === 'editor') return '/editor/dashboard';
+  if (user.role === 'board') return '/board/dashboard';
+  return '/mangaka/dashboard';
+}
 
 export default function GoogleCallbackPage() {
   const navigate = useNavigate();
@@ -24,19 +33,21 @@ export default function GoogleCallbackPage() {
       const refreshToken = hashParams.get('refresh_token');
 
       try {
+        let user: User;
         if (accessToken && refreshToken) {
-          await loginWithGoogleHashTokens(accessToken, refreshToken);
+          user = await loginWithGoogleHashTokens(accessToken, refreshToken);
         } else {
           const code = params.get('code');
           if (!code) {
             if (!cancelled) setError('Không nhận được mã xác thực từ Google.');
             return;
           }
-          await loginWithGoogleCode(code);
+          user = await loginWithGoogleCode(code);
         }
 
         if (!cancelled) {
-          navigate('/', { replace: true });
+          window.history.replaceState(null, '', window.location.pathname + window.location.search);
+          navigate(getDashboardPath(user), { replace: true });
         }
       } catch (err) {
         if (!cancelled) {
