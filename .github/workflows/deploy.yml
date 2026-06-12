@@ -1,0 +1,183 @@
+name: Build and Deploy
+
+on:
+  push:
+    branches:
+      - main
+      - Hao
+  workflow_dispatch:
+
+env:
+  DOTNET_VERSION: 9.0.x
+  NODE_VERSION: 22
+  BE_IMAGE: img-dotnet
+  FE_IMAGE: img-fe
+  BE_CONTAINER: cons-dotnet
+  FE_CONTAINER: cons-fe
+  SERVER_SRC_DIR: /root/PRN232v1
+
+jobs:
+  build:
+    name: Build BE and FE
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+
+      - name: Restore BE
+        run: dotnet restore ./BE/PRN232v1.csproj
+
+      - name: Build BE
+        run: dotnet build ./BE/PRN232v1.csproj --configuration Release --no-restore
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: FE/package-lock.json
+
+      - name: Install FE dependencies
+        working-directory: FE
+        run: npm ci
+
+      - name: Build FE
+        working-directory: FE
+        env:
+          VITE_API_BASE_URL: http://${{ secrets.SSH_HOST }}:3001
+        run: npm run build
+
+      - name: Build BE Docker image
+        run: docker build . -t ${{ env.BE_IMAGE }}:latest
+
+      - name: Build FE Docker image
+        run: docker build -t ${{ env.FE_IMAGE }}:latest --build-arg VITE_API_BASE_URL=http://${{ secrets.SSH_HOST }}:3001 ./FE
+
+  deploy:
+    name: Deploy to server
+    runs-on: ubuntu-latest
+    needs: build
+    environment: production
+
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v4
+
+      - name: Validate deployment secrets
+        env:
+          SSH_HOST: ${{ secrets.SSH_HOST }}
+          SSH_USER: ${{ secrets.SSH_USER }}
+          SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
+        run: |
+          test -n "$SSH_HOST" || (echo "Missing GitHub secret: SSH_HOST" && exit 1)
+          test -n "$SSH_USER" || (echo "Missing GitHub secret: SSH_USER" && exit 1)
+          test -n "$SSH_PRIVATE_KEY" || (echo "Missing GitHub secret: SSH_PRIVATE_KEY" && exit 1)
+
+      - name: Create BE env file
+        env:
+          SSH_HOST: ${{ secrets.SSH_HOST }}
+          SUPABASE_CONNECTION_STRING: ${{ secrets.SUPABASE_CONNECTION_STRING }}
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+          SUPABASE_JWT_SECRET: ${{ secrets.SUPABASE_JWT_SECRET }}
+          CLOUDINARY_CLOUD_NAME: ${{ secrets.CLOUDINARY_CLOUD_NAME }}
+          CLOUDINARY_API_KEY: ${{ secrets.CLOUDINARY_API_KEY }}
+          CLOUDINARY_API_SECRET: ${{ secrets.CLOUDINARY_API_SECRET }}
+          CLOUDINARY_UPLOAD_PRESET: ${{ secrets.CLOUDINARY_UPLOAD_PRESET }}
+        run: |
+          mkdir -p deploy-config
+          cat > deploy-config/be.env <<EOF
+          ASPNETCORE_ENVIRONMENT=Production
+          ASPNETCORE_URLS=http://+:3001
+          Swagger__Enabled=true
+          Google__RedirectUri=http://${SSH_HOST}:3002/auth/google/callback
+          Google__FrontendBaseUrl=http://${SSH_HOST}:3002
+          EOF
+
+          add_optional() {
+            if [ -n "$1" ]; then
+              printf '%s=%s\n' "$2" "$1" >> deploy-config/be.env
+            fi
+          }
+
+          add_optional "$SUPABASE_CONNECTION_STRING" "ConnectionStrings__SupabaseConnection"
+          add_optional "$SUPABASE_URL" "Supabase__Url"
+          add_optional "$SUPABASE_ANON_KEY" "Supabase__AnonKey"
+          add_optional "$SUPABASE_JWT_SECRET" "Supabase__JwtSecret"
+          add_optional "$CLOUDINARY_CLOUD_NAME" "Cloudinary__CloudName"
+          add_optional "$CLOUDINARY_API_KEY" "Cloudinary__ApiKey"
+          add_optional "$CLOUDINARY_API_SECRET" "Cloudinary__ApiSecret"
+          add_optional "$CLOUDINARY_UPLOAD_PRESET" "Cloudinary__UploadPreset"
+
+      - name: Setup SSH
+        env:
+          SSH_HOST: ${{ secrets.SSH_HOST }}
+          SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
+        run: |
+          mkdir -p ~/.ssh
+          printf '%s\n' "$SSH_PRIVATE_KEY" > ~/.ssh/prn232_deploy_key
+          chmod 600 ~/.ssh/prn232_deploy_key
+          ssh-keyscan -H "$SSH_HOST" >> ~/.ssh/known_hosts
+
+      - name: Upload BE env file
+        env:
+          SSH_HOST: ${{ secrets.SSH_HOST }}
+          SSH_PORT: ${{ secrets.SSH_PORT }}
+          SSH_USER: ${{ secrets.SSH_USER }}
+        run: |
+          SSH_PORT="${SSH_PORT:-22}"
+          ssh -i ~/.ssh/prn232_deploy_key -p "$SSH_PORT" "$SSH_USER@$SSH_HOST" "mkdir -p ${{ env.SERVER_SRC_DIR }}/.deploy"
+          scp -i ~/.ssh/prn232_deploy_key -P "$SSH_PORT" deploy-config/be.env "$SSH_USER@$SSH_HOST:${{ env.SERVER_SRC_DIR }}/.deploy/be.env"
+
+      - name: Pull source and restart containers
+        env:
+          SSH_HOST: ${{ secrets.SSH_HOST }}
+          SSH_PORT: ${{ secrets.SSH_PORT }}
+          SSH_USER: ${{ secrets.SSH_USER }}
+        run: |
+          SSH_PORT="${SSH_PORT:-22}"
+          ssh -i ~/.ssh/prn232_deploy_key -p "$SSH_PORT" "$SSH_USER@$SSH_HOST" <<'EOF'
+          set -e
+
+          cd ${{ env.SERVER_SRC_DIR }}
+          git fetch origin main
+          git pull --ff-only origin main
+
+          docker build . -t img-dotnet:latest
+          docker build -t img-fe:latest --build-arg VITE_API_BASE_URL=http://${{ secrets.SSH_HOST }}:3001 ./FE
+
+          docker rm -f cons-dotnet cons-fe cons-react || true
+
+          docker run -d \
+            --name cons-dotnet \
+            --restart unless-stopped \
+            --env-file ${{ env.SERVER_SRC_DIR }}/.deploy/be.env \
+            -p 3001:3001 \
+            img-dotnet:latest
+
+          docker run -d \
+            --name cons-fe \
+            --restart unless-stopped \
+            -p 3002:3002 \
+            img-fe:latest
+
+          sleep 8
+
+          if ! curl -fsS http://127.0.0.1:3001/swagger/index.html >/dev/null; then
+            docker logs cons-dotnet --tail 120
+            exit 1
+          fi
+
+          if ! curl -fsS http://127.0.0.1:3002 >/dev/null; then
+            docker logs cons-fe --tail 120
+            exit 1
+          fi
+
+          docker image prune -f
+          EOF
