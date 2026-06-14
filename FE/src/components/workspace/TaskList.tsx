@@ -1,9 +1,12 @@
 import { useState } from 'react';
-import { ChevronDown, ChevronUp, Calendar, DollarSign, Trash2 } from 'lucide-react';
+import { ChevronDown, ChevronUp, Calendar, DollarSign, Trash2, CreditCard, Loader2 } from 'lucide-react';
 import { clsx } from 'clsx';
 import type { WorkspaceAssistant, WorkspaceTask } from '../../services/workspaceApi';
 import { TypeBadge } from '../ui/Badge';
 import { format } from 'date-fns';
+import { createTaskPayment } from '../../services/paymentApi';
+import { toast } from 'sonner';
+import { getStoredUser } from '../../services/authApi';
 
 const STATUS_DOT: Record<string, string> = {
   'Pending': 'bg-gray-400',
@@ -31,7 +34,48 @@ interface TaskListProps {
 
 export default function TaskList({ tasks, assistants, onHoverTask, onDeleteTask, deletingTaskId }: TaskListProps) {
   const [expanded, setExpanded] = useState<string | null>(null);
+  const [payingTaskId, setPayingTaskId] = useState<string | null>(null);
   const assistantNames = new Map(assistants.map(assistant => [assistant.id, assistant.name]));
+  const user = getStoredUser();
+
+    const handlePayment = async (taskId: string) => {
+      if (!user) {
+        toast.error('Vui lòng đăng nhập để thanh toán');
+        return;
+      }
+
+      // Only mangaka/editor who assigned the task (or admin) can initiate payment
+      // Assistant should NOT be able to initiate payment for their own task
+      const task = tasks.find(t => t.id === taskId);
+      if (!task) return;
+
+      const isAssigner = task.assignedBy === user.id;  // Need to check if assignedBy is in task
+      const isMangakaOfSeries = false; // Would need series context
+      const isAdmin = ['admin'].includes(user.role);
+
+      // For now, allow mangaka, editor, admin - actual check happens on backend
+      const isStaff = ['admin', 'mangaka', 'editor'].includes(user.role);
+
+      if (!isStaff) {
+        toast.error('Chỉ mangaka/editor/admin mới có quyền thanh toán cho task này');
+        return;
+      }
+
+    setPayingTaskId(taskId);
+    try {
+      const response = await createTaskPayment(taskId, {});
+      if (response.paymentUrl) {
+        window.location.href = response.paymentUrl;
+      } else {
+        toast.error('Không thể tạo URL thanh toán');
+      }
+    } catch (error) {
+      console.error('Payment error:', error);
+      toast.error('Có lỗi xảy ra khi tạo thanh toán');
+    } finally {
+      setPayingTaskId(null);
+    }
+  };
 
   if (tasks.length === 0) {
     return (
@@ -107,6 +151,30 @@ export default function TaskList({ tasks, assistants, onHoverTask, onDeleteTask,
                     <Trash2 size={12} />
                     {deletingTaskId === task.id ? 'Đang hủy…' : 'Hủy task'}
                   </button>
+                )}
+                {task.status === 'Approved' && (
+                  <div className="mt-3 pt-3 border-t border-[#3A3A3A]">
+                    <button
+                      onClick={() => handlePayment(task.id)}
+                      disabled={payingTaskId === task.id}
+                      className="w-full inline-flex items-center justify-center gap-2 rounded-md bg-green-600 px-3 py-2 text-xs font-medium text-white hover:bg-green-700 transition-colors disabled:opacity-50 disabled:pointer-events-none"
+                    >
+                      {payingTaskId === task.id ? (
+                        <>
+                          <Loader2 size={14} className="animate-spin" />
+                          Đang chuyển hướng...
+                        </>
+                      ) : (
+                        <>
+                          <CreditCard size={14} />
+                          Thanh toán ({task.price.toLocaleString()} ¥)
+                        </>
+                      )}
+                    </button>
+                    <p className="mt-1 text-[10px] text-gray-500 text-center">
+                      Chuyển sang VNPay sandbox để thanh toán
+                    </p>
+                  </div>
                 )}
               </div>
             )}

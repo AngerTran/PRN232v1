@@ -39,6 +39,7 @@ public static class ServiceCollectionExtensions
         services.AddScoped<RankingService>();
         services.AddScoped<PublishingScheduleService>();
         services.AddScoped<SeriesService>();
+        services.AddScoped<VnPayService>();
         services.AddHttpClient<SupabaseAuthService>();
         services.AddHttpClient<SupabaseStorageService>();
         return services;
@@ -49,6 +50,7 @@ public static class ServiceCollectionExtensions
         services.Configure<SupabaseOptions>(configuration.GetSection(SupabaseOptions.SectionName));
         services.Configure<GoogleAuthOptions>(configuration.GetSection(GoogleAuthOptions.SectionName));
         services.Configure<CloudinaryOptions>(configuration.GetSection(CloudinaryOptions.SectionName));
+        services.Configure<VnPayOptions>(configuration.GetSection(VnPayOptions.SectionName));
 
         var supabase = configuration.GetSection(SupabaseOptions.SectionName).Get<SupabaseOptions>() ?? new SupabaseOptions();
         var authority = string.IsNullOrWhiteSpace(supabase.Url)

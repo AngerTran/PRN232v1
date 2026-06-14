@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Configuration;
 using DAL.Common;
 using BLL.Dtos.Tasks;
 using BLL.Services.Tasks;
@@ -13,10 +14,76 @@ namespace PRN232v1.Controllers;
 public class TasksController : ControllerBase
 {
     private readonly TaskService _taskService;
+    private readonly IConfiguration _configuration;
 
-    public TasksController(TaskService taskService)
+    public TasksController(TaskService taskService, IConfiguration configuration)
     {
         _taskService = taskService;
+        _configuration = configuration;
+    }
+
+    [HttpPost("/api/tasks/{id:guid}/payment")]
+    [SwaggerOperation(Summary = "Create VNPay payment URL for task", Description = "Creates a payment URL for an approved task. Requires assistant assigned to task or admin/mangaka/editor permission.")]
+    [ProducesResponseType(typeof(CreateTaskPaymentResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    public async Task<ActionResult<CreateTaskPaymentResponse>> CreatePayment(
+        Guid id,
+        [FromBody] CreateTaskPaymentRequest request,
+        CancellationToken cancellationToken)
+    {
+        if (!this.TryGetUserId(out var userId))
+        {
+            return Unauthorized();
+        }
+
+        var response = await _taskService.CreateTaskPaymentAsync(userId, id, request, cancellationToken);
+        if (response is null)
+        {
+            return NotFound(new { message = "Task not found." });
+        }
+
+        return Ok(response);
+    }
+
+    [HttpGet("/api/tasks/payment/return")]
+    [AllowAnonymous]
+    [SwaggerOperation(Summary = "VNPay return URL callback", Description = "Handles the return from VNPay after user completes payment. Redirects user to frontend with result.")]
+    [ProducesResponseType(StatusCodes.Status302Found)]
+    public async Task<IActionResult> PaymentReturn(
+        CancellationToken cancellationToken)
+    {
+        var queryParams = Request.Query.ToDictionary(
+            kvp => kvp.Key,
+            kvp => kvp.Value.ToString(),
+            StringComparer.OrdinalIgnoreCase);
+
+        var response = await _taskService.ProcessPaymentCallbackAsync(queryParams, cancellationToken);
+        
+        // Redirect user to frontend with result
+        var frontendUrl = _configuration.GetSection("VnPay").GetValue<string>("FrontendPaymentReturnBaseUrl") 
+            ?? "http://localhost:5173/tasks/payment/return";
+        
+        var redirectUrl = $"{frontendUrl}?taskId={response.TaskId}&success={response.IsSuccess}&message={Uri.EscapeDataString(response.Message)}&responseCode={response.ResponseCode}&txnRef={response.TxnRef}";
+        
+        return Redirect(redirectUrl);
+    }
+
+    [HttpPost("/api/tasks/payment/ipn")]
+    [AllowAnonymous]
+    [SwaggerOperation(Summary = "VNPay IPN (Instant Payment Notification)", Description = "Handles server-to-server IPN from VNPay. This is more reliable than the return URL.")]
+    [ProducesResponseType(typeof(TaskPaymentReturnResponse), StatusCodes.Status200OK)]
+    public async Task<ActionResult<TaskPaymentReturnResponse>> PaymentIpn(
+        CancellationToken cancellationToken)
+    {
+        var queryParams = Request.Query.ToDictionary(
+            kvp => kvp.Key,
+            kvp => kvp.Value.ToString(),
+            StringComparer.OrdinalIgnoreCase);
+
+        var response = await _taskService.ProcessPaymentCallbackAsync(queryParams, cancellationToken);
+        return Ok(response);
     }
 
     [HttpGet("/api/chapters/{chapterId:guid}/kanban")]

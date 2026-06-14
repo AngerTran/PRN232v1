@@ -15,6 +15,7 @@ import ProfilePage from '../pages/common/ProfilePage';
 import SettingsPage from '../pages/common/SettingsPage';
 import NotificationsPage from '../pages/common/NotificationsPage';
 import NotFoundPage from '../pages/common/NotFoundPage';
+import PaymentReturnPage from '../pages/common/PaymentReturnPage';
 
 // Mangaka pages
 import DashboardPage from '../pages/mangaka/DashboardPage';
@@ -121,6 +122,7 @@ export const router = createBrowserRouter([
       { path: '/profile', element: <ProfilePage /> },
       { path: '/settings', element: <SettingsPage /> },
       { path: '/notifications', element: <NotificationsPage /> },
+      { path: '/payment-return', element: <PaymentReturnPage /> },
 
       // Mangaka
       { path: '/mangaka/dashboard', element: <DashboardPage /> },
