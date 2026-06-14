@@ -624,6 +624,23 @@ public partial class AppDbContext : DbContext
                 .HasColumnType("numeric(12,2)")
                 .HasDefaultValue(0m)
                 .HasColumnName("price");
+            entity.Property(e => e.PaymentStatus)
+                .HasMaxLength(20)
+                .HasDefaultValue(PaymentStatuses.Unpaid)
+                .HasColumnName("payment_status");
+            entity.Property(e => e.PaidAt).HasColumnName("paid_at");
+            entity.Property(e => e.VnPayTxnRef)
+                .HasMaxLength(50)
+                .HasColumnName("vnpay_txn_ref");
+            entity.Property(e => e.VnPayTransactionNo)
+                .HasMaxLength(50)
+                .HasColumnName("vnpay_transaction_no");
+            entity.Property(e => e.VnPayBankCode)
+                .HasMaxLength(20)
+                .HasColumnName("vnpay_bank_code");
+            entity.Property(e => e.VnPayResponseCode)
+                .HasMaxLength(10)
+                .HasColumnName("vnpay_response_code");
 
             entity.HasOne(d => d.AssignedByNavigation).WithMany(p => p.TaskAssignedByNavigations)
                 .HasForeignKey(d => d.AssignedBy)

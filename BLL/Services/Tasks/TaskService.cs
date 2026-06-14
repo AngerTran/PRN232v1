@@ -21,6 +21,8 @@ public class TaskService
     private readonly NotificationService _notificationService;
     private readonly SupabaseStorageService _storage;
     private readonly SupabaseOptions _supabaseOptions;
+    private readonly VnPayService _vnPayService;
+    private readonly VnPayOptions _vnPayOptions; // Thêm dòng này
     private Repository<EditorTask> TaskRepository => _unitOfWork.Repository<EditorTask>();
     private Repository<Profile> ProfileRepository => _unitOfWork.Repository<Profile>();
 
@@ -29,13 +31,17 @@ public class TaskService
         PageAccessService pageAccess,
         NotificationService notificationService,
         SupabaseStorageService storage,
-        IOptions<SupabaseOptions> supabaseOptions)
+        IOptions<SupabaseOptions> supabaseOptions,
+        VnPayService vnPayService,
+        IOptions<VnPayOptions> vnPayOptions) // Thêm tham số này
     {
         _unitOfWork = unitOfWork;
         _pageAccess = pageAccess;
         _notificationService = notificationService;
         _storage = storage;
         _supabaseOptions = supabaseOptions.Value;
+        _vnPayService = vnPayService;
+        _vnPayOptions = vnPayOptions.Value; // Lưu giá trị options
     }
 
     public async Task<TaskItemResponse?> UploadResourcesAsync(
@@ -574,5 +580,185 @@ public class TaskService
         {
             throw new ArgumentException("Region must be valid JSON.", ex);
         }
+    }
+
+    public async Task<CreateTaskPaymentResponse?> CreateTaskPaymentAsync(
+        Guid callerId,
+        Guid taskId,
+        CreateTaskPaymentRequest request,
+        CancellationToken cancellationToken = default)
+    {
+        var caller = await _pageAccess.RequireProfileAsync(callerId, cancellationToken);
+        var task = await TaskRepository.GetByIdAsync(taskId, asNoTracking: false, cancellationToken);
+        if (task is null)
+        {
+            return null;
+        }
+
+        // Only the mangaka/editor who assigned the task (or admin) can initiate payment
+        // Assistant should NOT be able to initiate payment for their own task
+        var ctxForAuth = await _pageAccess.GetPageContextAsync(task.PageId, cancellationToken)
+            ?? throw new WorkflowForbiddenException("Page not found.");
+        
+        bool isAssigner = task.AssignedBy == callerId;
+        bool isMangakaOfSeries = ctxForAuth.Series.AuthorId == callerId;
+        bool isEditorOfSeries = ctxForAuth.Series.EditorId == callerId;
+        bool isAdmin = PageAccessService.IsAdmin(caller.Role);
+
+        if (!isAssigner && !isMangakaOfSeries && !isEditorOfSeries && !isAdmin)
+        {
+            throw new WorkflowForbiddenException("Only the task assigner (mangaka/editor) or admin can initiate payment for this task.");
+        }
+
+        // Task must be approved to be paid
+        if (task.Status != TaskStatuses.Approved)
+        {
+            throw new InvalidOperationException("Task must be approved before payment can be initiated.");
+        }
+
+        // Check if already paid
+        if (task.PaymentStatus == PaymentStatuses.Paid)
+        {
+            throw new InvalidOperationException("Task has already been paid.");
+        }
+
+        var ctx = await _pageAccess.GetPageContextAsync(task.PageId, cancellationToken)
+            ?? throw new WorkflowForbiddenException("Page not found.");
+
+        var txnRef = $"TASK_{taskId:N}_{DateTime.Now.Ticks}";
+        var orderInfo = $"Thanh toan task {task.Title ?? task.TaskType} - Series: {ctx.Series.Title}";
+        
+        // Use ReturnUrl from request if provided, otherwise use config
+        var returnUrl = !string.IsNullOrEmpty(request.ReturnUrl) 
+            ? request.ReturnUrl 
+            : _vnPayOptions.ReturnUrl;
+            
+        var paymentUrl = _vnPayService.CreatePaymentUrl(
+            task.Price,
+            orderInfo,
+            returnUrl,    // Backend API endpoint for user redirect
+            _vnPayOptions.IpnUrl,    // Backend API endpoint for IPN callback
+            txnRef);
+
+        // Store transaction reference in task
+        task.VnPayTxnRef = txnRef;
+        task.UpdatedAt = DateTime.UtcNow;
+        TaskRepository.Update(task);
+        await _unitOfWork.SaveChangesAsync(cancellationToken);
+
+        return new CreateTaskPaymentResponse(task.Id, paymentUrl, txnRef, task.PaymentStatus);
+    }
+
+    public async Task<TaskPaymentReturnResponse> ProcessPaymentCallbackAsync(
+        IReadOnlyDictionary<string, string> queryParams,
+        CancellationToken cancellationToken = default)
+    {
+        // Verify the callback signature
+        if (!_vnPayService.VerifyCallback(queryParams))
+        {
+            return new TaskPaymentReturnResponse(
+                null,
+                false,
+                "Chữ ký không hợp lệ",
+                null,
+                _vnPayService.GetResponseCode(queryParams),
+                _vnPayService.GetTransactionNo(queryParams),
+                _vnPayService.GetTxnRef(queryParams));
+        }
+
+        var responseCode = _vnPayService.GetResponseCode(queryParams);
+        var txnRef = _vnPayService.GetTxnRef(queryParams);
+        var transactionNo = _vnPayService.GetTransactionNo(queryParams);
+
+        // Extract taskId from txnRef (format: TASK_{taskId}_{ticks})
+        Guid? taskId = null;
+        try
+        {
+            var parts = txnRef.Split('_');
+            if (parts.Length >= 2 && Guid.TryParse(parts[1], out var parsedTaskId))
+            {
+                taskId = parsedTaskId;
+            }
+        }
+        catch
+        {
+            // Ignore parsing errors
+        }
+
+        if (taskId is null)
+        {
+            return new TaskPaymentReturnResponse(
+                null,
+                false,
+                "Không xác định được task",
+                null,
+                responseCode,
+                transactionNo,
+                txnRef);
+        }
+
+        var task = await TaskRepository.GetByIdAsync(taskId.Value, asNoTracking: false, cancellationToken);
+        if (task is null)
+        {
+            return new TaskPaymentReturnResponse(
+                taskId,
+                false,
+                "Không tìm thấy task",
+                null,
+                responseCode,
+                transactionNo,
+                txnRef);
+        }
+
+        var isSuccess = responseCode == "00";
+        string message;
+        string? newPaymentStatus = task.PaymentStatus;
+
+        if (isSuccess)
+        {
+            if (task.PaymentStatus != PaymentStatuses.Paid)
+            {
+                task.PaymentStatus = PaymentStatuses.Paid;
+                task.UpdatedAt = DateTime.UtcNow;
+                TaskRepository.Update(task);
+                await _unitOfWork.SaveChangesAsync(cancellationToken);
+                newPaymentStatus = PaymentStatuses.Paid;
+            }
+            message = "Thanh toán thành công";
+        }
+        else
+        {
+            message = GetVnPayErrorMessage(responseCode);
+        }
+
+        return new TaskPaymentReturnResponse(
+            taskId,
+            isSuccess,
+            message,
+            newPaymentStatus,
+            responseCode,
+            transactionNo,
+            txnRef);
+    }
+
+    private static string GetVnPayErrorMessage(string responseCode)
+    {
+        return responseCode switch
+        {
+            "00" => "Giao dịch thành công",
+            "07" => "Trừ tiền thành công. Giao dịch bị nghi ngờ (liên quan tới gian lận, bất thường)",
+            "09" => "Giao dịch không thành công do: Thẻ/Tài khoản của khách hàng chưa đăng ký dịch vụ InternetBanking",
+            "10" => "Giao dịch không thành công do: Khách hàng xác thực thông tin thẻ/tài khoản không đúng quá 3 lần",
+            "11" => "Giao dịch không thành công do: Đã hết hạn chờ thanh toán. Xin quý khách vui lòng thực hiện lại giao dịch.",
+            "12" => "Giao dịch không thành công do: Thẻ/Tài khoản của khách hàng bị khóa.",
+            "13" => "Giao dịch không thành công do Quý khách nhập sai mật khẩu xác thực giao dịch (OTP). Xin quý khách vui lòng thực hiện lại giao dịch.",
+            "24" => "Giao dịch không thành công do: Khách hàng hủy giao dịch",
+            "51" => "Giao dịch không thành công do: Tài khoản của quý khách không đủ số dư để thực hiện giao dịch.",
+            "65" => "Giao dịch không thành công do: Tài khoản của Quý khách đã vượt quá hạn mức giao dịch trong ngày.",
+            "75" => "Ngân hàng thanh toán đang bảo trì.",
+            "79" => "Giao dịch không thành công do: KH nhập sai mật khẩu thanh toán quá số lần quy định. Xin quý khách vui lòng thực hiện lại giao dịch",
+            "99" => "Các lỗi khác (lỗi còn lại, không có trong danh sách mã lỗi đã liệt kê)",
+            _ => $"Lỗi thanh toán (mã: {responseCode})"
+        };
     }
 }

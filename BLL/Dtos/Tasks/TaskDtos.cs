@@ -20,7 +20,8 @@ public record TaskItemResponse(
     DateTime? CreatedAt,
     IReadOnlyList<string>? ResourceUrls = null,
     string? AssignedByName = null,
-    decimal Price = 0);
+    decimal Price = 0,
+    string PaymentStatus = "unpaid");
 
 public record KanbanColumnItemResponse(
     Guid Id,
@@ -56,3 +57,21 @@ public record UpdateTaskRequest(
 
 public record UpdateTaskStatusRequest(
     [Required, MaxLength(30)] string Status);
+
+public record CreateTaskPaymentRequest(
+    string? ReturnUrl = null);
+
+public record CreateTaskPaymentResponse(
+    Guid TaskId,
+    string PaymentUrl,
+    string TxnRef,
+    string PaymentStatus);
+
+public record TaskPaymentReturnResponse(
+    Guid? TaskId,
+    bool IsSuccess,
+    string Message,
+    string? PaymentStatus,
+    string? ResponseCode,
+    string? TransactionNo,
+    string? TxnRef);

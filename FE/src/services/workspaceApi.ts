@@ -59,6 +59,8 @@ export interface WorkspaceTask {
   mangakaFeedback?: string;
   createdAt?: string;
   resourceUrls?: string[];
+  assignedBy?: string;
+  assignedByName?: string;
 }
 
 export interface WorkspacePayload {
@@ -197,6 +199,8 @@ interface ApiTask {
   region: string;
   assignedTo?: string | null;
   assignedToName?: string | null;
+  assignedBy?: string | null;
+  assignedByName?: string | null;
   deadline?: string | null;
   createdAt?: string | null;
   resourceUrls?: string[] | null;
@@ -320,6 +324,8 @@ function mapTask(
     region: normalizeRegion(task.region),
     createdAt: task.createdAt?.slice(0, 10),
     resourceUrls: task.resourceUrls ?? undefined,
+    assignedBy: task.assignedBy ?? undefined,
+    assignedByName: task.assignedByName ?? undefined,
   };
 }
 

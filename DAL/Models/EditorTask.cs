@@ -42,6 +42,18 @@ public partial class EditorTask
     // Giá (tiền công) cho task, do mangaka/editor đặt khi giao việc.
     public decimal Price { get; set; }
 
+    public string PaymentStatus { get; set; } = PaymentStatuses.Unpaid;
+
+    public DateTime? PaidAt { get; set; }
+
+    public string? VnPayTxnRef { get; set; }
+
+    public string? VnPayTransactionNo { get; set; }
+
+    public string? VnPayBankCode { get; set; }
+
+    public string? VnPayResponseCode { get; set; }
+
     public virtual Profile? AssignedByNavigation { get; set; }
 
     public virtual Profile? AssignedToNavigation { get; set; }

@@ -4,6 +4,7 @@ using DAL.Common;
 using DAL.Data;
 using BLL.Extensions;
 using BLL.Middleware;
+using Microsoft.Extensions.Logging; // Thêm dòng này
 
 var port = Environment.GetEnvironmentVariable("PORT");
 if (!string.IsNullOrWhiteSpace(port) &&
@@ -161,5 +162,8 @@ catch (Exception ex)
 {
     app.Logger.LogWarning(ex, "Could not sync series status from board votes.");
 }
+
+// Log application startup
+app.Logger.LogInformation("PRN232v1 application started.");
 
 app.Run();
