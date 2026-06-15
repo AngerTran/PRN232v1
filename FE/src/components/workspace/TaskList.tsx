@@ -46,13 +46,6 @@ export default function TaskList({ tasks, assistants, onHoverTask, onDeleteTask,
 
       // Only mangaka/editor who assigned the task (or admin) can initiate payment
       // Assistant should NOT be able to initiate payment for their own task
-      const task = tasks.find(t => t.id === taskId);
-      if (!task) return;
-
-      const isAssigner = task.assignedBy === user.id;  // Need to check if assignedBy is in task
-      const isMangakaOfSeries = false; // Would need series context
-      const isAdmin = ['admin'].includes(user.role);
-
       // For now, allow mangaka, editor, admin - actual check happens on backend
       const isStaff = ['admin', 'mangaka', 'editor'].includes(user.role);
 
@@ -152,7 +145,7 @@ export default function TaskList({ tasks, assistants, onHoverTask, onDeleteTask,
                     {deletingTaskId === task.id ? 'Đang hủy…' : 'Hủy task'}
                   </button>
                 )}
-                {task.status === 'Approved' && (
+                {task.status === 'Approved' && task.paymentStatus?.toLowerCase() !== 'paid' && (
                   <div className="mt-3 pt-3 border-t border-[#3A3A3A]">
                     <button
                       onClick={() => handlePayment(task.id)}

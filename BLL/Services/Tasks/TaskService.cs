@@ -622,11 +622,8 @@ public class TaskService
             throw new InvalidOperationException("Task has already been paid.");
         }
 
-        var ctx = await _pageAccess.GetPageContextAsync(task.PageId, cancellationToken)
-            ?? throw new WorkflowForbiddenException("Page not found.");
-
-        var txnRef = $"TASK_{taskId:N}_{DateTime.Now.Ticks}";
-        var orderInfo = $"Thanh toan task {task.Title ?? task.TaskType} - Series: {ctx.Series.Title}";
+        var txnRef = $"T{DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()}";
+        var orderInfo = $"Pay task {task.Id.ToString("N")[..8]}";
         
         // Use ReturnUrl from request if provided, otherwise use config
         var returnUrl = !string.IsNullOrEmpty(request.ReturnUrl) 
@@ -670,8 +667,13 @@ public class TaskService
         var txnRef = _vnPayService.GetTxnRef(queryParams);
         var transactionNo = _vnPayService.GetTransactionNo(queryParams);
 
-        // Extract taskId from txnRef (format: TASK_{taskId}_{ticks})
-        Guid? taskId = null;
+        var task = await TaskRepository.FirstOrDefaultAsync(
+            t => t.VnPayTxnRef == txnRef,
+            asNoTracking: false,
+            cancellationToken);
+
+        // Fall back to parsing payment URLs created with the previous txnRef format.
+        Guid? taskId = task?.Id;
         try
         {
             var parts = txnRef.Split('_');
@@ -697,7 +699,7 @@ public class TaskService
                 txnRef);
         }
 
-        var task = await TaskRepository.GetByIdAsync(taskId.Value, asNoTracking: false, cancellationToken);
+        task ??= await TaskRepository.GetByIdAsync(taskId.Value, asNoTracking: false, cancellationToken);
         if (task is null)
         {
             return new TaskPaymentReturnResponse(

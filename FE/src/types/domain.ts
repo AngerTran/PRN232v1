@@ -98,6 +98,7 @@ export interface Task {
   resourceUrls?: string[];
   assignedByName?: string;
   pageImageUrl?: string;
+  paymentStatus?: string | null;
 }
 
 export interface Submission {
