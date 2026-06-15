@@ -61,6 +61,7 @@ export interface WorkspaceTask {
   resourceUrls?: string[];
   assignedBy?: string;
   assignedByName?: string;
+  paymentStatus?: string | null;
 }
 
 export interface WorkspacePayload {
@@ -205,6 +206,7 @@ interface ApiTask {
   createdAt?: string | null;
   resourceUrls?: string[] | null;
   price?: number | null;
+  paymentStatus?: string | null;
 }
 
 interface ApiKanbanItem {
@@ -326,6 +328,7 @@ function mapTask(
     resourceUrls: task.resourceUrls ?? undefined,
     assignedBy: task.assignedBy ?? undefined,
     assignedByName: task.assignedByName ?? undefined,
+    paymentStatus: task.paymentStatus ?? null,
   };
 }
 

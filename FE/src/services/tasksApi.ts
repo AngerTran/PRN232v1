@@ -21,6 +21,7 @@ interface ApiTask {
   createdAt?: string | null;
   resourceUrls?: string[] | null;
   price?: number | null;
+  paymentStatus?: string | null;
 }
 
 interface ApiPage {
@@ -143,6 +144,7 @@ async function enrichTask(task: ApiTask, cache: EnrichCache): Promise<Task> {
     resourceUrls: task.resourceUrls ?? [],
     assignedByName: task.assignedByName ?? '',
     pageImageUrl: page?.imageUrl ?? page?.thumbnailUrl ?? '',
+    paymentStatus: task.paymentStatus ?? null,
   };
 }
 
