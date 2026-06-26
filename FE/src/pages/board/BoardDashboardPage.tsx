@@ -6,7 +6,7 @@ import { Button } from '../../app/components/ui/button';
 import { Badge } from '../../app/components/ui/badge';
 import type { Series } from '../../types/domain';
 import { getVisibleSeries } from '../../services/seriesApi';
-import { getPendingSeries, getLeaderboard, type PendingSeriesItem, type LeaderboardItem } from '../../services/boardApi';
+import { getPendingSeries, getLeaderboard, BOARD_VOTES_REQUIRED, type PendingSeriesItem, type LeaderboardItem } from '../../services/boardApi';
 import { getStoredUser } from '../../services/authApi';
 import {
   FileText, Star, CalendarDays, AlertTriangle, XCircle, ArrowRight, Gavel, Trophy,
@@ -204,9 +204,12 @@ export default function BoardDashboardPage() {
                 <CardContent className="p-4">
                   <h3 className="font-semibold text-sm mb-1 truncate">{sub.title}</h3>
                   <p className="text-xs text-muted-foreground mb-3">{sub.authorName ?? '—'}</p>
-                  <div className="flex gap-3 text-xs">
+                  <div className="flex gap-3 text-xs flex-wrap">
                     <span className="text-green-600 font-medium">✓ {sub.approveVotes}</span>
                     <span className="text-red-600 font-medium">✗ {sub.rejectVotes}</span>
+                    <span className="text-muted-foreground">
+                      {sub.votedBoardMembers}/{BOARD_VOTES_REQUIRED} phiếu
+                    </span>
                   </div>
                 </CardContent>
               </Card>

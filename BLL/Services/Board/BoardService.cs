@@ -11,6 +11,8 @@ namespace BLL.Services.Board;
 
 public class BoardService
 {
+    public const int MinimumBoardVotesForDecision = 3;
+
     private const int DangerRankPositionThreshold = 30;
     private static readonly IReadOnlySet<string> DangerDecisions = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
     {
@@ -160,7 +162,8 @@ public class BoardService
             votedCount,
             boardVotes.Count(v => v.Decision == VoteDecisions.Approve),
             boardVotes.Count(v => v.Decision == VoteDecisions.Reject),
-            boardMemberIds.Count > 0 && votedCount >= boardMemberIds.Count);
+            GetRequiredVoteQuorum(boardMemberIds.Count),
+            IsQuorumMet(votedCount, boardMemberIds.Count));
     }
 
     public async Task<IReadOnlyList<LeaderboardItemResponse>> GetLeaderboardAsync(
@@ -297,7 +300,7 @@ public class BoardService
 
         var votes = await GetBoardVotesForSeriesAsync(seriesId, boardMemberIds, cancellationToken);
         var votedMemberIds = votes.Select(v => v.BoardMemberId!.Value).Distinct().ToHashSet();
-        if (votedMemberIds.Count < boardMemberIds.Count)
+        if (!IsQuorumMet(votedMemberIds.Count, boardMemberIds.Count))
         {
             return;
         }
@@ -318,6 +321,14 @@ public class BoardService
             SeriesRepository.Update(series);
         }
     }
+
+    private static int GetRequiredVoteQuorum(int totalBoardMembers) =>
+        totalBoardMembers <= 0
+            ? 0
+            : Math.Min(MinimumBoardVotesForDecision, totalBoardMembers);
+
+    private static bool IsQuorumMet(int votedCount, int totalBoardMembers) =>
+        totalBoardMembers > 0 && votedCount >= GetRequiredVoteQuorum(totalBoardMembers);
 
     private async Task<List<Guid>> GetActiveBoardMemberIdsAsync(CancellationToken cancellationToken) =>
         await _unitOfWork.Context.Profiles

@@ -7,7 +7,7 @@ import { Input } from '../../app/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../../app/components/ui/select';
 import { SubmissionStatusBadge } from '../../app/components/ui/board';
 import type { BoardSubmissionStatus } from '../../types/domain';
-import { getPendingSeries, type PendingSeriesItem } from '../../services/boardApi';
+import { getPendingSeries, BOARD_VOTES_REQUIRED, type PendingSeriesItem } from '../../services/boardApi';
 import { Search, Eye } from 'lucide-react';
 
 function mapStatus(status: string): BoardSubmissionStatus {
@@ -65,7 +65,7 @@ export default function BoardSubmissionsPage() {
       <div>
         <h1 className="text-2xl font-bold">Danh Sách Duyệt Series</h1>
         <p className="text-muted-foreground mt-1">
-          Hội đồng xem xét và biểu quyết {items.length} series
+          Hội đồng xem xét và biểu quyết {items.length} series · cần {BOARD_VOTES_REQUIRED} phiếu để quyết định
         </p>
       </div>
 
@@ -134,9 +134,12 @@ export default function BoardSubmissionsPage() {
                       <SubmissionStatusBadge status={mapStatus(sub.status)} />
                     </td>
                     <td className="px-4 py-3">
-                      <div className="flex items-center gap-2 text-xs">
+                      <div className="flex items-center gap-2 text-xs flex-wrap">
                         <span className="text-green-600 font-semibold">✓{sub.approveVotes}</span>
                         <span className="text-red-600 font-semibold">✗{sub.rejectVotes}</span>
+                        <span className="text-muted-foreground">
+                          {sub.votedBoardMembers}/{BOARD_VOTES_REQUIRED}
+                        </span>
                       </div>
                     </td>
                     <td className="px-4 py-3">

@@ -8,7 +8,7 @@ import { Textarea } from '../../app/components/ui/textarea';
 import { SubmissionStatusBadge } from '../../app/components/ui/board';
 import type { BoardSubmissionStatus, Series } from '../../types/domain';
 import { getSeries, getSeriesChapters } from '../../services/seriesApi';
-import { listBoardVotes, castBoardVote, getBoardVoteProgress, type BoardDecision, type BoardVote, type BoardVoteProgress } from '../../services/boardApi';
+import { listBoardVotes, castBoardVote, getBoardVoteProgress, BOARD_VOTES_REQUIRED, type BoardDecision, type BoardVote, type BoardVoteProgress } from '../../services/boardApi';
 import { getStoredUser } from '../../services/authApi';
 import {
   ArrowLeft, CheckCircle, XCircle, User, BookOpen, Target, FileText, ExternalLink,
@@ -95,6 +95,7 @@ export default function SubmissionDetailPage() {
   const rejectVotes = voteProgress?.rejectVotes ?? votes.filter(v => v.decision === 'reject').length;
   const totalBoardMembers = voteProgress?.totalBoardMembers ?? 0;
   const votedBoardMembers = voteProgress?.votedBoardMembers ?? 0;
+  const requiredVotes = voteProgress?.requiredVotes ?? BOARD_VOTES_REQUIRED;
   const quorumMet = voteProgress?.quorumMet ?? false;
   const totalVotes = approveVotes + rejectVotes;
   const isPendingReview = series?.status === 'Submitted';
@@ -172,8 +173,8 @@ export default function SubmissionDetailPage() {
               {totalBoardMembers > 0 && isPendingReview && (
                 <p className="text-xs text-muted-foreground mb-3">
                   {quorumMet
-                    ? 'Đủ phiếu board — hệ thống sẽ quyết định theo đa số.'
-                    : `Cần ${votedBoardMembers}/${totalBoardMembers} board vote mới quyết định.`}
+                    ? `Đủ ${requiredVotes} phiếu board — hệ thống đã quyết định theo đa số.`
+                    : `Đã có ${votedBoardMembers} phiếu (cần ${requiredVotes} phiếu board để quyết định).`}
                 </p>
               )}
               <div className="grid grid-cols-2 gap-4 pt-4 border-t">

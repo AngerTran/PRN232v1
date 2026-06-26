@@ -122,9 +122,9 @@ try
             from public.board_votes v
             inner join public.profiles p on p.id = v.board_member_id
             where v.series_id = s.id and p.role = 'board'::user_role and coalesce(p.is_active, true) = true
-          ) = (
+          ) >= LEAST(3, (
             select count(*) from public.profiles p where p.role = 'board'::user_role and coalesce(p.is_active, true) = true
-          )
+          ))
           and (
             select count(*) from public.board_votes v
             inner join public.profiles p on p.id = v.board_member_id
@@ -144,14 +144,14 @@ try
             from public.board_votes v
             inner join public.profiles p on p.id = v.board_member_id
             where v.series_id = s.id and p.role = 'board'::user_role and coalesce(p.is_active, true) = true
-          ) = (
+          ) >= LEAST(3, (
             select count(*) from public.profiles p where p.role = 'board'::user_role and coalesce(p.is_active, true) = true
-          )
+          ))
           and (
             select count(*) from public.board_votes v
             inner join public.profiles p on p.id = v.board_member_id
             where v.series_id = s.id and p.role = 'board'::user_role and v.decision = 'reject'::vote_decision
-          ) > (
+          ) >= (
             select count(*) from public.board_votes v
             inner join public.profiles p on p.id = v.board_member_id
             where v.series_id = s.id and p.role = 'board'::user_role and v.decision = 'approve'::vote_decision

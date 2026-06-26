@@ -33,6 +33,7 @@ public record BoardVoteProgressResponse(
     int VotedBoardMembers,
     int ApproveVotes,
     int RejectVotes,
+    int RequiredVotes,
     bool QuorumMet);
 
 public record LeaderboardItemResponse(

@@ -33,11 +33,14 @@ interface ApiPendingSeriesItem {
   votedBoardMembers: number;
 }
 
+export const BOARD_VOTES_REQUIRED = 3;
+
 export interface BoardVoteProgress {
   totalBoardMembers: number;
   votedBoardMembers: number;
   approveVotes: number;
   rejectVotes: number;
+  requiredVotes: number;
   quorumMet: boolean;
 }
 
@@ -46,6 +49,7 @@ interface ApiBoardVoteProgress {
   votedBoardMembers: number;
   approveVotes: number;
   rejectVotes: number;
+  requiredVotes: number;
   quorumMet: boolean;
 }
 
@@ -127,6 +131,7 @@ export async function getBoardVoteProgress(seriesId: string): Promise<BoardVoteP
     votedBoardMembers: item.votedBoardMembers,
     approveVotes: item.approveVotes,
     rejectVotes: item.rejectVotes,
+    requiredVotes: item.requiredVotes ?? BOARD_VOTES_REQUIRED,
     quorumMet: item.quorumMet,
   };
 }

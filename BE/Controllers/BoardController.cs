@@ -65,7 +65,7 @@ public class BoardController : ControllerBase
     }
 
     [HttpGet("vote-progress")]
-    [SwaggerOperation(Summary = "Get board vote progress", Description = "Returns how many board members have voted and whether quorum is met for a series.")]
+    [SwaggerOperation(Summary = "Get board vote progress", Description = "Returns vote counts and whether the series has reached the minimum 3 board votes required for a decision.")]
     [ProducesResponseType(typeof(BoardVoteProgressResponse), StatusCodes.Status200OK)]
     public async Task<ActionResult<BoardVoteProgressResponse>> VoteProgress(
         [FromQuery] Guid seriesId,
