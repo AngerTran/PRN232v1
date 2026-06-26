@@ -1,25 +1,30 @@
 import { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router';
+import { ChevronLeft, CheckCircle, XCircle, Download, FileText, User } from 'lucide-react';
+import { clsx } from 'clsx';
+import Button from '../../components/ui/Button';
+import Card, { CardHeader, CardTitle } from '../../components/ui/Card';
 import { usePageMeta } from '../../hooks/usePageMeta';
-import { Card, CardContent, CardHeader, CardTitle } from '../../app/components/ui/card';
-import { Button } from '../../app/components/ui/button';
-import { Badge } from '../../app/components/ui/badge';
-import { Textarea } from '../../app/components/ui/textarea';
 import { SubmissionStatusBadge } from '../../app/components/ui/board';
 import type { BoardSubmissionStatus, Series } from '../../types/domain';
 import { getSeries, getSeriesChapters } from '../../services/seriesApi';
-import { listBoardVotes, castBoardVote, getBoardVoteProgress, BOARD_VOTES_REQUIRED, type BoardDecision, type BoardVote, type BoardVoteProgress } from '../../services/boardApi';
-import { getStoredUser } from '../../services/authApi';
 import {
-  ArrowLeft, CheckCircle, XCircle, User, BookOpen, Target, FileText, ExternalLink,
-} from 'lucide-react';
-import { clsx } from 'clsx';
+  listBoardVotes,
+  castBoardVote,
+  getBoardVoteProgress,
+  BOARD_VOTES_REQUIRED,
+  type BoardDecision,
+  type BoardVote,
+  type BoardVoteProgress,
+} from '../../services/boardApi';
+import { getStoredUser } from '../../services/authApi';
 
 function mapStatus(status: string): BoardSubmissionStatus {
   switch (status) {
     case 'Approved':
     case 'In Progress':
     case 'Published':
+    case 'Completed':
       return 'Approved';
     case 'Cancelled':
       return 'Rejected';
@@ -30,10 +35,22 @@ function mapStatus(status: string): BoardSubmissionStatus {
   }
 }
 
+function manuscriptFileName(url: string): string {
+  try {
+    const name = decodeURIComponent(url.split('/').pop()?.split('?')[0] || '');
+    return name || 'ban-thao';
+  } catch {
+    return 'ban-thao';
+  }
+}
+
+const inputClass =
+  'w-full px-4 py-2.5 text-sm bg-muted/40 border border-border rounded-xl text-foreground cursor-default';
+
 export default function SubmissionDetailPage() {
-  usePageMeta({ title: 'Chi Tiết Submission' });
   const { submissionId } = useParams<{ submissionId: string }>();
   const navigate = useNavigate();
+  const { setPageMeta } = usePageMeta();
 
   const [series, setSeries] = useState<Series | null>(null);
   const [votes, setVotes] = useState<BoardVote[]>([]);
@@ -64,12 +81,10 @@ export default function SubmissionDetailPage() {
         setVotes(v);
         setVoteProgress(progress);
         const proposal = chapters.find(c => c.number === 0) ?? chapters.find(c => c.description);
-        setManuscriptUrl(proposal?.description || null);
+        setManuscriptUrl(proposal?.description?.trim() || null);
 
         const currentUserId = getStoredUser()?.id;
-        const myVote = currentUserId
-          ? v.find(vote => vote.boardMemberId === currentUserId)
-          : undefined;
+        const myVote = currentUserId ? v.find(vote => vote.boardMemberId === currentUserId) : undefined;
         if (myVote) {
           setSubmitted(true);
           setDecision(myVote.decision === 'reject' ? 'reject' : 'approve');
@@ -81,7 +96,7 @@ export default function SubmissionDetailPage() {
         }
       })
       .catch(err => {
-        if (isActive) setError(err instanceof Error ? err.message : 'Không thể tải submission.');
+        if (isActive) setError(err instanceof Error ? err.message : 'Không thể tải hồ sơ series.');
       })
       .finally(() => {
         if (isActive) setLoading(false);
@@ -91,15 +106,26 @@ export default function SubmissionDetailPage() {
     };
   }, [seriesId]);
 
+  useEffect(() => {
+    if (series) {
+      setPageMeta({
+        title: series.title,
+        breadcrumb: [
+          { label: 'Duyệt Series', href: '/board/submissions' },
+          { label: series.title },
+        ],
+      });
+    }
+  }, [series, setPageMeta]);
+
   const approveVotes = voteProgress?.approveVotes ?? votes.filter(v => v.decision === 'approve').length;
   const rejectVotes = voteProgress?.rejectVotes ?? votes.filter(v => v.decision === 'reject').length;
-  const totalBoardMembers = voteProgress?.totalBoardMembers ?? 0;
-  const votedBoardMembers = voteProgress?.votedBoardMembers ?? 0;
+  const votedBoardMembers = voteProgress?.votedBoardMembers ?? votes.length;
   const requiredVotes = voteProgress?.requiredVotes ?? BOARD_VOTES_REQUIRED;
   const quorumMet = voteProgress?.quorumMet ?? false;
-  const totalVotes = approveVotes + rejectVotes;
   const isPendingReview = series?.status === 'Submitted';
   const myDecision = submitted ? decision : null;
+  const genres = series?.genres?.length ? series.genres : (series?.genre ? series.genre.split(',').map(g => g.trim()) : []);
 
   const handleSubmitVote = async () => {
     if (!decision || !seriesId) return;
@@ -124,253 +150,312 @@ export default function SubmissionDetailPage() {
   };
 
   if (loading) {
-    return <div className="p-6 text-sm text-muted-foreground">Đang tải submission...</div>;
+    return <div className="p-6 text-sm text-muted-foreground">Đang tải hồ sơ series...</div>;
   }
 
   if (!series) {
     return (
       <div className="p-6">
         <Card>
-          <CardContent className="py-12 text-center text-muted-foreground">
-            {error || 'Không tìm thấy submission này.'}
-          </CardContent>
+          <p className="py-12 text-center text-muted-foreground">{error || 'Không tìm thấy series này.'}</p>
         </Card>
       </div>
     );
   }
 
+  const votePanel = (
+    <Card>
+      <CardHeader>
+        <CardTitle>Bỏ phiếu của bạn</CardTitle>
+      </CardHeader>
+      <div className="space-y-4">
+        <div className="rounded-xl bg-muted/50 px-4 py-3 text-xs space-y-1">
+          <div className="flex justify-between">
+            <span className="text-muted-foreground">Tiến độ hội đồng</span>
+            <span className="font-semibold">{votedBoardMembers}/{requiredVotes}</span>
+          </div>
+          <div className="flex gap-4 font-semibold">
+            <span className="text-green-700">✓ {approveVotes}</span>
+            <span className="text-red-600">✗ {rejectVotes}</span>
+          </div>
+          {isPendingReview && (
+            <p className="text-muted-foreground pt-1">
+              {quorumMet
+                ? `Đủ ${requiredVotes} phiếu — hệ thống đã quyết định theo đa số.`
+                : `Cần ${requiredVotes} phiếu board để quyết định.`}
+            </p>
+          )}
+        </div>
+
+        {!isPendingReview ? (
+          <div className="text-center py-4">
+            <CheckCircle className="h-10 w-10 text-green-500 mx-auto mb-2" />
+            <p className="font-medium text-sm">Series đã có quyết định</p>
+            <p className="text-xs text-muted-foreground mt-1">
+              {series.status === 'Cancelled' ? 'Từ chối' : 'Đã duyệt'}
+            </p>
+          </div>
+        ) : submitted ? (
+          <div className="text-center py-4 space-y-3">
+            <CheckCircle className="h-10 w-10 text-green-500 mx-auto" />
+            <p className="font-medium text-sm">Đã ghi nhận phiếu bầu</p>
+            <p className="text-xs text-muted-foreground">
+              Quyết định: <span className="font-semibold">{myDecision === 'approve' ? 'Phê duyệt' : 'Từ chối'}</span>
+            </p>
+            <Button type="button" variant="outline" className="w-full" onClick={() => setSubmitted(false)}>
+              Thay đổi phiếu
+            </Button>
+          </div>
+        ) : (
+          <>
+            <div className="space-y-2">
+              {(
+                [
+                  { val: 'approve' as const, label: 'Phê duyệt', icon: <CheckCircle size={16} />, active: 'border-green-500 bg-green-50 text-green-700' },
+                  { val: 'reject' as const, label: 'Từ chối', icon: <XCircle size={16} />, active: 'border-red-500 bg-red-50 text-red-700' },
+                ]
+              ).map(opt => (
+                <button
+                  key={opt.val}
+                  type="button"
+                  onClick={() => setDecision(opt.val)}
+                  className={clsx(
+                    'w-full flex items-center gap-3 px-4 py-3 rounded-xl border-2 text-sm font-medium transition-all',
+                    decision === opt.val ? opt.active : 'border-border hover:border-gray-300'
+                  )}
+                >
+                  {opt.icon}
+                  {opt.label}
+                </button>
+              ))}
+            </div>
+            <textarea
+              placeholder="Lý do / nhận xét (khuyến nghị nếu từ chối)..."
+              rows={4}
+              value={reason}
+              onChange={e => setReason(e.target.value)}
+              className={`${inputClass} resize-none cursor-text bg-input-background`}
+            />
+            <Button
+              type="button"
+              variant="primary"
+              className="w-full"
+              disabled={!decision || submitting}
+              loading={submitting}
+              onClick={handleSubmitVote}
+            >
+              Xác nhận phiếu bầu
+            </Button>
+          </>
+        )}
+      </div>
+    </Card>
+  );
+
+  const resourcesSection = (
+    <>
+      <Card>
+        <CardHeader>
+          <CardTitle>Tài nguyên series</CardTitle>
+        </CardHeader>
+        <div className="space-y-5">
+          <div>
+            <label className="block text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-2">
+              Ảnh bìa
+            </label>
+            <div className="rounded-xl border border-border overflow-hidden bg-muted/30 aspect-[280/380] max-h-[380px]">
+              {series.coverUrl ? (
+                <img src={series.coverUrl} alt={series.title} className="w-full h-full object-cover" />
+              ) : (
+                <div className="w-full h-full flex items-center justify-center text-sm text-muted-foreground">
+                  Chưa có ảnh bìa
+                </div>
+              )}
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-2">
+              Bản thảo đề xuất
+            </label>
+            {manuscriptUrl ? (
+              <div className="rounded-xl border border-dashed border-border bg-muted/20 p-4 space-y-3">
+                <div className="flex items-start gap-3">
+                  <FileText className="h-8 w-8 text-primary shrink-0 mt-0.5" />
+                  <div className="min-w-0">
+                    <p className="text-sm font-medium truncate">{manuscriptFileName(manuscriptUrl)}</p>
+                    <p className="text-xs text-muted-foreground mt-0.5">Tài liệu do mangaka tải lên khi gửi đề xuất</p>
+                  </div>
+                </div>
+                <div className="flex flex-col gap-2">
+                  <a
+                    href={manuscriptUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center justify-center gap-2 rounded-xl border border-primary/30 bg-primary/5 px-4 py-2.5 text-sm font-semibold text-primary hover:bg-primary/10 transition-colors"
+                  >
+                    Mở xem bản thảo
+                  </a>
+                  <a
+                    href={manuscriptUrl}
+                    download={manuscriptFileName(manuscriptUrl)}
+                    className="inline-flex items-center justify-center gap-2 rounded-xl border border-border px-4 py-2.5 text-sm font-medium hover:bg-muted transition-colors"
+                  >
+                    <Download size={16} />
+                    Tải về máy
+                  </a>
+                </div>
+              </div>
+            ) : (
+              <div className="rounded-xl border border-dashed border-border bg-muted/20 p-6 text-center text-sm text-muted-foreground">
+                Mangaka chưa đính kèm bản thảo
+              </div>
+            )}
+          </div>
+        </div>
+      </Card>
+      {votePanel}
+    </>
+  );
+
   return (
-    <div className="p-6 space-y-6">
-      <Button variant="ghost" size="sm" onClick={() => navigate('/board/submissions')} className="text-muted-foreground">
-        <ArrowLeft className="h-4 w-4 mr-1" /> Quay lại
-      </Button>
+    <div className="flex flex-1 min-h-0 flex-col overflow-y-auto lg:flex-row lg:overflow-hidden">
+      <div className="flex-1 min-w-0 lg:min-h-0 lg:overflow-y-auto lg:overscroll-contain">
+        <div className="p-6 space-y-5">
+          <div className="flex items-center gap-3">
+            <button
+              type="button"
+              onClick={() => navigate('/board/submissions')}
+              className="p-1.5 rounded-lg hover:bg-muted transition-colors text-muted-foreground hover:text-foreground"
+            >
+              <ChevronLeft size={20} />
+            </button>
+            <div className="flex-1 min-w-0">
+              <div className="flex flex-wrap items-center gap-2 mb-1">
+                <h1 className="text-xl font-bold truncate">{series.title}</h1>
+                <SubmissionStatusBadge status={mapStatus(series.status)} />
+              </div>
+              <p className="text-sm text-muted-foreground flex items-center gap-1.5">
+                <User size={14} />
+                {series.mangakaName ?? '—'}
+              </p>
+            </div>
+          </div>
 
-      {error && (
-        <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{error}</div>
-      )}
+          {error && (
+            <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{error}</div>
+          )}
 
-      {/* Header */}
-      <Card className="shadow-sm overflow-hidden">
-        <CardContent className="p-0">
-          <div className="flex flex-col md:flex-row gap-0">
-            <img src={series.coverUrl} alt={series.title} className="w-full md:w-48 h-64 md:h-auto object-cover" />
-            <div className="p-6 flex-1">
-              <div className="flex items-start justify-between gap-4 mb-4">
-                <div>
-                  <h1 className="text-2xl font-bold mb-1">{series.title}</h1>
-                  <div className="flex items-center gap-2 text-sm text-muted-foreground mb-3">
-                    <User className="h-4 w-4" />
-                    <span>{series.mangakaName ?? '—'}</span>
-                  </div>
-                  <div className="flex flex-wrap gap-2">
-                    <Badge variant="outline">{series.genre}</Badge>
-                    <SubmissionStatusBadge status={mapStatus(series.status)} />
-                  </div>
+          <Card>
+            <CardHeader>
+              <CardTitle>Thông tin đề xuất</CardTitle>
+            </CardHeader>
+            <div className="space-y-4">
+              <div>
+                <label className="block text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-1.5">
+                  Tiêu đề series
+                </label>
+                <div className={inputClass}>{series.title}</div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-2">
+                  Thể loại
+                </label>
+                <div className="flex flex-wrap gap-2">
+                  {genres.length > 0 ? (
+                    genres.map(genre => (
+                      <span
+                        key={genre}
+                        className="px-3 py-1.5 text-xs font-semibold rounded-lg border bg-secondary/10 text-secondary border-secondary/20"
+                      >
+                        {genre}
+                      </span>
+                    ))
+                  ) : (
+                    <span className="text-sm text-muted-foreground">—</span>
+                  )}
                 </div>
               </div>
 
-              {/* Vote summary */}
-              {totalBoardMembers > 0 && isPendingReview && (
-                <p className="text-xs text-muted-foreground mb-3">
-                  {quorumMet
-                    ? `Đủ ${requiredVotes} phiếu board — hệ thống đã quyết định theo đa số.`
-                    : `Đã có ${votedBoardMembers} phiếu (cần ${requiredVotes} phiếu board để quyết định).`}
-                </p>
-              )}
-              <div className="grid grid-cols-2 gap-4 pt-4 border-t">
-                <div className="text-center">
-                  <p className="text-2xl font-bold text-green-600">{approveVotes}</p>
-                  <p className="text-xs text-muted-foreground mt-1">Phê Duyệt</p>
-                  <div className="h-1.5 bg-gray-100 rounded-full mt-2">
-                    <div className="h-full bg-green-500 rounded-full" style={{ width: totalVotes ? `${(approveVotes / totalVotes) * 100}%` : '0%' }} />
-                  </div>
+              <div>
+                <label className="block text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-1.5">
+                  Tóm tắt
+                </label>
+                <div className={`${inputClass} min-h-[120px] whitespace-pre-wrap leading-relaxed`}>
+                  {series.synopsis || 'Chưa có tóm tắt.'}
                 </div>
-                <div className="text-center">
-                  <p className="text-2xl font-bold text-red-600">{rejectVotes}</p>
-                  <p className="text-xs text-muted-foreground mt-1">Từ Chối</p>
-                  <div className="h-1.5 bg-gray-100 rounded-full mt-2">
-                    <div className="h-full bg-red-500 rounded-full" style={{ width: totalVotes ? `${(rejectVotes / totalVotes) * 100}%` : '0%' }} />
-                  </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-1.5">
+                    Đối tượng độc giả
+                  </label>
+                  <div className={inputClass}>{series.targetAudience || '—'}</div>
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-1.5">
+                    Lịch xuất bản
+                  </label>
+                  <div className={inputClass}>{series.publishingType || '—'}</div>
                 </div>
               </div>
             </div>
-          </div>
-        </CardContent>
-      </Card>
-
-      <div className="grid gap-6 lg:grid-cols-3">
-        <div className="lg:col-span-2 space-y-6">
-          {/* Synopsis */}
-          <Card className="shadow-sm">
-            <CardHeader className="pb-3">
-              <CardTitle className="text-base flex items-center gap-2">
-                <BookOpen className="h-4 w-4 text-primary" /> Tóm Tắt Nội Dung
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <p className="text-sm leading-relaxed text-muted-foreground">{series.synopsis || 'Chưa có tóm tắt.'}</p>
-            </CardContent>
           </Card>
 
-          {/* Target Audience */}
-          <Card className="shadow-sm">
-            <CardHeader className="pb-3">
-              <CardTitle className="text-base flex items-center gap-2">
-                <Target className="h-4 w-4 text-primary" /> Đối Tượng Mục Tiêu
-              </CardTitle>
+          <Card>
+            <CardHeader>
+              <CardTitle>Nhân vật chính</CardTitle>
             </CardHeader>
-            <CardContent>
-              <Badge className="bg-secondary/10 text-secondary border-secondary/20 text-sm">
-                {series.targetAudience || '—'}
-              </Badge>
-            </CardContent>
+            <div className={`${inputClass} min-h-[100px] whitespace-pre-wrap leading-relaxed`}>
+              {series.mainCharacters || 'Chưa có mô tả nhân vật.'}
+            </div>
           </Card>
 
-          {series.mainCharacters && (
-            <Card className="shadow-sm">
-              <CardHeader className="pb-3">
-                <CardTitle className="text-base flex items-center gap-2">
-                  <User className="h-4 w-4 text-primary" /> Nhân Vật Chính
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <p className="text-sm leading-relaxed text-muted-foreground whitespace-pre-line">{series.mainCharacters}</p>
-              </CardContent>
-            </Card>
-          )}
-
-          {manuscriptUrl && (
-            <Card className="shadow-sm">
-              <CardHeader className="pb-3">
-                <CardTitle className="text-base flex items-center gap-2">
-                  <FileText className="h-4 w-4 text-primary" /> Bản Thảo Đề Xuất
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <a
-                  href={manuscriptUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="inline-flex items-center gap-2 text-sm font-medium text-primary hover:underline"
-                >
-                  <ExternalLink className="h-4 w-4" />
-                  Xem / tải bản thảo
-                </a>
-              </CardContent>
-            </Card>
-          )}
-
-          {/* Board Votes */}
-          <Card className="shadow-sm">
-            <CardHeader className="pb-3">
-              <CardTitle className="text-base flex items-center gap-2">
-                <FileText className="h-4 w-4 text-primary" /> Ý Kiến Hội Đồng
-              </CardTitle>
+          <Card>
+            <CardHeader>
+              <CardTitle>Ý kiến hội đồng</CardTitle>
             </CardHeader>
-            <CardContent className="space-y-4">
-              {votes.length === 0 ? (
-                <p className="text-sm text-muted-foreground">Chưa có thành viên nào bỏ phiếu.</p>
-              ) : (
-                votes.map(v => (
+            {votes.length === 0 ? (
+              <p className="text-sm text-muted-foreground">Chưa có thành viên nào bỏ phiếu.</p>
+            ) : (
+              <div className="space-y-4">
+                {votes.map(v => (
                   <div key={v.id} className="flex gap-3">
                     <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center text-primary font-bold text-sm shrink-0">
                       {(v.boardMemberName ?? '?').slice(0, 1).toUpperCase()}
                     </div>
-                    <div className="flex-1">
-                      <div className="flex items-center gap-2 mb-1">
+                    <div className="flex-1 min-w-0">
+                      <div className="flex flex-wrap items-center gap-2 mb-1">
                         <span className="font-medium text-sm">{v.boardMemberName ?? 'Thành viên'}</span>
-                        <span className={clsx('text-xs font-semibold px-2 py-0.5 rounded-full',
-                          v.decision === 'approve' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'
-                        )}>
-                          {v.decision === 'approve' ? '✓ Phê Duyệt' : '✗ Từ Chối'}
+                        <span
+                          className={clsx(
+                            'text-xs font-semibold px-2 py-0.5 rounded-full',
+                            v.decision === 'approve' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'
+                          )}
+                        >
+                          {v.decision === 'approve' ? '✓ Phê duyệt' : '✗ Từ chối'}
                         </span>
                       </div>
                       {v.comment && <p className="text-xs text-muted-foreground">{v.comment}</p>}
                       {v.createdAt && (
-                        <p className="text-xs text-muted-foreground/60 mt-1">{new Date(v.createdAt).toLocaleString('vi-VN')}</p>
+                        <p className="text-xs text-muted-foreground/60 mt-1">
+                          {new Date(v.createdAt).toLocaleString('vi-VN')}
+                        </p>
                       )}
                     </div>
                   </div>
-                ))
-              )}
-            </CardContent>
-          </Card>
-        </div>
-
-        {/* Voting Panel */}
-        <div className="space-y-4">
-          <Card className="shadow-sm sticky top-6">
-            <CardHeader className="pb-3">
-              <CardTitle className="text-base">Bỏ Phiếu Của Bạn</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              {!isPendingReview ? (
-                <div className="text-center py-6">
-                  <CheckCircle className="h-10 w-10 text-green-500 mx-auto mb-3" />
-                  <p className="font-medium">Series đã có quyết định</p>
-                  <p className="text-xs text-muted-foreground mt-1">
-                    Trạng thái: <span className="font-semibold">{series.status === 'Cancelled' ? 'Từ chối' : 'Đã duyệt'}</span>
-                  </p>
-                </div>
-              ) : submitted ? (
-                <div className="text-center py-6">
-                  <CheckCircle className="h-10 w-10 text-green-500 mx-auto mb-3" />
-                  <p className="font-medium">Đã ghi nhận phiếu bầu!</p>
-                  <p className="text-xs text-muted-foreground mt-1">
-                    Quyết định: <span className="font-semibold">{myDecision === 'approve' ? 'Phê Duyệt' : 'Từ Chối'}</span>
-                  </p>
-                  <Button variant="outline" className="mt-4" onClick={() => setSubmitted(false)}>
-                    Thay đổi phiếu
-                  </Button>
-                </div>
-              ) : (
-                <>
-                  <div className="space-y-2">
-                    {(
-                      [
-                        { val: 'approve' as const, label: 'Phê Duyệt', icon: <CheckCircle className="h-4 w-4" />, color: 'border-green-500 bg-green-50 text-green-700' },
-                        { val: 'reject' as const, label: 'Từ Chối', icon: <XCircle className="h-4 w-4" />, color: 'border-red-500 bg-red-50 text-red-700' },
-                      ]
-                    ).map(opt => (
-                      <button
-                        key={opt.val}
-                        onClick={() => setDecision(opt.val)}
-                        className={clsx(
-                          'w-full flex items-center gap-3 px-4 py-3 rounded-xl border-2 text-sm font-medium transition-all',
-                          decision === opt.val ? opt.color : 'border-border hover:border-gray-300 text-foreground'
-                        )}
-                      >
-                        {opt.icon}
-                        {opt.label}
-                      </button>
-                    ))}
-                  </div>
-
-                  <Textarea
-                    placeholder="Lý do / nhận xét (khuyến nghị nếu từ chối)..."
-                    rows={4}
-                    value={reason}
-                    onChange={e => setReason(e.target.value)}
-                    className="text-sm resize-none"
-                  />
-
-                  <Button
-                    className="w-full"
-                    disabled={!decision || submitting}
-                    onClick={handleSubmitVote}
-                  >
-                    {submitting ? 'Đang gửi…' : 'Xác Nhận Phiếu Bầu'}
-                  </Button>
-
-                  {!decision && (
-                    <p className="text-xs text-muted-foreground text-center">Chọn quyết định để bỏ phiếu</p>
-                  )}
-                </>
-              )}
-            </CardContent>
+                ))}
+              </div>
+            )}
           </Card>
         </div>
       </div>
+
+      <aside className="shrink-0 w-full lg:w-[min(380px,36vw)] lg:min-w-[280px] lg:max-w-[420px] lg:min-h-0 lg:overflow-y-auto lg:overscroll-contain border-t lg:border-t-0 lg:border-l border-border bg-background p-6 space-y-5">
+        {resourcesSection}
+      </aside>
     </div>
   );
 }

@@ -41,6 +41,7 @@ const MANGAKA_GROUPS: NavGroup[] = [
       { label: 'Nhiệm vụ', icon: <ClipboardList size={18} />, href: '/mangaka/tasks' },
       { label: 'Trợ lý', icon: <Users size={18} />, href: '/mangaka/assistants' },
       { label: 'Editor', icon: <ShieldCheck size={18} />, href: '/mangaka/editors' },
+      { label: 'Mời hội đồng', icon: <Gavel size={18} />, href: '/mangaka/board-invite' },
       { label: 'Nộp series', icon: <Send size={18} />, href: '/mangaka/submissions' },
       { label: 'Xếp hạng', icon: <BarChart2 size={18} />, href: '/mangaka/ranking' },
     ],
@@ -92,6 +93,7 @@ const BOARD_GROUPS: NavGroup[] = [
     items: [
       { label: 'Dashboard', icon: <LayoutDashboard size={18} />, href: '/board/dashboard', exact: true },
       { label: 'Duyệt Series', icon: <Gavel size={18} />, href: '/board/submissions' },
+      { label: 'Lời mời xét duyệt', icon: <Mail size={18} />, href: '/board/review-invitations' },
       { label: 'Series Đã Duyệt', icon: <Star size={18} />, href: '/board/approved-series' },
       { label: 'Lịch Xuất Bản', icon: <CalendarDays size={18} />, href: '/board/publishing-schedule' },
     ],

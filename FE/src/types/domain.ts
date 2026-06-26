@@ -49,6 +49,8 @@ export interface Series {
   mainCharacters?: string;
   createdAt: string;
   updatedAt: string;
+  submittedForReviewAt?: string;
+  reviewExpiresAt?: string;
   isAtRisk: boolean;
 }
 

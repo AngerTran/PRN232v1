@@ -19,6 +19,7 @@ interface ApiSeries {
   publishingFrequency?: string | null;
   createdAt?: string | null;
   updatedAt?: string | null;
+  submittedForReviewAt?: string | null;
 }
 
 interface ApiChapter {
@@ -159,6 +160,10 @@ export function mapSeries(item: ApiSeries, chaptersCount = 0): Series {
     editorName: item.editorName ?? undefined,
     createdAt: dateOnly(item.createdAt),
     updatedAt: dateOnly(item.updatedAt),
+    submittedForReviewAt: item.submittedForReviewAt ? dateOnly(item.submittedForReviewAt) : undefined,
+    reviewExpiresAt: item.submittedForReviewAt
+      ? dateOnly(new Date(new Date(item.submittedForReviewAt).getTime() + 30 * 86400000).toISOString())
+      : undefined,
     isAtRisk: item.status?.toLowerCase() === 'hiatus',
   };
 }
@@ -237,8 +242,10 @@ export const SERIES_SUBMISSION_STATUS_HINT: Record<SeriesStatus, string> = {
   'At Risk': 'Series đang có nguy cơ bị tạm dừng do xếp hạng thấp.',
   Completed: 'Editor đã đánh dấu series hoàn thành sản xuất.',
   Published: 'Series đã xuất bản.',
-  Cancelled: 'Hội đồng đã từ chối series.',
+  Cancelled: 'Hội đồng đã từ chối hoặc hết hạn xét duyệt — bạn có thể chỉnh sửa và gửi lại.',
 };
+
+export const REVIEW_EXPIRY_DAYS = 30;
 
 /** Lịch sử nộp series của mangaka — mọi series đã gửi duyệt, mới nhất trước. */
 export async function getSubmittedSeries(): Promise<Series[]> {
@@ -453,6 +460,69 @@ export async function markSeriesCompleted(id: string): Promise<Series> {
 /** Gửi series lên hội đồng xét duyệt (draft → pending_review). */
 export async function submitSeriesForReview(id: string): Promise<Series> {
   return updateSeriesStatus(id, 'pending_review');
+}
+
+/** Gửi lại series sau khi bị từ chối / hết hạn (cancelled → pending_review). */
+export async function resubmitSeriesForReview(id: string): Promise<Series> {
+  return updateSeriesStatus(id, 'pending_review');
+}
+
+export interface SeriesBoardReviewInvitation {
+  seriesId: string;
+  seriesTitle: string;
+  mangakaId: string;
+  mangakaName: string;
+  boardMemberId: string;
+  boardMemberName: string;
+  status: 'pending' | 'accepted' | 'rejected';
+  createdAt: string;
+  respondedAt?: string | null;
+}
+
+export interface SeriesBoardReviewStatus {
+  seriesId: string;
+  approveVotes: number;
+  rejectVotes: number;
+  votedBoardMembers: number;
+  requiredVotes: number;
+  pendingInvitations: number;
+  availableInviteSlots: number;
+  submittedForReviewAt?: string | null;
+  reviewExpiresAt?: string | null;
+  quorumMet: boolean;
+}
+
+export async function inviteBoardMember(seriesId: string, boardMemberId: string): Promise<SeriesBoardReviewInvitation> {
+  return unwrap(await apiRequest<ApiEnvelope<SeriesBoardReviewInvitation>>(`/api/series/${seriesId}/board-review-invitations`, {
+    method: 'POST',
+    body: JSON.stringify({ boardMemberId }),
+  }));
+}
+
+export async function getSentBoardReviewInvitations(): Promise<SeriesBoardReviewInvitation[]> {
+  return unwrap(await apiRequest<ApiEnvelope<SeriesBoardReviewInvitation[]>>('/api/series/board-review-invitations/sent'));
+}
+
+export async function getBoardReviewInvitationsForSeries(seriesId: string): Promise<SeriesBoardReviewInvitation[]> {
+  return unwrap(await apiRequest<ApiEnvelope<SeriesBoardReviewInvitation[]>>(`/api/series/${seriesId}/board-review-invitations`));
+}
+
+export async function getMyBoardReviewInvitations(): Promise<SeriesBoardReviewInvitation[]> {
+  return unwrap(await apiRequest<ApiEnvelope<SeriesBoardReviewInvitation[]>>('/api/series/board-review-invitations/mine'));
+}
+
+export async function respondToBoardReviewInvitation(
+  seriesId: string,
+  action: 'accept' | 'reject'
+): Promise<SeriesBoardReviewInvitation> {
+  return unwrap(await apiRequest<ApiEnvelope<SeriesBoardReviewInvitation>>(
+    `/api/series/board-review-invitations/${seriesId}/${action}`,
+    { method: 'PATCH' }
+  ));
+}
+
+export async function getSeriesBoardReviewStatus(seriesId: string): Promise<SeriesBoardReviewStatus> {
+  return unwrap(await apiRequest<ApiEnvelope<SeriesBoardReviewStatus>>(`/api/series/${seriesId}/board-review-status`));
 }
 
 export async function deleteSeries(id: string): Promise<void> {

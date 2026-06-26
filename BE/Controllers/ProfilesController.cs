@@ -166,6 +166,22 @@ public class ProfilesController : ControllerBase
         return Ok(profiles);
     }
 
+    /// <summary>Danh sách board — Mangaka (mời xét duyệt) hoặc Admin.</summary>
+    [HttpGet("board-members")]
+    [SwaggerOperation(Summary = "List board members", Description = "Returns active board profiles. Mangaka and admin can list board members for review invitations.")]
+    [ProducesResponseType(typeof(IReadOnlyList<ProfileResponse>), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    public async Task<ActionResult<IReadOnlyList<ProfileResponse>>> ListBoardMembers(CancellationToken cancellationToken)
+    {
+        if (!this.TryGetUserId(out var callerId))
+        {
+            return Unauthorized();
+        }
+
+        var profiles = await _profileService.ListBoardMembersForAssignmentAsync(callerId, cancellationToken);
+        return Ok(profiles);
+    }
+
     /// <summary>Chi tiết profile — mọi user đã đăng nhập.</summary>
     [HttpGet("{id:guid}")]
     [SwaggerOperation(Summary = "Get profile by ID", Description = "Returns a profile by ID for an authenticated user.")]

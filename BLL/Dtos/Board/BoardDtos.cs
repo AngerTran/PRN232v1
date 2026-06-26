@@ -26,7 +26,12 @@ public record PendingSeriesItemResponse(
     int ApproveVotes,
     int RejectVotes,
     int TotalBoardMembers,
-    int VotedBoardMembers);
+    int VotedBoardMembers,
+    DateTime? SubmittedForReviewAt,
+    DateTime? ReviewExpiresAt,
+    bool CurrentUserHasVoted,
+    string? CurrentUserInvitationStatus,
+    bool CanVolunteerReview);
 
 public record BoardVoteProgressResponse(
     int TotalBoardMembers,

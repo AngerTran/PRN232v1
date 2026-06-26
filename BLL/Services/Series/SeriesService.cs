@@ -22,6 +22,7 @@ public class SeriesService
   private readonly SupabaseStorageService _storage;
   private readonly SupabaseOptions _supabaseOptions;
   private readonly NotificationService _notificationService;
+  private readonly Board.BoardService _boardService;
   private Repository<SeriesEntity> SeriesRepository => _unitOfWork.Repository<SeriesEntity>();
   private Repository<Chapter> ChapterRepository => _unitOfWork.Repository<Chapter>();
   private Repository<Profile> ProfileRepository => _unitOfWork.Repository<Profile>();
@@ -30,12 +31,14 @@ public class SeriesService
     UnitOfWork unitOfWork,
     SupabaseStorageService storage,
     IOptions<SupabaseOptions> supabaseOptions,
-    NotificationService notificationService)
+    NotificationService notificationService,
+    Board.BoardService boardService)
   {
     _unitOfWork = unitOfWork;
     _storage = storage;
     _supabaseOptions = supabaseOptions.Value;
     _notificationService = notificationService;
+    _boardService = boardService;
   }
 
   public async Task<SeriesListResponse> ListCatalogAsync(
@@ -434,6 +437,244 @@ public class SeriesService
     return MapEditorInvitation(invitation);
   }
 
+  public async Task<SeriesBoardReviewInvitationResponse> InviteBoardMemberAsync(
+    Guid callerId,
+    Guid seriesId,
+    InviteSeriesBoardMemberRequest request,
+    CancellationToken cancellationToken = default)
+  {
+    var caller = await RequireCallerAsync(callerId, cancellationToken);
+    var series = await SeriesRepository.GetByIdAsync(seriesId, asNoTracking: false, cancellationToken)
+      ?? throw new SeriesForbiddenException("Series not found.");
+
+    if (!IsMangaka(caller.Role) || series.AuthorId != caller.Id)
+    {
+      throw new SeriesForbiddenException("Only the series author can invite board members.");
+    }
+
+    if (series.Status != SeriesStatus.PendingReview)
+    {
+      throw new SeriesForbiddenException("Chỉ có thể mời hội đồng khi series đang chờ xét duyệt.");
+    }
+
+    if (!await ProfileRepository.AnyAsync(
+        p => p.Id == request.BoardMemberId && p.Role == ProfileRole.Board && p.IsActive != false,
+        cancellationToken))
+    {
+      throw new ArgumentException("BoardMemberId must reference an active profile with role 'board'.");
+    }
+
+    var pendingCount = await _unitOfWork.Context.SeriesBoardReviewInvitations
+      .CountAsync(i => i.SeriesId == seriesId && i.Status == "pending", cancellationToken);
+    var votedCount = await _unitOfWork.Context.BoardVotes
+      .Where(v => v.SeriesId == seriesId && v.BoardMemberId != null)
+      .Select(v => v.BoardMemberId!.Value)
+      .Distinct()
+      .CountAsync(cancellationToken);
+
+    if (pendingCount + votedCount >= SeriesReviewRules.MaxActiveReviewSlots)
+    {
+      throw new ArgumentException("Series đã đủ 3 vị trí xét duyệt đang hoạt động.");
+    }
+
+    var invitation = await BoardInvitationQuery(asNoTracking: false)
+      .FirstOrDefaultAsync(
+        i => i.SeriesId == seriesId && i.BoardMemberId == request.BoardMemberId,
+        cancellationToken);
+
+    var shouldNotify = false;
+    if (invitation is null)
+    {
+      invitation = new SeriesBoardReviewInvitation
+      {
+        SeriesId = seriesId,
+        BoardMemberId = request.BoardMemberId,
+        Status = "pending",
+        CreatedAt = DateTime.UtcNow
+      };
+      await _unitOfWork.Context.SeriesBoardReviewInvitations.AddAsync(invitation, cancellationToken);
+      invitation.Series = series;
+      invitation.BoardMember = await ProfileRepository.GetByIdAsync(request.BoardMemberId, cancellationToken: cancellationToken)
+        ?? throw new ArgumentException("Board profile not found.");
+      shouldNotify = true;
+    }
+    else if (invitation.Status == "rejected")
+    {
+      invitation.Status = "pending";
+      invitation.CreatedAt = DateTime.UtcNow;
+      invitation.RespondedAt = null;
+      shouldNotify = true;
+    }
+    else if (invitation.Status == "pending")
+    {
+      throw new ArgumentException("Lời mời đang chờ board phản hồi.");
+    }
+    else
+    {
+      throw new ArgumentException("Thành viên board này đã chấp nhận xét duyệt series.");
+    }
+
+    await _unitOfWork.SaveChangesAsync(cancellationToken);
+
+    if (shouldNotify)
+    {
+      await _notificationService.CreateAsync(
+        request.BoardMemberId,
+        "Lời mời xét duyệt series",
+        $"{caller.FullName} đã mời bạn xét duyệt series \"{series.Title}\".",
+        cancellationToken);
+    }
+
+    return MapBoardInvitation(invitation);
+  }
+
+  public async Task<IReadOnlyList<SeriesBoardReviewInvitationResponse>> ListSentBoardReviewInvitationsAsync(
+    Guid callerId,
+    CancellationToken cancellationToken = default)
+  {
+    var caller = await RequireCallerAsync(callerId, cancellationToken);
+    if (!IsMangaka(caller.Role))
+    {
+      throw new SeriesForbiddenException("Requires mangaka role.");
+    }
+
+    var invitations = await BoardInvitationQuery()
+      .Where(i => i.Series.AuthorId == callerId)
+      .OrderByDescending(i => i.CreatedAt)
+      .ToListAsync(cancellationToken);
+
+    return invitations.Select(MapBoardInvitation).ToList();
+  }
+
+  public async Task<IReadOnlyList<SeriesBoardReviewInvitationResponse>> ListBoardReviewInvitationsForSeriesAsync(
+    Guid callerId,
+    Guid seriesId,
+    CancellationToken cancellationToken = default)
+  {
+    var caller = await RequireCallerAsync(callerId, cancellationToken);
+    var series = await SeriesRepository.GetByIdAsync(seriesId, cancellationToken: cancellationToken)
+      ?? throw new SeriesForbiddenException("Series not found.");
+
+    if (!IsStaff(caller.Role) && series.AuthorId != caller.Id)
+    {
+      throw new SeriesForbiddenException("Forbidden.");
+    }
+
+    var invitations = await BoardInvitationQuery()
+      .Where(i => i.SeriesId == seriesId)
+      .OrderByDescending(i => i.CreatedAt)
+      .ToListAsync(cancellationToken);
+
+    return invitations.Select(MapBoardInvitation).ToList();
+  }
+
+  public async Task<IReadOnlyList<SeriesBoardReviewInvitationResponse>> ListMyBoardReviewInvitationsAsync(
+    Guid callerId,
+    CancellationToken cancellationToken = default)
+  {
+    var caller = await RequireCallerAsync(callerId, cancellationToken);
+    if (!IsBoard(caller.Role))
+    {
+      throw new SeriesForbiddenException("Requires board role.");
+    }
+
+    var invitations = await BoardInvitationQuery()
+      .Where(i => i.BoardMemberId == callerId)
+      .OrderByDescending(i => i.CreatedAt)
+      .ToListAsync(cancellationToken);
+
+    return invitations.Select(MapBoardInvitation).ToList();
+  }
+
+  public async Task<SeriesBoardReviewInvitationResponse?> RespondToBoardReviewInvitationAsync(
+    Guid callerId,
+    Guid seriesId,
+    bool accept,
+    CancellationToken cancellationToken = default)
+  {
+    var caller = await RequireCallerAsync(callerId, cancellationToken);
+    if (!IsBoard(caller.Role))
+    {
+      throw new SeriesForbiddenException("Requires board role.");
+    }
+
+    var invitation = await BoardInvitationQuery(asNoTracking: false)
+      .FirstOrDefaultAsync(i => i.SeriesId == seriesId && i.BoardMemberId == callerId, cancellationToken);
+    if (invitation is null)
+    {
+      return null;
+    }
+
+    if (invitation.Status != "pending")
+    {
+      throw new ArgumentException("Lời mời này đã được phản hồi.");
+    }
+
+    invitation.Status = accept ? "accepted" : "rejected";
+    invitation.RespondedAt = DateTime.UtcNow;
+    await _unitOfWork.SaveChangesAsync(cancellationToken);
+
+    await _boardService.RecordInvitationDecisionAsync(seriesId, callerId, accept, cancellationToken);
+
+    await _notificationService.CreateAsync(
+      invitation.Series.AuthorId,
+      accept ? "Board đã chấp nhận xét duyệt" : "Board đã từ chối xét duyệt",
+      $"{caller.FullName} đã {(accept ? "chấp nhận" : "từ chối")} xét duyệt series \"{invitation.Series.Title}\".",
+      cancellationToken);
+
+    return MapBoardInvitation(invitation);
+  }
+
+  public async Task<SeriesBoardReviewStatusResponse?> GetBoardReviewStatusAsync(
+    Guid callerId,
+    Guid seriesId,
+    CancellationToken cancellationToken = default)
+  {
+    var caller = await RequireCallerAsync(callerId, cancellationToken);
+    var series = await SeriesRepository.GetByIdAsync(seriesId, cancellationToken: cancellationToken);
+    if (series is null)
+    {
+      return null;
+    }
+
+    if (!CanViewSeries(caller, series))
+    {
+      throw new SeriesForbiddenException("Forbidden.");
+    }
+
+    await _boardService.ExpireStalePendingReviewsAsync(cancellationToken);
+    series = await SeriesRepository.GetByIdAsync(seriesId, cancellationToken: cancellationToken);
+    if (series is null)
+    {
+      return null;
+    }
+
+    var votes = await _unitOfWork.Context.BoardVotes
+      .AsNoTracking()
+      .Where(v => v.SeriesId == seriesId)
+      .ToListAsync(cancellationToken);
+    var pendingInvitations = await _unitOfWork.Context.SeriesBoardReviewInvitations
+      .AsNoTracking()
+      .CountAsync(i => i.SeriesId == seriesId && i.Status == "pending", cancellationToken);
+    var votedCount = votes.Where(v => v.BoardMemberId != null).Select(v => v.BoardMemberId!.Value).Distinct().Count();
+    var approveVotes = votes.Count(v => v.Decision == VoteDecisions.Approve);
+    var rejectVotes = votes.Count(v => v.Decision == VoteDecisions.Reject);
+    var requiredVotes = Board.BoardService.MinimumBoardVotesForDecision;
+    var expiresAt = series.SubmittedForReviewAt?.AddDays(Board.BoardService.ReviewExpiryDays);
+
+    return new SeriesBoardReviewStatusResponse(
+      seriesId,
+      approveVotes,
+      rejectVotes,
+      votedCount,
+      requiredVotes,
+      pendingInvitations,
+      Math.Max(0, SeriesReviewRules.MaxActiveReviewSlots - pendingInvitations - votedCount),
+      series.SubmittedForReviewAt,
+      expiresAt,
+      votedCount >= requiredVotes);
+  }
+
   public async Task<bool> DeleteAsync(Guid callerId, Guid id, CancellationToken cancellationToken = default)
   {
     var caller = await RequireCallerAsync(callerId, cancellationToken);
@@ -484,6 +725,13 @@ public class SeriesService
         .Where(v => v.SeriesId == series.Id)
         .ToListAsync(cancellationToken);
       _unitOfWork.Context.BoardVotes.RemoveRange(oldVotes);
+
+      var oldInvitations = await _unitOfWork.Context.SeriesBoardReviewInvitations
+        .Where(i => i.SeriesId == series.Id)
+        .ToListAsync(cancellationToken);
+      _unitOfWork.Context.SeriesBoardReviewInvitations.RemoveRange(oldInvitations);
+
+      series.SubmittedForReviewAt = DateTime.UtcNow;
     }
 
     series.Status = newStatus;
@@ -971,7 +1219,8 @@ public class SeriesService
       SeriesStatuses.ToDbValue(s.Status),
       s.PublishingFrequency == null ? null : PublishingFrequencies.ToDbValue(s.PublishingFrequency.Value),
       s.CreatedAt,
-      s.UpdatedAt);
+      s.UpdatedAt,
+      s.SubmittedForReviewAt);
 
   private static ChapterResponse MapChapterToDto(Chapter c) =>
     new(
@@ -1001,7 +1250,8 @@ public class SeriesService
       SeriesStatuses.ToDbValue(s.Status),
       s.PublishingFrequency == null ? null : PublishingFrequencies.ToDbValue(s.PublishingFrequency.Value),
       s.CreatedAt,
-      s.UpdatedAt);
+      s.UpdatedAt,
+      s.SubmittedForReviewAt);
 
   private static bool CanViewSeries(Profile caller, SeriesEntity series) =>
     IsStaff(caller.Role)
@@ -1084,6 +1334,29 @@ public class SeriesService
       invitation.Series.Author.FullName,
       invitation.EditorId,
       invitation.Editor.FullName,
+      invitation.Status,
+      invitation.CreatedAt,
+      invitation.RespondedAt);
+
+  private IQueryable<SeriesBoardReviewInvitation> BoardInvitationQuery(bool asNoTracking = true)
+  {
+    var query = _unitOfWork.Context.SeriesBoardReviewInvitations
+      .Include(i => i.Series)
+      .ThenInclude(s => s.Author)
+      .Include(i => i.BoardMember)
+      .AsQueryable();
+
+    return asNoTracking ? query.AsNoTracking() : query;
+  }
+
+  private static SeriesBoardReviewInvitationResponse MapBoardInvitation(SeriesBoardReviewInvitation invitation) =>
+    new(
+      invitation.SeriesId,
+      invitation.Series.Title,
+      invitation.Series.AuthorId,
+      invitation.Series.Author.FullName,
+      invitation.BoardMemberId,
+      invitation.BoardMember.FullName,
       invitation.Status,
       invitation.CreatedAt,
       invitation.RespondedAt);

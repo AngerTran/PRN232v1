@@ -4,14 +4,15 @@ using BLL.Dtos.Tasks;
 using DAL.Models;
 using DAL.Repositories;
 using BLL.Services.Workflow;
-using BLL.Services.Workflow;
 using BLL.Dtos.Board;
+using BLL.Services.Notifications;
 
 namespace BLL.Services.Board;
 
 public class BoardService
 {
-    public const int MinimumBoardVotesForDecision = 3;
+    public const int MinimumBoardVotesForDecision = SeriesReviewRules.MinimumReviewDecisions;
+    public const int ReviewExpiryDays = SeriesReviewRules.ReviewExpiryDays;
 
     private const int DangerRankPositionThreshold = 30;
     private static readonly IReadOnlySet<string> DangerDecisions = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
@@ -23,13 +24,73 @@ public class BoardService
     };
 
     private readonly UnitOfWork _unitOfWork;
+    private readonly NotificationService _notificationService;
     private Repository<BoardVote> VoteRepository => _unitOfWork.Repository<BoardVote>();
     private Repository<DAL.Models.Series> SeriesRepository => _unitOfWork.Repository<DAL.Models.Series>();
     private Repository<ActivityLog> ActivityLogRepository => _unitOfWork.Repository<ActivityLog>();
 
-    public BoardService(UnitOfWork unitOfWork)
+    public BoardService(UnitOfWork unitOfWork, NotificationService notificationService)
     {
         _unitOfWork = unitOfWork;
+        _notificationService = notificationService;
+    }
+
+    public async Task ExpireStalePendingReviewsAsync(CancellationToken cancellationToken = default)
+    {
+        var cutoff = DateTime.UtcNow.AddDays(-ReviewExpiryDays);
+        var expired = await _unitOfWork.Context.Series
+            .AsNoTracking()
+            .Where(s => s.Status == SeriesStatus.PendingReview
+                && s.SubmittedForReviewAt != null
+                && s.SubmittedForReviewAt < cutoff)
+            .Select(s => new { s.Id, s.Title, s.AuthorId })
+            .ToListAsync(cancellationToken);
+
+        if (expired.Count == 0)
+        {
+            return;
+        }
+
+        foreach (var item in expired)
+        {
+            var series = await SeriesRepository.GetByIdAsync(item.Id, asNoTracking: false, cancellationToken);
+            if (series is null || series.Status != SeriesStatus.PendingReview)
+            {
+                continue;
+            }
+
+            series.Status = SeriesStatus.Cancelled;
+            series.UpdatedAt = DateTime.UtcNow;
+            SeriesRepository.Update(series);
+
+            await _notificationService.CreateAsync(
+                item.AuthorId,
+                "Series hết hạn xét duyệt",
+                $"Series \"{item.Title}\" đã hết hạn {ReviewExpiryDays} ngày chờ xét duyệt. Bạn có thể chỉnh sửa và gửi lại.",
+                cancellationToken);
+        }
+
+        await _unitOfWork.SaveChangesAsync(cancellationToken);
+    }
+
+    public async Task RecordInvitationDecisionAsync(
+        Guid seriesId,
+        Guid boardMemberId,
+        bool accept,
+        CancellationToken cancellationToken = default)
+    {
+        var series = await SeriesRepository.GetByIdAsync(seriesId, asNoTracking: false, cancellationToken)
+            ?? throw new ArgumentException("Series not found.");
+
+        if (series.Status != SeriesStatus.PendingReview)
+        {
+            return;
+        }
+
+        var decision = accept ? VoteDecisions.Approve : VoteDecisions.Reject;
+        await UpsertBoardVoteAsync(seriesId, boardMemberId, decision, null, cancellationToken);
+        await TryAutoUpdateSeriesStatusAsync(series, seriesId, cancellationToken);
+        await _unitOfWork.SaveChangesAsync(cancellationToken);
     }
 
     public async Task<BoardVoteResponse> VoteAsync(
@@ -68,21 +129,12 @@ public class BoardService
             return MapVote(existing, series.Title, caller.FullName);
         }
 
-        var vote = new BoardVote
-        {
-            Id = Guid.NewGuid(),
-            SeriesId = request.SeriesId,
-            BoardMemberId = callerId,
-            Decision = decision,
-            Comment = request.Comment,
-            CreatedAt = DateTime.UtcNow
-        };
-
-        await VoteRepository.AddAsync(vote, cancellationToken);
-        await _unitOfWork.SaveChangesAsync(cancellationToken);
+        await UpsertBoardVoteAsync(request.SeriesId, callerId, decision, request.Comment, cancellationToken);
         await TryAutoUpdateSeriesStatusAsync(series, request.SeriesId, cancellationToken);
         await _unitOfWork.SaveChangesAsync(cancellationToken);
 
+        var vote = await _unitOfWork.Context.BoardVotes
+            .FirstAsync(v => v.SeriesId == request.SeriesId && v.BoardMemberId == callerId, cancellationToken);
         return MapVote(vote, series.Title, caller.FullName);
     }
 
@@ -113,6 +165,7 @@ public class BoardService
         CancellationToken cancellationToken = default)
     {
         await RequireBoardOrAdminAsync(callerId, cancellationToken);
+        await ExpireStalePendingReviewsAsync(cancellationToken);
 
         var pending = await _unitOfWork.Context.Series
             .AsNoTracking()
@@ -126,6 +179,10 @@ public class BoardService
             .AsNoTracking()
             .Where(v => v.SeriesId != null && seriesIds.Contains(v.SeriesId.Value))
             .ToListAsync(cancellationToken);
+        var invitations = await _unitOfWork.Context.SeriesBoardReviewInvitations
+            .AsNoTracking()
+            .Where(i => seriesIds.Contains(i.SeriesId))
+            .ToListAsync(cancellationToken);
 
         return pending.Select(s =>
         {
@@ -133,6 +190,10 @@ public class BoardService
                 .Where(v => v.SeriesId == s.Id && v.BoardMemberId != null && boardMemberIds.Contains(v.BoardMemberId.Value))
                 .ToList();
             var votedCount = seriesVotes.Select(v => v.BoardMemberId!.Value).Distinct().Count();
+            var myVote = seriesVotes.FirstOrDefault(v => v.BoardMemberId == callerId);
+            var myInvitation = invitations.FirstOrDefault(i => i.SeriesId == s.Id && i.BoardMemberId == callerId);
+            var expiresAt = s.SubmittedForReviewAt?.AddDays(ReviewExpiryDays);
+
             return new PendingSeriesItemResponse(
                 s.Id,
                 s.Title,
@@ -142,7 +203,14 @@ public class BoardService
                 seriesVotes.Count(v => v.Decision == VoteDecisions.Approve),
                 seriesVotes.Count(v => v.Decision == VoteDecisions.Reject),
                 boardMemberIds.Count,
-                votedCount);
+                votedCount,
+                s.SubmittedForReviewAt,
+                expiresAt,
+                myVote is not null,
+                myInvitation?.Status,
+                myVote is null
+                    && myInvitation?.Status != "pending"
+                    && votedCount < MinimumBoardVotesForDecision);
         }).ToList();
     }
 
@@ -313,13 +381,73 @@ public class BoardService
             series.Status = SeriesStatus.Approved;
             series.UpdatedAt = DateTime.UtcNow;
             SeriesRepository.Update(series);
+            await NotifyAuthorReviewDecisionAsync(series, approved: true, cancellationToken);
         }
         else
         {
             series.Status = SeriesStatus.Cancelled;
             series.UpdatedAt = DateTime.UtcNow;
             SeriesRepository.Update(series);
+            await NotifyAuthorReviewDecisionAsync(series, approved: false, cancellationToken);
         }
+    }
+
+    private async Task NotifyAuthorReviewDecisionAsync(
+        DAL.Models.Series series,
+        bool approved,
+        CancellationToken cancellationToken)
+    {
+        var authorId = series.AuthorId;
+        var title = series.Title;
+        if (approved)
+        {
+            await _notificationService.CreateAsync(
+                authorId,
+                "Series đã được duyệt",
+                $"Series \"{title}\" đã được hội đồng phê duyệt.",
+                cancellationToken);
+        }
+        else
+        {
+            await _notificationService.CreateAsync(
+                authorId,
+                "Series bị từ chối",
+                $"Series \"{title}\" đã bị hội đồng từ chối. Bạn có thể chỉnh sửa và gửi lại.",
+                cancellationToken);
+        }
+    }
+
+    private async Task UpsertBoardVoteAsync(
+        Guid seriesId,
+        Guid boardMemberId,
+        string decision,
+        string? comment,
+        CancellationToken cancellationToken)
+    {
+        var existing = await _unitOfWork.Context.BoardVotes
+            .FirstOrDefaultAsync(
+                v => v.SeriesId == seriesId && v.BoardMemberId == boardMemberId,
+                cancellationToken);
+
+        if (existing is not null)
+        {
+            existing.Decision = decision;
+            existing.Comment = comment;
+            VoteRepository.Update(existing);
+            return;
+        }
+
+        var vote = new BoardVote
+        {
+            Id = Guid.NewGuid(),
+            SeriesId = seriesId,
+            BoardMemberId = boardMemberId,
+            Decision = decision,
+            Comment = comment,
+            CreatedAt = DateTime.UtcNow
+        };
+
+        await VoteRepository.AddAsync(vote, cancellationToken);
     }
 
     private static int GetRequiredVoteQuorum(int totalBoardMembers) =>

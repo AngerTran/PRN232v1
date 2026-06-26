@@ -2,14 +2,17 @@ import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router';
 import { format } from 'date-fns';
 import { vi } from 'date-fns/locale';
-import { ChevronRight, Send } from 'lucide-react';
+import { ChevronRight, Send, RotateCcw } from 'lucide-react';
 import Badge from '../../components/ui/Badge';
+import Button from '../../components/ui/Button';
 import Card from '../../components/ui/Card';
 import EmptyState from '../../components/ui/EmptyState';
 import { usePageMeta } from '../../hooks/usePageMeta';
 import {
   getSubmittedSeries,
   SERIES_SUBMISSION_STATUS_HINT,
+  resubmitSeriesForReview,
+  REVIEW_EXPIRY_DAYS,
 } from '../../services/seriesApi';
 import type { Series } from '../../types/domain';
 
@@ -27,6 +30,20 @@ export default function SubmissionHistoryPage() {
   const [series, setSeries] = useState<Series[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [resubmittingId, setResubmittingId] = useState<string | null>(null);
+
+  const handleResubmit = async (seriesId: string) => {
+    setResubmittingId(seriesId);
+    setError(null);
+    try {
+      const updated = await resubmitSeriesForReview(seriesId);
+      setSeries(current => current.map(item => (item.id === seriesId ? updated : item)));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Không thể gửi lại series.');
+    } finally {
+      setResubmittingId(null);
+    }
+  };
 
   useEffect(() => {
     setPageMeta({ title: 'Lịch sử nộp series' });
@@ -55,7 +72,7 @@ export default function SubmissionHistoryPage() {
       <div>
         <h1 className="text-xl font-bold">Lịch sử nộp series</h1>
         <p className="text-sm text-muted-foreground mt-1">
-          Theo dõi trạng thái duyệt các series đã gửi lên hội đồng biên tập.
+          Theo dõi trạng thái duyệt các series đã gửi lên hội đồng. Series chờ duyệt hết hạn sau {REVIEW_EXPIRY_DAYS} ngày.
         </p>
       </div>
 
@@ -104,9 +121,29 @@ export default function SubmissionHistoryPage() {
                   </p>
                   <p className="mt-1 text-xs text-muted-foreground">
                     Cập nhật lần cuối: {formatDate(item.updatedAt)}
+                    {item.reviewExpiresAt && item.status === 'Submitted' && (
+                      <> · Hết hạn: {formatDate(item.reviewExpiresAt)}</>
+                    )}
                   </p>
                 </div>
-                <ChevronRight size={18} className="text-muted-foreground shrink-0" />
+                <div className="flex items-center gap-2 shrink-0">
+                  {item.status === 'Cancelled' && (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      loading={resubmittingId === item.id}
+                      onClick={e => {
+                        e.stopPropagation();
+                        handleResubmit(item.id);
+                      }}
+                    >
+                      <RotateCcw size={14} className="mr-1" />
+                      Gửi lại
+                    </Button>
+                  )}
+                  <ChevronRight size={18} className="text-muted-foreground" />
+                </div>
               </button>
             </Card>
           ))}

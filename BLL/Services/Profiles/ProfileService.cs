@@ -79,6 +79,24 @@ public class ProfileService
         return profiles.Select(MapToDto).ToList();
     }
 
+    public async Task<IReadOnlyList<ProfileResponse>> ListBoardMembersForAssignmentAsync(
+        Guid callerId,
+        CancellationToken cancellationToken = default)
+    {
+        var caller = await Repository.GetByIdAsync(callerId, cancellationToken: cancellationToken)
+            ?? throw new ProfileForbiddenException("Caller profile not found.");
+
+        if (caller.Role != ProfileRole.Admin && caller.Role != ProfileRole.Mangaka)
+        {
+            throw new ProfileForbiddenException("Requires mangaka or admin role.");
+        }
+
+        var profiles = await Repository.FindListAsync(
+            p => p.Role == ProfileRole.Board && p.IsActive != false,
+            cancellationToken: cancellationToken);
+        return profiles.Select(MapToDto).ToList();
+    }
+
     public async Task<IReadOnlyList<ProfileResponse>> ListMyAssistantsAsync(
         Guid callerId,
         CancellationToken cancellationToken = default)

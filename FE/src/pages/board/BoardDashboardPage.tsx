@@ -227,7 +227,7 @@ export default function BoardDashboardPage() {
         {approvedSeries.length > 0 ? (
           <SeriesPreviewGrid
             items={approvedSeries.slice(0, PREVIEW_LIMIT)}
-            onItemClick={s => navigate(`/board/publishing-schedule?seriesId=${s.id}`)}
+            onItemClick={s => navigate(`/board/publishing-schedule/${s.id}`)}
           />
         ) : null}
       </DashboardSection>
@@ -241,7 +241,7 @@ export default function BoardDashboardPage() {
         {publishingSeries.length > 0 ? (
           <SeriesPreviewGrid
             items={publishingSeries.slice(0, PREVIEW_LIMIT)}
-            onItemClick={s => navigate(`/board/publishing-schedule?seriesId=${s.id}`)}
+            onItemClick={s => navigate(`/board/publishing-schedule/${s.id}`)}
           />
         ) : null}
       </DashboardSection>
@@ -255,7 +255,7 @@ export default function BoardDashboardPage() {
         {atRiskSeries.length > 0 ? (
           <SeriesPreviewGrid
             items={atRiskSeries.slice(0, PREVIEW_LIMIT)}
-            onItemClick={s => navigate(`/board/publishing-schedule?seriesId=${s.id}`)}
+            onItemClick={s => navigate(`/board/publishing-schedule/${s.id}`)}
           />
         ) : null}
       </DashboardSection>

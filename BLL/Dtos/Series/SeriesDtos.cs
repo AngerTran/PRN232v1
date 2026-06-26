@@ -16,7 +16,34 @@ public record SeriesResponse(
     string Status,
     string? PublishingFrequency,
     DateTime? CreatedAt,
-    DateTime? UpdatedAt);
+    DateTime? UpdatedAt,
+    DateTime? SubmittedForReviewAt = null);
+
+public record InviteSeriesBoardMemberRequest(
+    [Required] Guid BoardMemberId);
+
+public record SeriesBoardReviewInvitationResponse(
+    Guid SeriesId,
+    string SeriesTitle,
+    Guid MangakaId,
+    string MangakaName,
+    Guid BoardMemberId,
+    string BoardMemberName,
+    string Status,
+    DateTime CreatedAt,
+    DateTime? RespondedAt);
+
+public record SeriesBoardReviewStatusResponse(
+    Guid SeriesId,
+    int ApproveVotes,
+    int RejectVotes,
+    int VotedBoardMembers,
+    int RequiredVotes,
+    int PendingInvitations,
+    int AvailableInviteSlots,
+    DateTime? SubmittedForReviewAt,
+    DateTime? ReviewExpiresAt,
+    bool QuorumMet);
 
 public record SeriesRankingItemResponse(
     Guid SeriesId,

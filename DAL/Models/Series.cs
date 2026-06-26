@@ -30,6 +30,8 @@ public partial class Series
 
     public DateTime? UpdatedAt { get; set; }
 
+    public DateTime? SubmittedForReviewAt { get; set; }
+
     public virtual Profile Author { get; set; } = null!;
 
     public virtual ICollection<BoardVote> BoardVotes { get; set; } = new List<BoardVote>();

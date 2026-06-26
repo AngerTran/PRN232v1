@@ -47,6 +47,12 @@ export async function getEditors(): Promise<ProfileSummary[]> {
   return items.map(mapProfile);
 }
 
+/** Danh sách board để mangaka mời xét duyệt series. */
+export async function getBoardMembers(): Promise<ProfileSummary[]> {
+  const items = unwrap(await apiRequest<ApiEnvelope<ApiProfile[]>>('/api/profiles/board-members'));
+  return items.map(mapProfile);
+}
+
 export interface AssistantInvitation {
   mangakaId: string;
   mangakaName: string;

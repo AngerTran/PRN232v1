@@ -19,6 +19,11 @@ export interface PendingSeriesItem {
   rejectVotes: number;
   totalBoardMembers: number;
   votedBoardMembers: number;
+  submittedForReviewAt?: string;
+  reviewExpiresAt?: string;
+  currentUserHasVoted: boolean;
+  currentUserInvitationStatus?: string;
+  canVolunteerReview: boolean;
 }
 
 interface ApiPendingSeriesItem {
@@ -31,6 +36,11 @@ interface ApiPendingSeriesItem {
   rejectVotes: number;
   totalBoardMembers: number;
   votedBoardMembers: number;
+  submittedForReviewAt?: string | null;
+  reviewExpiresAt?: string | null;
+  currentUserHasVoted: boolean;
+  currentUserInvitationStatus?: string | null;
+  canVolunteerReview: boolean;
 }
 
 export const BOARD_VOTES_REQUIRED = 3;
@@ -119,6 +129,11 @@ export async function getPendingSeries(): Promise<PendingSeriesItem[]> {
     rejectVotes: item.rejectVotes,
     totalBoardMembers: item.totalBoardMembers,
     votedBoardMembers: item.votedBoardMembers,
+    submittedForReviewAt: item.submittedForReviewAt ?? undefined,
+    reviewExpiresAt: item.reviewExpiresAt ?? undefined,
+    currentUserHasVoted: item.currentUserHasVoted,
+    currentUserInvitationStatus: item.currentUserInvitationStatus ?? undefined,
+    canVolunteerReview: item.canVolunteerReview,
   }));
 }
 

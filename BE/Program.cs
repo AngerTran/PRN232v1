@@ -163,6 +163,17 @@ catch (Exception ex)
     app.Logger.LogWarning(ex, "Could not sync series status from board votes.");
 }
 
+try
+{
+    await using var scope = app.Services.CreateAsyncScope();
+    var boardService = scope.ServiceProvider.GetRequiredService<BLL.Services.Board.BoardService>();
+    await boardService.ExpireStalePendingReviewsAsync();
+}
+catch (Exception ex)
+{
+    app.Logger.LogWarning(ex, "Could not expire stale pending series reviews.");
+}
+
 // Log application startup
 app.Logger.LogInformation("PRN232v1 application started.");
 

@@ -29,6 +29,8 @@ public partial class AppDbContext : DbContext
 
     public virtual DbSet<SeriesEditorInvitation> SeriesEditorInvitations { get; set; }
 
+    public virtual DbSet<SeriesBoardReviewInvitation> SeriesBoardReviewInvitations { get; set; }
+
     public virtual DbSet<Page> Pages { get; set; }
 
     public virtual DbSet<Profile> Profiles { get; set; }
@@ -344,6 +346,37 @@ public partial class AppDbContext : DbContext
                 .HasConstraintName("series_editor_invitations_editor_id_fkey");
         });
 
+        modelBuilder.Entity<SeriesBoardReviewInvitation>(entity =>
+        {
+            entity.HasKey(e => new { e.SeriesId, e.BoardMemberId })
+                .HasName("series_board_review_invitations_pkey");
+
+            entity.ToTable("series_board_review_invitations");
+
+            entity.HasIndex(e => e.BoardMemberId, "idx_series_board_review_invitations_board");
+
+            entity.Property(e => e.SeriesId).HasColumnName("series_id");
+            entity.Property(e => e.BoardMemberId).HasColumnName("board_member_id");
+            entity.Property(e => e.Status)
+                .HasMaxLength(20)
+                .HasDefaultValue("pending")
+                .HasColumnName("status");
+            entity.Property(e => e.CreatedAt)
+                .HasDefaultValueSql("now()")
+                .HasColumnName("created_at");
+            entity.Property(e => e.RespondedAt).HasColumnName("responded_at");
+
+            entity.HasOne(d => d.Series).WithMany()
+                .HasForeignKey(d => d.SeriesId)
+                .OnDelete(DeleteBehavior.Cascade)
+                .HasConstraintName("series_board_review_invitations_series_id_fkey");
+
+            entity.HasOne(d => d.BoardMember).WithMany()
+                .HasForeignKey(d => d.BoardMemberId)
+                .OnDelete(DeleteBehavior.Cascade)
+                .HasConstraintName("series_board_review_invitations_board_member_id_fkey");
+        });
+
         modelBuilder.Entity<Page>(entity =>
         {
             entity.HasKey(e => e.Id).HasName("pages_pkey");
@@ -513,6 +546,7 @@ public partial class AppDbContext : DbContext
             entity.Property(e => e.UpdatedAt)
                 .HasDefaultValueSql("now()")
                 .HasColumnName("updated_at");
+            entity.Property(e => e.SubmittedForReviewAt).HasColumnName("submitted_for_review_at");
 
             entity.HasOne(d => d.Author).WithMany(p => p.SeriesAuthors)
                 .HasForeignKey(d => d.AuthorId)
