@@ -4,6 +4,8 @@ public record NotificationResponse(
     Guid Id,
     string? Title,
     string? Message,
+    string? LinkUrl,
+    string? Category,
     bool IsRead,
     DateTime? CreatedAt);
 

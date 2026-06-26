@@ -17,6 +17,8 @@ public record CreateBoardVoteRequest(
     [Required] string Decision,
     string? Comment);
 
+public record ClaimSeriesReviewRequest(bool WantLead = false);
+
 public record PendingSeriesItemResponse(
     Guid Id,
     string Title,
@@ -27,11 +29,21 @@ public record PendingSeriesItemResponse(
     int RejectVotes,
     int TotalBoardMembers,
     int VotedBoardMembers,
+    int ClaimedBoardMembers,
+    int RequiredClaims,
     DateTime? SubmittedForReviewAt,
     DateTime? ReviewExpiresAt,
     bool CurrentUserHasVoted,
+    bool CurrentUserHasClaimed,
+    bool CurrentUserIsLead,
     string? CurrentUserInvitationStatus,
-    bool CanVolunteerReview);
+    bool CanClaim,
+    bool CanClaimAsLead,
+    bool ClaimsFull,
+    bool HasLead,
+    Guid? LeadBoardMemberId,
+    string? LeadBoardMemberName,
+    bool CanManagePublishingSchedule);
 
 public record BoardVoteProgressResponse(
     int TotalBoardMembers,
@@ -39,7 +51,30 @@ public record BoardVoteProgressResponse(
     int ApproveVotes,
     int RejectVotes,
     int RequiredVotes,
-    bool QuorumMet);
+    bool QuorumMet,
+    int ClaimedBoardMembers,
+    int RequiredClaims,
+    bool CurrentUserHasClaimed,
+    bool CurrentUserIsLead,
+    bool CanClaim,
+    bool CanClaimAsLead,
+    bool ClaimsFull,
+    bool HasLead,
+    Guid? LeadBoardMemberId,
+    string? LeadBoardMemberName,
+    bool CanManagePublishingSchedule);
+
+public record BoardReviewClaimResponse(
+    Guid SeriesId,
+    Guid BoardMemberId,
+    int ClaimedBoardMembers,
+    int RequiredClaims,
+    bool ClaimsFull,
+    bool IsLead,
+    bool HasLead,
+    Guid? LeadBoardMemberId,
+    string? LeadBoardMemberName,
+    DateTime ClaimedAt);
 
 public record LeaderboardItemResponse(
     Guid SeriesId,

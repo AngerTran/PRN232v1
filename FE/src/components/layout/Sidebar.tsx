@@ -94,7 +94,7 @@ const BOARD_GROUPS: NavGroup[] = [
       { label: 'Dashboard', icon: <LayoutDashboard size={18} />, href: '/board/dashboard', exact: true },
       { label: 'Duyệt Series', icon: <Gavel size={18} />, href: '/board/submissions' },
       { label: 'Lời mời xét duyệt', icon: <Mail size={18} />, href: '/board/review-invitations' },
-      { label: 'Series Đã Duyệt', icon: <Star size={18} />, href: '/board/approved-series' },
+      { label: 'Series Đã Nhận', icon: <Star size={18} />, href: '/board/approved-series' },
       { label: 'Lịch Xuất Bản', icon: <CalendarDays size={18} />, href: '/board/publishing-schedule' },
     ],
   },

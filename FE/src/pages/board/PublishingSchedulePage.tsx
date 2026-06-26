@@ -109,7 +109,7 @@ export default function PublishingSchedulePage() {
           <Inbox className="h-10 w-10 text-muted-foreground mx-auto mb-3" />
           <p className="font-medium">Chưa có lịch xuất bản</p>
           <p className="text-sm text-muted-foreground mt-1">
-            Lên lịch từ trang Series Đã Duyệt khi series đã hoàn thành sản xuất.
+            Lên lịch từ trang Series Đã Nhận khi series đã hoàn thành sản xuất.
           </p>
         </div>
       ) : (

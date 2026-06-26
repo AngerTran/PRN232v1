@@ -4,7 +4,6 @@ using BLL.Dtos.Tasks;
 using DAL.Models;
 using DAL.Repositories;
 using BLL.Services.Workflow;
-using BLL.Services.Workflow;
 using BLL.Dtos.Notifications;
 using BLL.Services.Profiles;
 
@@ -42,6 +41,8 @@ public class NotificationService
                 n.Id,
                 n.Title,
                 n.Message,
+                n.LinkUrl,
+                n.Category,
                 n.IsRead == true,
                 n.CreatedAt))
             .ToListAsync(cancellationToken);
@@ -51,6 +52,8 @@ public class NotificationService
         Guid userId,
         string title,
         string message,
+        string? linkUrl = null,
+        string? category = null,
         CancellationToken cancellationToken = default)
     {
         await EnsureUserExistsAsync(userId, cancellationToken);
@@ -62,6 +65,8 @@ public class NotificationService
             UserId = userId,
             Title = title.Trim(),
             Message = message.Trim(),
+            LinkUrl = string.IsNullOrWhiteSpace(linkUrl) ? null : linkUrl.Trim(),
+            Category = string.IsNullOrWhiteSpace(category) ? null : category.Trim(),
             IsRead = false,
             CreatedAt = now
         };
@@ -69,12 +74,21 @@ public class NotificationService
         await Repository.AddAsync(notification, cancellationToken);
         await _unitOfWork.SaveChangesAsync(cancellationToken);
 
-        return new NotificationResponse(
-            notification.Id,
-            notification.Title,
-            notification.Message,
-            notification.IsRead == true,
-            notification.CreatedAt);
+        return Map(notification);
+    }
+
+    public async Task CreateForUsersAsync(
+        IEnumerable<Guid> userIds,
+        string title,
+        string message,
+        string? linkUrl = null,
+        string? category = null,
+        CancellationToken cancellationToken = default)
+    {
+        foreach (var userId in userIds.Distinct())
+        {
+            await CreateAsync(userId, title, message, linkUrl, category, cancellationToken);
+        }
     }
 
     public async Task<MarkNotificationReadResponse?> MarkReadAsync(
@@ -118,6 +132,16 @@ public class NotificationService
 
         return new MarkAllNotificationsReadResponse(unread.Count);
     }
+
+    private static NotificationResponse Map(Notification notification) =>
+        new(
+            notification.Id,
+            notification.Title,
+            notification.Message,
+            notification.LinkUrl,
+            notification.Category,
+            notification.IsRead == true,
+            notification.CreatedAt);
 
     private async Task EnsureUserExistsAsync(Guid userId, CancellationToken cancellationToken)
     {

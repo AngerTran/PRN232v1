@@ -10,6 +10,7 @@ using BLL.Services.Storage;
 using BLL.Configuration;
 using BLL.Dtos.Series;
 using BLL.Services.Notifications;
+using BLL.Common;
 using Microsoft.AspNetCore.Http;
 
 namespace BLL.Services.Series;
@@ -343,7 +344,9 @@ public class SeriesService
         request.EditorId,
         "Lời mời phụ trách series",
         $"{caller.FullName} đã mời bạn phụ trách series \"{series.Title}\".",
-        cancellationToken);
+        WorkflowNotificationPaths.EditorInvitations(),
+        WorkflowNotificationPaths.CategorySubmission,
+        cancellationToken: cancellationToken);
     }
 
     return MapEditorInvitation(invitation);
@@ -432,7 +435,9 @@ public class SeriesService
       invitation.Series.AuthorId,
       accept ? "Editor đã chấp nhận lời mời" : "Editor đã từ chối lời mời",
       $"{caller.FullName} đã {(accept ? "chấp nhận" : "từ chối")} phụ trách series \"{invitation.Series.Title}\".",
-      cancellationToken);
+      WorkflowNotificationPaths.MangakaSeries(invitation.SeriesId),
+      WorkflowNotificationPaths.CategorySubmission,
+      cancellationToken: cancellationToken);
 
     return MapEditorInvitation(invitation);
   }
@@ -522,7 +527,9 @@ public class SeriesService
         request.BoardMemberId,
         "Lời mời xét duyệt series",
         $"{caller.FullName} đã mời bạn xét duyệt series \"{series.Title}\".",
-        cancellationToken);
+        WorkflowNotificationPaths.BoardReviewInvitations(),
+        WorkflowNotificationPaths.CategorySubmission,
+        cancellationToken: cancellationToken);
     }
 
     return MapBoardInvitation(invitation);
@@ -620,7 +627,9 @@ public class SeriesService
       invitation.Series.AuthorId,
       accept ? "Board đã chấp nhận xét duyệt" : "Board đã từ chối xét duyệt",
       $"{caller.FullName} đã {(accept ? "chấp nhận" : "từ chối")} xét duyệt series \"{invitation.Series.Title}\".",
-      cancellationToken);
+      WorkflowNotificationPaths.MangakaSeries(seriesId),
+      WorkflowNotificationPaths.CategorySubmission,
+      cancellationToken: cancellationToken);
 
     return MapBoardInvitation(invitation);
   }
@@ -731,15 +740,79 @@ public class SeriesService
         .ToListAsync(cancellationToken);
       _unitOfWork.Context.SeriesBoardReviewInvitations.RemoveRange(oldInvitations);
 
+      var oldClaims = await _unitOfWork.Context.SeriesBoardReviewClaims
+        .Where(c => c.SeriesId == series.Id)
+        .ToListAsync(cancellationToken);
+      _unitOfWork.Context.SeriesBoardReviewClaims.RemoveRange(oldClaims);
+
       series.SubmittedForReviewAt = DateTime.UtcNow;
     }
+
+    var becamePendingReview = newStatus == SeriesStatus.PendingReview && series.Status != SeriesStatus.PendingReview;
+    var becameCompleted = newStatus == SeriesStatus.Completed && series.Status != SeriesStatus.Completed;
 
     series.Status = newStatus;
     series.UpdatedAt = DateTime.UtcNow;
     SeriesRepository.Update(series);
     await _unitOfWork.SaveChangesAsync(cancellationToken);
 
+    if (becamePendingReview)
+    {
+      await NotifyBoardMembersNewSubmissionAsync(series, cancellationToken);
+    }
+
+    if (becameCompleted)
+    {
+      await NotifyLeadOnSeriesCompletedAsync(series, cancellationToken);
+    }
+
     return await GetByIdAsync(callerId, id, cancellationToken);
+  }
+
+  private async Task NotifyBoardMembersNewSubmissionAsync(
+    SeriesEntity series,
+    CancellationToken cancellationToken)
+  {
+    var boardMemberIds = await _unitOfWork.Context.Profiles
+      .AsNoTracking()
+      .Where(p => p.Role == ProfileRole.Board && (p.IsActive == null || p.IsActive == true))
+      .Select(p => p.Id)
+      .ToListAsync(cancellationToken);
+
+    if (boardMemberIds.Count == 0)
+    {
+      return;
+    }
+
+    await _notificationService.CreateForUsersAsync(
+      boardMemberIds,
+      "Series mới chờ xét duyệt",
+      $"Mangaka đã gửi series \"{series.Title}\" để hội đồng xét duyệt.",
+      WorkflowNotificationPaths.BoardSubmission(series.Id),
+      WorkflowNotificationPaths.CategorySubmission,
+      cancellationToken);
+  }
+
+  private async Task NotifyLeadOnSeriesCompletedAsync(
+    SeriesEntity series,
+    CancellationToken cancellationToken)
+  {
+    var lead = await _unitOfWork.Context.SeriesBoardReviewClaims
+      .AsNoTracking()
+      .FirstOrDefaultAsync(c => c.SeriesId == series.Id && c.IsLead, cancellationToken);
+
+    if (lead is null)
+    {
+      return;
+    }
+
+    await _notificationService.CreateAsync(
+      lead.BoardMemberId,
+      "Series hoàn thành sản xuất",
+      $"Editor đã đánh dấu series \"{series.Title}\" là hoàn thành. Bạn có thể lên lịch xuất bản.",
+      WorkflowNotificationPaths.BoardSchedule(series.Id),
+      WorkflowNotificationPaths.CategorySubmission,
+      cancellationToken: cancellationToken);
   }
 
   public async Task<IReadOnlyList<SeriesRankingItemResponse>> GetRankingAsync(

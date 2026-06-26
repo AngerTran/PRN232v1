@@ -7,6 +7,8 @@ interface ApiNotification {
   id: string;
   title?: string | null;
   message?: string | null;
+  linkUrl?: string | null;
+  category?: string | null;
   isRead: boolean;
   createdAt?: string | null;
 }
@@ -27,15 +29,32 @@ function unwrap<T>(value: ApiEnvelope<T>): T {
   return value as T;
 }
 
-// BE chưa lưu loại thông báo nên mặc định 'system' để tương thích kiểu FE.
+const VALID_NOTIF_TYPES: NotifType[] = [
+  'task_submitted',
+  'task_approved',
+  'revision_required',
+  'deadline_warning',
+  'ranking_alert',
+  'submission_update',
+  'system',
+];
+
+function mapCategoryToType(category?: string | null): NotifType {
+  if (!category) return 'system';
+  return VALID_NOTIF_TYPES.includes(category as NotifType)
+    ? (category as NotifType)
+    : 'system';
+}
+
 function mapNotification(item: ApiNotification): Notification {
   return {
     id: item.id,
-    type: 'system' as NotifType,
+    type: mapCategoryToType(item.category),
     title: item.title ?? '',
     message: item.message ?? '',
     read: item.isRead,
     createdAt: item.createdAt ?? new Date().toISOString(),
+    linkTo: item.linkUrl ?? undefined,
   };
 }
 

@@ -9,7 +9,7 @@ const submissionColors: Record<BoardSubmissionStatus, 'default' | 'secondary' | 
 };
 
 const submissionLabels: Record<BoardSubmissionStatus, string> = {
-  'Pending Review': 'Chờ Duyệt',
+  'Pending Review': 'Chờ nhận xét duyệt',
   'Approved': 'Đã Duyệt',
   'Rejected': 'Từ Chối',
   'More Info Required': 'Cần Thêm Thông Tin',

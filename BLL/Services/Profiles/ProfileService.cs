@@ -172,7 +172,7 @@ public class ProfileService
                 assistant.Id,
                 "Lời mời tham gia studio",
                 $"{invitation.Mangaka.FullName} đã mời bạn tham gia studio với vai trò trợ lý.",
-                cancellationToken);
+                cancellationToken: cancellationToken);
         }
 
         return MapInvitation(invitation);
@@ -231,7 +231,7 @@ public class ProfileService
             mangakaId,
             accept ? "Trợ lý đã chấp nhận lời mời" : "Trợ lý đã từ chối lời mời",
             $"{invitation.Assistant.FullName} đã {(accept ? "chấp nhận" : "từ chối")} lời mời tham gia studio.",
-            cancellationToken);
+            cancellationToken: cancellationToken);
 
         return MapInvitation(invitation);
     }

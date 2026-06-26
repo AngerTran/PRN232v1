@@ -5,6 +5,7 @@ using DAL.Common;
 using DAL.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
@@ -13,9 +14,11 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace DAL.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    partial class AppDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260626124056_AddSeriesBoardReviewClaims")]
+    partial class AddSeriesBoardReviewClaims
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -493,11 +496,6 @@ namespace DAL.Migrations
                         .HasColumnName("id")
                         .HasDefaultValueSql("uuid_generate_v4()");
 
-                    b.Property<string>("Category")
-                        .HasMaxLength(50)
-                        .HasColumnType("character varying(50)")
-                        .HasColumnName("category");
-
                     b.Property<DateTime?>("CreatedAt")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("timestamp with time zone")
@@ -509,11 +507,6 @@ namespace DAL.Migrations
                         .HasColumnType("boolean")
                         .HasDefaultValue(false)
                         .HasColumnName("is_read");
-
-                    b.Property<string>("LinkUrl")
-                        .HasMaxLength(500)
-                        .HasColumnType("character varying(500)")
-                        .HasColumnName("link_url");
 
                     b.Property<string>("Message")
                         .HasColumnType("text")
@@ -841,12 +834,6 @@ namespace DAL.Migrations
                         .HasColumnName("claimed_at")
                         .HasDefaultValueSql("now()");
 
-                    b.Property<bool>("IsLead")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("boolean")
-                        .HasDefaultValue(false)
-                        .HasColumnName("is_lead");
-
                     b.Property<string>("Source")
                         .IsRequired()
                         .ValueGeneratedOnAdd()
@@ -859,10 +846,6 @@ namespace DAL.Migrations
                         .HasName("series_board_review_claims_pkey");
 
                     b.HasIndex(new[] { "BoardMemberId" }, "idx_series_board_review_claims_board");
-
-                    b.HasIndex(new[] { "SeriesId" }, "idx_series_board_review_claims_one_lead")
-                        .IsUnique()
-                        .HasFilter("is_lead = true");
 
                     b.ToTable("series_board_review_claims", (string)null);
                 });

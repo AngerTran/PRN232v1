@@ -31,6 +31,8 @@ public partial class AppDbContext : DbContext
 
     public virtual DbSet<SeriesBoardReviewInvitation> SeriesBoardReviewInvitations { get; set; }
 
+    public virtual DbSet<SeriesBoardReviewClaim> SeriesBoardReviewClaims { get; set; }
+
     public virtual DbSet<Page> Pages { get; set; }
 
     public virtual DbSet<Profile> Profiles { get; set; }
@@ -273,6 +275,12 @@ public partial class AppDbContext : DbContext
                 .HasDefaultValue(false)
                 .HasColumnName("is_read");
             entity.Property(e => e.Message).HasColumnName("message");
+            entity.Property(e => e.LinkUrl)
+                .HasMaxLength(500)
+                .HasColumnName("link_url");
+            entity.Property(e => e.Category)
+                .HasMaxLength(50)
+                .HasColumnName("category");
             entity.Property(e => e.Title)
                 .HasMaxLength(255)
                 .HasColumnName("title");
@@ -375,6 +383,43 @@ public partial class AppDbContext : DbContext
                 .HasForeignKey(d => d.BoardMemberId)
                 .OnDelete(DeleteBehavior.Cascade)
                 .HasConstraintName("series_board_review_invitations_board_member_id_fkey");
+        });
+
+        modelBuilder.Entity<SeriesBoardReviewClaim>(entity =>
+        {
+            entity.HasKey(e => new { e.SeriesId, e.BoardMemberId })
+                .HasName("series_board_review_claims_pkey");
+
+            entity.ToTable("series_board_review_claims");
+
+            entity.HasIndex(e => e.BoardMemberId, "idx_series_board_review_claims_board");
+
+            entity.Property(e => e.SeriesId).HasColumnName("series_id");
+            entity.Property(e => e.BoardMemberId).HasColumnName("board_member_id");
+            entity.Property(e => e.Source)
+                .HasMaxLength(20)
+                .HasDefaultValue("public")
+                .HasColumnName("source");
+            entity.Property(e => e.ClaimedAt)
+                .HasDefaultValueSql("now()")
+                .HasColumnName("claimed_at");
+            entity.Property(e => e.IsLead)
+                .HasDefaultValue(false)
+                .HasColumnName("is_lead");
+
+            entity.HasIndex(e => e.SeriesId, "idx_series_board_review_claims_one_lead")
+                .IsUnique()
+                .HasFilter("is_lead = true");
+
+            entity.HasOne(d => d.Series).WithMany()
+                .HasForeignKey(d => d.SeriesId)
+                .OnDelete(DeleteBehavior.Cascade)
+                .HasConstraintName("series_board_review_claims_series_id_fkey");
+
+            entity.HasOne(d => d.BoardMember).WithMany()
+                .HasForeignKey(d => d.BoardMemberId)
+                .OnDelete(DeleteBehavior.Cascade)
+                .HasConstraintName("series_board_review_claims_board_member_id_fkey");
         });
 
         modelBuilder.Entity<Page>(entity =>

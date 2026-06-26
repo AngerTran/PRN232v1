@@ -64,6 +64,44 @@ public class BoardController : ControllerBase
         return Ok(await _boardService.ListPendingSeriesAsync(userId, cancellationToken));
     }
 
+    [HttpGet("in-review-series")]
+    [SwaggerOperation(
+        Summary = "List in-review series",
+        Description = "Lists pending-review series that already have 3 reviewers assigned (claimed).")]
+    [ProducesResponseType(typeof(IReadOnlyList<PendingSeriesItemResponse>), StatusCodes.Status200OK)]
+    public async Task<ActionResult<IReadOnlyList<PendingSeriesItemResponse>>> InReviewSeries(
+        CancellationToken cancellationToken)
+    {
+        if (!this.TryGetUserId(out var userId))
+        {
+            return Unauthorized();
+        }
+
+        return Ok(await _boardService.ListInReviewSeriesAsync(userId, cancellationToken));
+    }
+
+    [HttpPost("series/{seriesId:guid}/claim-review")]
+    [SwaggerOperation(
+        Summary = "Claim series for review",
+        Description = "Reserves a review slot for the caller before they can cast a vote.")]
+    [ProducesResponseType(typeof(BoardReviewClaimResponse), StatusCodes.Status200OK)]
+    public async Task<ActionResult<BoardReviewClaimResponse>> ClaimReview(
+        Guid seriesId,
+        [FromBody] ClaimSeriesReviewRequest? request,
+        CancellationToken cancellationToken)
+    {
+        if (!this.TryGetUserId(out var userId))
+        {
+            return Unauthorized();
+        }
+
+        return Ok(await _boardService.ClaimReviewAsync(
+            userId,
+            seriesId,
+            request?.WantLead ?? false,
+            cancellationToken));
+    }
+
     [HttpGet("vote-progress")]
     [SwaggerOperation(Summary = "Get board vote progress", Description = "Returns vote counts and whether the series has reached the minimum 3 board votes required for a decision.")]
     [ProducesResponseType(typeof(BoardVoteProgressResponse), StatusCodes.Status200OK)]

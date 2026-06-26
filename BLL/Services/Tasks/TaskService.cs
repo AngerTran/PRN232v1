@@ -257,7 +257,8 @@ public class TaskService
                 task.AssignedTo.Value,
                 "Task mới được giao",
                 $"{ctx.Series.Title} - Trang {ctx.Page.PageNumber}: {task.Title ?? task.TaskType} đã được giao cho bạn.",
-                cancellationToken);
+                category: "task_submitted",
+                cancellationToken: cancellationToken);
         }
 
         return (await GetByIdAsync(callerId, task.Id, cancellationToken))!;
@@ -333,7 +334,8 @@ public class TaskService
                 request.AssignedTo.Value,
                 "Task mới được giao",
                 $"{ctx.Series.Title} - Trang {ctx.Page.PageNumber}: {task.Title ?? task.TaskType} đã được giao cho bạn.",
-                cancellationToken);
+                category: "task_submitted",
+                cancellationToken: cancellationToken);
         }
 
         return await GetByIdAsync(callerId, taskId, cancellationToken);

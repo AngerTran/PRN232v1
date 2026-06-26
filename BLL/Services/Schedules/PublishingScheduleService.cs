@@ -6,17 +6,21 @@ using DAL.Repositories;
 using BLL.Services.Workflow;
 using BLL.Services.Workflow;
 using BLL.Dtos.Schedules;
+using BLL.Services.Notifications;
+using BLL.Common;
 
 namespace BLL.Services.Schedules;
 
 public class PublishingScheduleService
 {
     private readonly UnitOfWork _unitOfWork;
+    private readonly NotificationService _notificationService;
     private Repository<PublishingSchedule> Repository => _unitOfWork.Repository<PublishingSchedule>();
 
-    public PublishingScheduleService(UnitOfWork unitOfWork)
+    public PublishingScheduleService(UnitOfWork unitOfWork, NotificationService notificationService)
     {
         _unitOfWork = unitOfWork;
+        _notificationService = notificationService;
     }
 
     public async Task<IReadOnlyList<PublishingScheduleResponse>> ListBySeriesAsync(
@@ -69,6 +73,29 @@ public class PublishingScheduleService
 
         await Repository.AddAsync(schedule, cancellationToken);
         await _unitOfWork.SaveChangesAsync(cancellationToken);
+
+        var dateLabel = request.PublishDate.ToString("dd/MM/yyyy");
+        var scheduleMessage =
+            $"Lịch xuất bản mới cho \"{series.Title}\" — ngày {dateLabel} (số {request.IssueNumber}).";
+
+        await _notificationService.CreateAsync(
+            series.AuthorId,
+            "Lịch xuất bản mới",
+            scheduleMessage,
+            WorkflowNotificationPaths.MangakaSeries(seriesId),
+            WorkflowNotificationPaths.CategorySubmission,
+            cancellationToken: cancellationToken);
+
+        if (series.EditorId is Guid editorId)
+        {
+            await _notificationService.CreateAsync(
+                editorId,
+                "Lịch xuất bản mới",
+                scheduleMessage,
+                WorkflowNotificationPaths.EditorSeries(seriesId),
+                WorkflowNotificationPaths.CategorySubmission,
+                cancellationToken: cancellationToken);
+        }
 
         return Map(schedule);
     }
@@ -169,14 +196,31 @@ public class PublishingScheduleService
         var series = await _unitOfWork.Repository<DAL.Models.Series>().GetByIdAsync(seriesId, cancellationToken: cancellationToken)
             ?? throw new WorkflowForbiddenException("Series not found.");
 
-        if (PageAccessService.IsAdmin(caller.Role)
-            || PageAccessService.IsBoard(caller.Role)
-            || (PageAccessService.IsEditor(caller.Role) && series.EditorId == caller.Id))
+        if (PageAccessService.IsAdmin(caller.Role))
         {
             return series;
         }
 
-        throw new WorkflowForbiddenException("Requires board, assigned editor, or admin.");
+        if (PageAccessService.IsBoard(caller.Role))
+        {
+            var claimCount = await _unitOfWork.Context.SeriesBoardReviewClaims
+                .CountAsync(c => c.SeriesId == seriesId, cancellationToken);
+            if (claimCount == 0)
+            {
+                return series;
+            }
+
+            var isLead = await _unitOfWork.Context.SeriesBoardReviewClaims
+                .AnyAsync(c => c.SeriesId == seriesId && c.BoardMemberId == callerId && c.IsLead, cancellationToken);
+            if (!isLead)
+            {
+                throw new WorkflowForbiddenException("Chỉ board phụ trách chính mới được sắp lịch xuất bản.");
+            }
+
+            return series;
+        }
+
+        throw new WorkflowForbiddenException("Requires board lead or admin.");
     }
 
     private static PublishingScheduleResponse Map(PublishingSchedule s) =>

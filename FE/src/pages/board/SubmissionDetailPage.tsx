@@ -11,8 +11,10 @@ import { getSeries, getSeriesChapters } from '../../services/seriesApi';
 import {
   listBoardVotes,
   castBoardVote,
+  claimSeriesReview,
   getBoardVoteProgress,
   BOARD_VOTES_REQUIRED,
+  BOARD_CLAIMS_REQUIRED,
   type BoardDecision,
   type BoardVote,
   type BoardVoteProgress,
@@ -60,6 +62,8 @@ export default function SubmissionDetailPage() {
   const [decision, setDecision] = useState<BoardDecision | null>(null);
   const [reason, setReason] = useState('');
   const [submitting, setSubmitting] = useState(false);
+  const [claiming, setClaiming] = useState(false);
+  const [wantLead, setWantLead] = useState(false);
   const [submitted, setSubmitted] = useState(false);
   const [error, setError] = useState('');
 
@@ -124,7 +128,32 @@ export default function SubmissionDetailPage() {
   const requiredVotes = voteProgress?.requiredVotes ?? BOARD_VOTES_REQUIRED;
   const quorumMet = voteProgress?.quorumMet ?? false;
   const isPendingReview = series?.status === 'Submitted';
+  const claimedBoardMembers = voteProgress?.claimedBoardMembers ?? 0;
+  const requiredClaims = voteProgress?.requiredClaims ?? BOARD_CLAIMS_REQUIRED;
+  const currentUserHasClaimed = voteProgress?.currentUserHasClaimed ?? false;
+  const canClaim = voteProgress?.canClaim ?? false;
+  const canClaimAsLead = voteProgress?.canClaimAsLead ?? false;
+  const claimsFull = voteProgress?.claimsFull ?? false;
+  const hasLead = voteProgress?.hasLead ?? false;
+  const leadBoardMemberName = voteProgress?.leadBoardMemberName;
+  const currentUserIsLead = voteProgress?.currentUserIsLead ?? false;
   const myDecision = submitted ? decision : null;
+
+  const handleClaimReview = async () => {
+    if (!seriesId) return;
+    setClaiming(true);
+    setError('');
+    try {
+      await claimSeriesReview(seriesId, wantLead);
+      const progress = await getBoardVoteProgress(seriesId).catch(() => null);
+      if (progress) setVoteProgress(progress);
+      setWantLead(false);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Không thể nhận xét duyệt series.');
+    } finally {
+      setClaiming(false);
+    }
+  };
   const genres = series?.genres?.length ? series.genres : (series?.genre ? series.genre.split(',').map(g => g.trim()) : []);
 
   const handleSubmitVote = async () => {
@@ -166,10 +195,14 @@ export default function SubmissionDetailPage() {
   const votePanel = (
     <Card>
       <CardHeader>
-        <CardTitle>Bỏ phiếu của bạn</CardTitle>
+        <CardTitle>Xét duyệt series</CardTitle>
       </CardHeader>
       <div className="space-y-4">
         <div className="rounded-xl bg-muted/50 px-4 py-3 text-xs space-y-1">
+          <div className="flex justify-between">
+            <span className="text-muted-foreground">Reviewer đã nhận</span>
+            <span className="font-semibold">{claimedBoardMembers}/{requiredClaims}</span>
+          </div>
           <div className="flex justify-between">
             <span className="text-muted-foreground">Tiến độ hội đồng</span>
             <span className="font-semibold">{votedBoardMembers}/{requiredVotes}</span>
@@ -180,9 +213,17 @@ export default function SubmissionDetailPage() {
           </div>
           {isPendingReview && (
             <p className="text-muted-foreground pt-1">
+              {hasLead && (
+                <span className="block mb-1">
+                  Phụ trách chính: <span className="font-semibold text-foreground">{leadBoardMemberName}</span>
+                  {currentUserIsLead && <span className="text-primary"> (bạn)</span>}
+                </span>
+              )}
               {quorumMet
                 ? `Đủ ${requiredVotes} phiếu — hệ thống đã quyết định theo đa số.`
-                : `Cần ${requiredVotes} phiếu board để quyết định.`}
+                : currentUserHasClaimed
+                  ? `Cần ${requiredVotes} phiếu board để quyết định.`
+                  : `Đọc hồ sơ và bản thảo, sau đó nhận xét duyệt để được bỏ phiếu.`}
             </p>
           )}
         </div>
@@ -194,6 +235,55 @@ export default function SubmissionDetailPage() {
             <p className="text-xs text-muted-foreground mt-1">
               {series.status === 'Cancelled' ? 'Từ chối' : 'Đã duyệt'}
             </p>
+          </div>
+        ) : !currentUserHasClaimed ? (
+          <div className="space-y-3">
+            {claimsFull ? (
+              <p className="text-sm text-center text-muted-foreground py-2">
+                Đã đủ {requiredClaims} reviewer. Series không còn trên tab chung — xem tại Series Đã Nhận.
+              </p>
+            ) : canClaim ? (
+              <>
+                <p className="text-sm text-muted-foreground">
+                  Bạn có thể xem thông tin và tải bản thảo trước. Khi sẵn sàng, nhận series để giữ chỗ reviewer ({claimedBoardMembers}/{requiredClaims}).
+                </p>
+                {hasLead ? (
+                  <p className="text-xs text-muted-foreground">
+                    Phụ trách chính: <span className="font-semibold">{leadBoardMemberName}</span>
+                  </p>
+                ) : (
+                  <label className="flex items-start gap-3 rounded-xl border border-border px-4 py-3 cursor-pointer hover:bg-muted/40">
+                    <input
+                      type="checkbox"
+                      className="mt-0.5"
+                      checked={wantLead}
+                      onChange={e => setWantLead(e.target.checked)}
+                      disabled={!canClaimAsLead}
+                    />
+                    <span className="text-sm">
+                      <span className="font-semibold block">Nhận làm phụ trách chính</span>
+                      <span className="text-muted-foreground text-xs">
+                        Chịu trách nhiệm lên lịch xuất bản sau khi series được duyệt (mỗi series chỉ 1 người).
+                      </span>
+                    </span>
+                  </label>
+                )}
+                <Button
+                  type="button"
+                  variant="primary"
+                  className="w-full"
+                  loading={claiming}
+                  disabled={claiming}
+                  onClick={handleClaimReview}
+                >
+                  Nhận xét duyệt series
+                </Button>
+              </>
+            ) : (
+              <p className="text-sm text-center text-muted-foreground py-2">
+                Bạn có lời mời đang chờ — hãy xử lý trong mục Lời mời xét duyệt.
+              </p>
+            )}
           </div>
         ) : submitted ? (
           <div className="text-center py-4 space-y-3">

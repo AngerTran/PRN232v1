@@ -13,6 +13,10 @@ public partial class Notification
 
     public string? Message { get; set; }
 
+    public string? LinkUrl { get; set; }
+
+    public string? Category { get; set; }
+
     public bool? IsRead { get; set; }
 
     public DateTime? CreatedAt { get; set; }

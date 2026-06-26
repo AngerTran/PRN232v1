@@ -5,15 +5,18 @@ import { Card, CardContent } from '../../app/components/ui/card';
 import { Button } from '../../app/components/ui/button';
 import { Badge } from '../../app/components/ui/badge';
 import type { Series } from '../../types/domain';
-import { getVisibleSeries } from '../../services/seriesApi';
-import { getPendingSeries, getLeaderboard, BOARD_VOTES_REQUIRED, type PendingSeriesItem, type LeaderboardItem } from '../../services/boardApi';
+import { getVisibleSeries, getSeries } from '../../services/seriesApi';
+import { getPendingSeries, getLeaderboard, type PendingSeriesItem, type LeaderboardItem } from '../../services/boardApi';
 import { getStoredUser } from '../../services/authApi';
+import { BoardSubmissionCard } from '../../app/components/ui/board/BoardSubmissionCard';
 import {
   FileText, Star, CalendarDays, AlertTriangle, XCircle, ArrowRight, Gavel, Trophy,
 } from 'lucide-react';
 import { clsx } from 'clsx';
 
 const PREVIEW_LIMIT = 3;
+
+type EnrichedPending = PendingSeriesItem & { series: Series | null };
 
 function DashboardSection({
   title,
@@ -100,7 +103,7 @@ export default function BoardDashboardPage() {
   const boardName = getStoredUser()?.name ?? 'Hội đồng';
 
   const [series, setSeries] = useState<Series[]>([]);
-  const [pending, setPending] = useState<PendingSeriesItem[]>([]);
+  const [pending, setPending] = useState<EnrichedPending[]>([]);
   const [leaderboard, setLeaderboard] = useState<LeaderboardItem[]>([]);
 
   useEffect(() => {
@@ -109,10 +112,17 @@ export default function BoardDashboardPage() {
       getVisibleSeries().catch(() => [] as Series[]),
       getPendingSeries().catch(() => [] as PendingSeriesItem[]),
       getLeaderboard('rank').catch(() => [] as LeaderboardItem[]),
-    ]).then(([s, p, l]) => {
+    ]).then(async ([s, p, l]) => {
+      if (!isActive) return;
+      const enriched = await Promise.all(
+        p.map(async item => {
+          const detail = await getSeries(item.id).catch(() => null);
+          return { ...item, series: detail };
+        })
+      );
       if (!isActive) return;
       setSeries(s);
-      setPending(p);
+      setPending(enriched);
       setLeaderboard(l);
     });
     return () => {
@@ -135,7 +145,7 @@ export default function BoardDashboardPage() {
 
   const summaryCards = [
     { label: 'Chờ Duyệt', value: stats.pending, icon: <FileText className="h-4 w-4" />, color: 'text-blue-600', bg: 'bg-blue-50' },
-    { label: 'Series Đã Duyệt', value: stats.approved, icon: <Star className="h-4 w-4" />, color: 'text-green-600', bg: 'bg-green-50' },
+    { label: 'Series Đã Nhận', value: stats.approved, icon: <Star className="h-4 w-4" />, color: 'text-green-600', bg: 'bg-green-50' },
     { label: 'Đang Xuất Bản', value: stats.publishing, icon: <CalendarDays className="h-4 w-4" />, color: 'text-violet-600', bg: 'bg-violet-50' },
     { label: 'At Risk', value: stats.atRisk, icon: <AlertTriangle className="h-4 w-4" />, color: 'text-red-600', bg: 'bg-red-50' },
     { label: 'Đã Từ Chối', value: stats.cancelled, icon: <XCircle className="h-4 w-4" />, color: 'text-gray-600', bg: 'bg-gray-50' },
@@ -194,35 +204,19 @@ export default function BoardDashboardPage() {
         emptyText="Không có series nào đang chờ phê duyệt"
       >
         {pendingTop.length > 0 ? (
-          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+          <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3">
             {pendingTop.map(sub => (
-              <Card
-                key={sub.id}
-                className="shadow-sm hover:shadow-md transition-shadow cursor-pointer"
-                onClick={() => navigate(`/board/submissions/${sub.id}`)}
-              >
-                <CardContent className="p-4">
-                  <h3 className="font-semibold text-sm mb-1 truncate">{sub.title}</h3>
-                  <p className="text-xs text-muted-foreground mb-3">{sub.authorName ?? '—'}</p>
-                  <div className="flex gap-3 text-xs flex-wrap">
-                    <span className="text-green-600 font-medium">✓ {sub.approveVotes}</span>
-                    <span className="text-red-600 font-medium">✗ {sub.rejectVotes}</span>
-                    <span className="text-muted-foreground">
-                      {sub.votedBoardMembers}/{BOARD_VOTES_REQUIRED} phiếu
-                    </span>
-                  </div>
-                </CardContent>
-              </Card>
+              <BoardSubmissionCard key={sub.id} item={sub} series={sub.series} compact />
             ))}
           </div>
         ) : null}
       </DashboardSection>
 
       <DashboardSection
-        title="Series Đã Duyệt"
+        title="Series Đã Nhận"
         viewAllLabel="Xem tất cả"
         onViewAll={() => navigate('/board/approved-series')}
-        emptyText="Chưa có series nào được phê duyệt"
+        emptyText="Chưa có series nào trong danh sách đã nhận"
       >
         {approvedSeries.length > 0 ? (
           <SeriesPreviewGrid

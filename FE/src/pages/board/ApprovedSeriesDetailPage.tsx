@@ -13,6 +13,7 @@ import {
   canSchedulePublishing,
   type PublishingScheduleItem,
 } from '../../services/seriesApi';
+import { getBoardVoteProgress, type BoardVoteProgress } from '../../services/boardApi';
 
 function statusLabel(status: SeriesStatus): { text: string; className: string } {
   switch (status) {
@@ -34,6 +35,7 @@ export default function ApprovedSeriesDetailPage() {
   const { setPageMeta } = usePageMeta();
   const [series, setSeries] = useState<Series | null>(null);
   const [schedules, setSchedules] = useState<PublishingScheduleItem[]>([]);
+  const [boardProgress, setBoardProgress] = useState<BoardVoteProgress | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
@@ -41,15 +43,20 @@ export default function ApprovedSeriesDetailPage() {
     if (!seriesId) return;
     let isActive = true;
     setLoading(true);
-    Promise.all([getSeries(seriesId), getSeriesSchedules(seriesId).catch(() => [])])
-      .then(([s, sc]) => {
+    Promise.all([
+      getSeries(seriesId),
+      getSeriesSchedules(seriesId).catch(() => []),
+      getBoardVoteProgress(seriesId).catch(() => null),
+    ])
+      .then(([s, sc, progress]) => {
         if (!isActive) return;
         setSeries(s);
         setSchedules(sc);
+        setBoardProgress(progress);
         setPageMeta({
           title: s.title,
           breadcrumb: [
-            { label: 'Series Đã Duyệt', href: '/board/approved-series' },
+            { label: 'Series Đã Nhận', href: '/board/approved-series' },
             { label: s.title },
           ],
         });
@@ -81,6 +88,8 @@ export default function ApprovedSeriesDetailPage() {
   const latestSchedule = [...schedules].sort(
     (a, b) => new Date(b.publishDate).getTime() - new Date(a.publishDate).getTime()
   )[0];
+  const canScheduleStatus = canSchedulePublishing(series.status);
+  const canManageSchedule = canScheduleStatus && (boardProgress?.canManagePublishingSchedule ?? true);
 
   return (
     <div className="flex flex-1 min-h-0 flex-col overflow-y-auto lg:flex-row lg:overflow-hidden">
@@ -182,7 +191,13 @@ export default function ApprovedSeriesDetailPage() {
             <CardTitle>Thao tác</CardTitle>
           </CardHeader>
           <div className="space-y-3">
-            {canSchedulePublishing(series.status) ? (
+            {boardProgress?.hasLead && (
+              <p className="text-xs text-muted-foreground">
+                Phụ trách chính: <span className="font-semibold text-foreground">{boardProgress.leadBoardMemberName}</span>
+                {boardProgress.currentUserIsLead && <span className="text-primary"> (bạn)</span>}
+              </p>
+            )}
+            {canManageSchedule ? (
               <Button className="w-full" onClick={() => navigate(`/board/publishing-schedule/${series.id}`)}>
                 {schedules.length > 0 ? (
                   <>
@@ -196,10 +211,20 @@ export default function ApprovedSeriesDetailPage() {
                   </>
                 )}
               </Button>
+            ) : canScheduleStatus ? (
+              <p className="text-sm text-muted-foreground">
+                Chỉ phụ trách chính được lên lịch. Bạn có thể xem lịch hiện có.
+              </p>
             ) : (
               <p className="text-sm text-muted-foreground">
                 Chờ editor đánh dấu hoàn thành sản xuất trước khi lên lịch xuất bản.
               </p>
+            )}
+            {canScheduleStatus && !canManageSchedule && schedules.length > 0 && (
+              <Button variant="outline" className="w-full" onClick={() => navigate(`/board/publishing-schedule/${series.id}`)}>
+                <CalendarDays className="h-4 w-4 mr-2" />
+                Xem lịch xuất bản
+              </Button>
             )}
             {latestSchedule && (
               <p className="text-xs text-muted-foreground">

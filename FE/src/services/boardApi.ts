@@ -19,11 +19,21 @@ export interface PendingSeriesItem {
   rejectVotes: number;
   totalBoardMembers: number;
   votedBoardMembers: number;
+  claimedBoardMembers: number;
+  requiredClaims: number;
   submittedForReviewAt?: string;
   reviewExpiresAt?: string;
   currentUserHasVoted: boolean;
+  currentUserHasClaimed: boolean;
+  currentUserIsLead: boolean;
   currentUserInvitationStatus?: string;
-  canVolunteerReview: boolean;
+  canClaim: boolean;
+  canClaimAsLead: boolean;
+  claimsFull: boolean;
+  hasLead: boolean;
+  leadBoardMemberId?: string;
+  leadBoardMemberName?: string;
+  canManagePublishingSchedule: boolean;
 }
 
 interface ApiPendingSeriesItem {
@@ -36,14 +46,25 @@ interface ApiPendingSeriesItem {
   rejectVotes: number;
   totalBoardMembers: number;
   votedBoardMembers: number;
+  claimedBoardMembers: number;
+  requiredClaims: number;
   submittedForReviewAt?: string | null;
   reviewExpiresAt?: string | null;
   currentUserHasVoted: boolean;
+  currentUserHasClaimed: boolean;
+  currentUserIsLead: boolean;
   currentUserInvitationStatus?: string | null;
-  canVolunteerReview: boolean;
+  canClaim: boolean;
+  canClaimAsLead: boolean;
+  claimsFull: boolean;
+  hasLead: boolean;
+  leadBoardMemberId?: string | null;
+  leadBoardMemberName?: string | null;
+  canManagePublishingSchedule: boolean;
 }
 
 export const BOARD_VOTES_REQUIRED = 3;
+export const BOARD_CLAIMS_REQUIRED = 3;
 
 export interface BoardVoteProgress {
   totalBoardMembers: number;
@@ -52,6 +73,17 @@ export interface BoardVoteProgress {
   rejectVotes: number;
   requiredVotes: number;
   quorumMet: boolean;
+  claimedBoardMembers: number;
+  requiredClaims: number;
+  currentUserHasClaimed: boolean;
+  currentUserIsLead: boolean;
+  canClaim: boolean;
+  canClaimAsLead: boolean;
+  claimsFull: boolean;
+  hasLead: boolean;
+  leadBoardMemberId?: string;
+  leadBoardMemberName?: string;
+  canManagePublishingSchedule: boolean;
 }
 
 interface ApiBoardVoteProgress {
@@ -61,6 +93,43 @@ interface ApiBoardVoteProgress {
   rejectVotes: number;
   requiredVotes: number;
   quorumMet: boolean;
+  claimedBoardMembers: number;
+  requiredClaims: number;
+  currentUserHasClaimed: boolean;
+  currentUserIsLead: boolean;
+  canClaim: boolean;
+  canClaimAsLead: boolean;
+  claimsFull: boolean;
+  hasLead: boolean;
+  leadBoardMemberId?: string | null;
+  leadBoardMemberName?: string | null;
+  canManagePublishingSchedule: boolean;
+}
+
+export interface BoardReviewClaim {
+  seriesId: string;
+  boardMemberId: string;
+  claimedBoardMembers: number;
+  requiredClaims: number;
+  claimsFull: boolean;
+  isLead: boolean;
+  hasLead: boolean;
+  leadBoardMemberId?: string;
+  leadBoardMemberName?: string;
+  claimedAt: string;
+}
+
+interface ApiBoardReviewClaim {
+  seriesId: string;
+  boardMemberId: string;
+  claimedBoardMembers: number;
+  requiredClaims: number;
+  claimsFull: boolean;
+  isLead: boolean;
+  hasLead: boolean;
+  leadBoardMemberId?: string | null;
+  leadBoardMemberName?: string | null;
+  claimedAt: string;
 }
 
 export interface LeaderboardItem {
@@ -104,6 +173,57 @@ interface ApiBoardVote {
   createdAt?: string | null;
 }
 
+function mapPendingSeriesItem(item: ApiPendingSeriesItem): PendingSeriesItem {
+  return {
+    id: item.id,
+    title: item.title,
+    status: item.status,
+    authorId: item.authorId,
+    authorName: item.authorName ?? undefined,
+    approveVotes: item.approveVotes,
+    rejectVotes: item.rejectVotes,
+    totalBoardMembers: item.totalBoardMembers,
+    votedBoardMembers: item.votedBoardMembers,
+    claimedBoardMembers: item.claimedBoardMembers,
+    requiredClaims: item.requiredClaims ?? BOARD_CLAIMS_REQUIRED,
+    submittedForReviewAt: item.submittedForReviewAt ?? undefined,
+    reviewExpiresAt: item.reviewExpiresAt ?? undefined,
+    currentUserHasVoted: item.currentUserHasVoted,
+    currentUserHasClaimed: item.currentUserHasClaimed,
+    currentUserIsLead: item.currentUserIsLead ?? false,
+    currentUserInvitationStatus: item.currentUserInvitationStatus ?? undefined,
+    canClaim: item.canClaim,
+    canClaimAsLead: item.canClaimAsLead ?? false,
+    claimsFull: item.claimsFull,
+    hasLead: item.hasLead ?? false,
+    leadBoardMemberId: item.leadBoardMemberId ?? undefined,
+    leadBoardMemberName: item.leadBoardMemberName ?? undefined,
+    canManagePublishingSchedule: item.canManagePublishingSchedule ?? false,
+  };
+}
+
+function mapVoteProgress(item: ApiBoardVoteProgress): BoardVoteProgress {
+  return {
+    totalBoardMembers: item.totalBoardMembers,
+    votedBoardMembers: item.votedBoardMembers,
+    approveVotes: item.approveVotes,
+    rejectVotes: item.rejectVotes,
+    requiredVotes: item.requiredVotes ?? BOARD_VOTES_REQUIRED,
+    quorumMet: item.quorumMet,
+    claimedBoardMembers: item.claimedBoardMembers ?? 0,
+    requiredClaims: item.requiredClaims ?? BOARD_CLAIMS_REQUIRED,
+    currentUserHasClaimed: item.currentUserHasClaimed ?? false,
+    currentUserIsLead: item.currentUserIsLead ?? false,
+    canClaim: item.canClaim ?? false,
+    canClaimAsLead: item.canClaimAsLead ?? false,
+    claimsFull: item.claimsFull ?? false,
+    hasLead: item.hasLead ?? false,
+    leadBoardMemberId: item.leadBoardMemberId ?? undefined,
+    leadBoardMemberName: item.leadBoardMemberName ?? undefined,
+    canManagePublishingSchedule: item.canManagePublishingSchedule ?? false,
+  };
+}
+
 function mapVote(item: ApiBoardVote): BoardVote {
   return {
     id: item.id,
@@ -119,36 +239,40 @@ function mapVote(item: ApiBoardVote): BoardVote {
 
 export async function getPendingSeries(): Promise<PendingSeriesItem[]> {
   const items = unwrap(await apiRequest<ApiEnvelope<ApiPendingSeriesItem[]>>('/api/board/pending-series'));
-  return items.map(item => ({
-    id: item.id,
-    title: item.title,
-    status: item.status,
-    authorId: item.authorId,
-    authorName: item.authorName ?? undefined,
-    approveVotes: item.approveVotes,
-    rejectVotes: item.rejectVotes,
-    totalBoardMembers: item.totalBoardMembers,
-    votedBoardMembers: item.votedBoardMembers,
-    submittedForReviewAt: item.submittedForReviewAt ?? undefined,
-    reviewExpiresAt: item.reviewExpiresAt ?? undefined,
-    currentUserHasVoted: item.currentUserHasVoted,
-    currentUserInvitationStatus: item.currentUserInvitationStatus ?? undefined,
-    canVolunteerReview: item.canVolunteerReview,
-  }));
+  return items.map(mapPendingSeriesItem);
+}
+
+export async function getInReviewSeries(): Promise<PendingSeriesItem[]> {
+  const items = unwrap(await apiRequest<ApiEnvelope<ApiPendingSeriesItem[]>>('/api/board/in-review-series'));
+  return items.map(mapPendingSeriesItem);
+}
+
+export async function claimSeriesReview(seriesId: string, wantLead = false): Promise<BoardReviewClaim> {
+  const item = unwrap(
+    await apiRequest<ApiEnvelope<ApiBoardReviewClaim>>(`/api/board/series/${seriesId}/claim-review`, {
+      method: 'POST',
+      body: JSON.stringify({ wantLead }),
+    })
+  );
+  return {
+    seriesId: item.seriesId,
+    boardMemberId: item.boardMemberId,
+    claimedBoardMembers: item.claimedBoardMembers,
+    requiredClaims: item.requiredClaims,
+    claimsFull: item.claimsFull,
+    isLead: item.isLead,
+    hasLead: item.hasLead,
+    leadBoardMemberId: item.leadBoardMemberId ?? undefined,
+    leadBoardMemberName: item.leadBoardMemberName ?? undefined,
+    claimedAt: item.claimedAt,
+  };
 }
 
 export async function getBoardVoteProgress(seriesId: string): Promise<BoardVoteProgress> {
   const item = unwrap(
     await apiRequest<ApiEnvelope<ApiBoardVoteProgress>>(`/api/board/vote-progress?seriesId=${seriesId}`)
   );
-  return {
-    totalBoardMembers: item.totalBoardMembers,
-    votedBoardMembers: item.votedBoardMembers,
-    approveVotes: item.approveVotes,
-    rejectVotes: item.rejectVotes,
-    requiredVotes: item.requiredVotes ?? BOARD_VOTES_REQUIRED,
-    quorumMet: item.quorumMet,
-  };
+  return mapVoteProgress(item);
 }
 
 export async function getLeaderboard(metric?: string): Promise<LeaderboardItem[]> {

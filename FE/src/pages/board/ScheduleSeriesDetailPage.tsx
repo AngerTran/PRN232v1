@@ -18,6 +18,7 @@ import {
   canSchedulePublishing,
   type PublishingScheduleItem,
 } from '../../services/seriesApi';
+import { getBoardVoteProgress, type BoardVoteProgress } from '../../services/boardApi';
 
 const emptyForm = { frequency: 'weekly', publishDate: '', issueNumber: '', notes: '' };
 
@@ -33,15 +34,21 @@ export default function ScheduleSeriesDetailPage() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [form, setForm] = useState(emptyForm);
   const [saving, setSaving] = useState(false);
+  const [boardProgress, setBoardProgress] = useState<BoardVoteProgress | null>(null);
 
   async function load() {
     if (!seriesId) return;
     setLoading(true);
     setError('');
     try {
-      const [s, sc] = await Promise.all([getSeries(seriesId), getSeriesSchedules(seriesId)]);
+      const [s, sc, progress] = await Promise.all([
+        getSeries(seriesId),
+        getSeriesSchedules(seriesId),
+        getBoardVoteProgress(seriesId).catch(() => null),
+      ]);
       setSeries(s);
       setSchedules(sc);
+      setBoardProgress(progress);
       setPageMeta({
         title: `Lịch · ${s.title}`,
         breadcrumb: [
@@ -122,7 +129,9 @@ export default function ScheduleSeriesDetailPage() {
   if (loading) return <div className="p-6 text-sm text-muted-foreground">Đang tải...</div>;
   if (!series) return <div className="p-6 text-muted-foreground">{error || 'Không tìm thấy series.'}</div>;
 
-  const canSchedule = canSchedulePublishing(series.status);
+  const canScheduleStatus = canSchedulePublishing(series.status);
+  const canManageSchedule = canScheduleStatus && (boardProgress?.canManagePublishingSchedule ?? true);
+  const canSchedule = canManageSchedule;
 
   return (
     <div className="flex flex-1 min-h-0 flex-col overflow-y-auto lg:flex-row lg:overflow-hidden">
@@ -152,9 +161,14 @@ export default function ScheduleSeriesDetailPage() {
           <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{error}</div>
         )}
 
-        {!canSchedule && (
+        {!canScheduleStatus && (
           <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
             Series chưa được editor đánh dấu hoàn thành — chỉ xem lịch, không tạo mới.
+          </div>
+        )}
+        {canScheduleStatus && !canManageSchedule && (
+          <div className="rounded-xl border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-900">
+            Chỉ board phụ trách chính ({boardProgress?.leadBoardMemberName ?? '—'}) được sắp lịch xuất bản. Bạn có thể xem lịch.
           </div>
         )}
 

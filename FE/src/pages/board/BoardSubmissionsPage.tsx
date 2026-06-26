@@ -64,7 +64,7 @@ export default function BoardSubmissionsPage() {
         <p className="text-muted-foreground mt-1">
           {loading
             ? 'Đang tải hồ sơ đề xuất...'
-            : `${items.length} series chờ xét duyệt · cần ${BOARD_VOTES_REQUIRED} phiếu board để quyết định`}
+            : `${items.length} series chờ nhận xét duyệt · tối đa ${BOARD_VOTES_REQUIRED} reviewer mỗi series`}
         </p>
       </div>
 
@@ -83,30 +83,30 @@ export default function BoardSubmissionsPage() {
       )}
 
       {loading ? (
-        <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+        <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3">
           {Array.from({ length: 4 }).map((_, i) => (
-            <div key={i} className="rounded-2xl border border-border bg-muted/30 aspect-[3/5] animate-pulse" />
+            <div key={i} className="rounded-xl border border-border bg-muted/30 h-[5.5rem] animate-pulse" />
           ))}
         </div>
       ) : filtered.length === 0 ? (
         <div className="rounded-2xl border border-dashed border-border bg-muted/20 py-16 text-center">
           <Inbox className="h-10 w-10 text-muted-foreground mx-auto mb-3" />
-          <p className="font-medium text-foreground">Không có series chờ duyệt</p>
+          <p className="font-medium text-foreground">Không có series chờ nhận xét duyệt</p>
           <p className="text-sm text-muted-foreground mt-1">
             {search ? 'Thử từ khóa khác hoặc xóa bộ lọc.' : 'Mangaka chưa gửi đề xuất series mới.'}
           </p>
         </div>
       ) : (
-        <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+        <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3">
           {filtered.map(item => (
-            <BoardSubmissionCard key={item.id} item={item} series={item.series} />
+            <BoardSubmissionCard key={item.id} item={item} series={item.series} compact />
           ))}
         </div>
       )}
 
       {!loading && (
         <p className="text-xs text-muted-foreground">
-          Hiển thị {filtered.length} / {items.length} series · Nhấn thẻ để xem hồ sơ đầy đủ và bỏ phiếu
+          Hiển thị {filtered.length} / {items.length} series · Nhấn thẻ để xem hồ sơ, nhận xét duyệt và bỏ phiếu
         </p>
       )}
     </div>
