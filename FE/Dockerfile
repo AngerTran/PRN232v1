@@ -6,7 +6,8 @@ RUN npm ci
 
 COPY . .
 
-ARG VITE_API_BASE_URL=http://146.190.94.40:3001
+# Empty = same-origin /api (nginx proxies to backend). Set explicitly for local cross-port dev.
+ARG VITE_API_BASE_URL=
 ENV VITE_API_BASE_URL=$VITE_API_BASE_URL
 
 RUN npm run build

@@ -1,4 +1,17 @@
-export const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:3001').replace(/\/$/, '');
+function resolveApiBaseUrl(): string {
+  const configured = import.meta.env.VITE_API_BASE_URL?.trim();
+  if (configured) {
+    return configured.replace(/\/$/, '');
+  }
+
+  if (import.meta.env.PROD && typeof window !== 'undefined' && window.location.origin) {
+    return window.location.origin;
+  }
+
+  return 'http://localhost:3001';
+}
+
+export const API_BASE_URL = resolveApiBaseUrl();
 
 type ApiRequestOptions = RequestInit & {
   auth?: boolean;

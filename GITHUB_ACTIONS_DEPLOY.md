@@ -12,7 +12,7 @@ Moi lan push len branch `main`, GitHub Actions se:
 6. Chay EF Core migrations len Supabase (container tam `mcr.microsoft.com/dotnet/sdk:9.0`, dung `ConnectionStrings__SupabaseConnection` tu `.deploy/be.env`).
 7. Build Docker images tren server va restart containers:
    - BE: `cons-dotnet`, public port `3001`
-   - FE: `cons-fe`, public port `3002`
+   - FE: `cons-fe`, public port `3002`, nginx proxy `/api/` -> BE (same-origin, ho tro HTTPS qua domain nhu `www.chaydev.me`)
 
 ## GitHub Secrets Can Tao
 

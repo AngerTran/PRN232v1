@@ -30,8 +30,13 @@ export default function LoginPage() {
       } else {
         setError('Email hoặc mật khẩu không đúng.');
       }
-    } catch {
-      setError('Cannot connect to backend. Please try again.');
+    } catch (err) {
+      const message = err instanceof Error ? err.message : '';
+      if (message && !message.toLowerCase().includes('failed to fetch')) {
+        setError(message);
+      } else {
+        setError('Cannot connect to backend. Please try again.');
+      }
     } finally {
       setLoading(false);
     }
