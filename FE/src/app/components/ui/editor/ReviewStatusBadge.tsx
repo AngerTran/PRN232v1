@@ -1,16 +1,17 @@
 import { ReviewStatus } from '../../../../types/domain';
 import { Badge } from '../badge';
+import { REVIEW_STATUS_LABELS } from '../../../../utils/statusLabels';
 
 interface ReviewStatusBadgeProps {
   status: ReviewStatus;
   className?: string;
 }
 
-const statusConfig: Record<ReviewStatus, { label: string; variant: 'default' | 'secondary' | 'outline' | 'destructive' }> = {
-  'Pending': { label: 'Chờ review', variant: 'secondary' },
-  'In Review': { label: 'Đang review', variant: 'default' },
-  'Approved': { label: 'Đã duyệt', variant: 'default' },
-  'Revision Required': { label: 'Yêu cầu sửa', variant: 'destructive' },
+const statusConfig: Record<ReviewStatus, { variant: 'default' | 'secondary' | 'outline' | 'destructive' }> = {
+  'Pending': { variant: 'secondary' },
+  'In Review': { variant: 'default' },
+  'Approved': { variant: 'default' },
+  'Revision Required': { variant: 'destructive' },
 };
 
 export function ReviewStatusBadge({ status, className }: ReviewStatusBadgeProps) {
@@ -18,7 +19,7 @@ export function ReviewStatusBadge({ status, className }: ReviewStatusBadgeProps)
 
   return (
     <Badge variant={config.variant} className={className}>
-      {config.label}
+      {REVIEW_STATUS_LABELS[status]}
     </Badge>
   );
 }

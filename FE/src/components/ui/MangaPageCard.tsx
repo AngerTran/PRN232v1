@@ -56,7 +56,7 @@ export default function MangaPageCard({ page, onDelete }: MangaPageCardProps) {
       <div className="p-3">
         <div className="flex items-center justify-between gap-2 mb-2">
           <span className="text-xs font-semibold text-foreground truncate min-w-0">Trang {page.pageNumber}</span>
-          <Badge status={page.status} className="normal-case tracking-normal" />
+          <Badge status={page.status} statusKind="page" className="normal-case tracking-normal" />
         </div>
         {(page.tasksCount ?? 0) > 0 && (
           <div className="flex items-center gap-2 text-xs text-muted-foreground">

@@ -7,7 +7,7 @@ import EmptyState from '../../components/ui/EmptyState';
 import { usePageMeta } from '../../hooks/usePageMeta';
 import { useConfirm } from '../../components/ui/ConfirmDialog';
 import type { Chapter, Series } from '../../types/domain';
-import { getSeries, getSeriesChapters, deleteChapter, canMangakaProduceOnSeries, SERIES_PRODUCTION_LOCK_HINT } from '../../services/seriesApi';
+import { getSeries, getSeriesChapters, deleteChapter, canMangakaProduceOnSeries, canMangakaDeleteChapter, SERIES_PRODUCTION_LOCK_HINT } from '../../services/seriesApi';
 import { FileText } from 'lucide-react';
 
 export default function ChapterListPage() {
@@ -70,6 +70,11 @@ export default function ChapterListPage() {
 
   const handleDeleteChapter = async (chapterId: string) => {
     const target = chapters.find(c => c.id === chapterId);
+    if (!target || !canMangakaDeleteChapter(target.status)) {
+      setError('Chỉ có thể xóa chương ở trạng thái bản nháp.');
+      return;
+    }
+
     const confirmed = await confirm({
       title: 'Xóa chương',
       message: (
@@ -149,7 +154,12 @@ export default function ChapterListPage() {
       ) : (
         <div className="space-y-2">
           {chapters.map(ch => (
-            <ChapterCard key={ch.id} chapter={ch} seriesId={seriesId ?? ''} onDelete={handleDeleteChapter} />
+            <ChapterCard
+              key={ch.id}
+              chapter={ch}
+              seriesId={seriesId ?? ''}
+              onDelete={canMangakaDeleteChapter(ch.status) ? handleDeleteChapter : undefined}
+            />
           ))}
         </div>
       )}

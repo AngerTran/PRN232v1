@@ -10,13 +10,14 @@ import SearchInput from '../../components/ui/SearchInput';
 import FilterDropdown from '../../components/ui/FilterDropdown';
 import EmptyState from '../../components/ui/EmptyState';
 import { usePageMeta } from '../../hooks/usePageMeta';
-import type { Task, TaskStatus, TaskType } from '../../types/domain';
+import type { Task, TaskType } from '../../types/domain';
 import { getMangakaTasks } from '../../services/tasksApi';
 import { createTaskPayment } from '../../services/paymentApi';
 import { getAssistants, type ProfileSummary } from '../../services/profilesApi';
+import { TASK_STATUS_FILTER_OPTIONS, formatTaskStatusLabel } from '../../utils/statusLabels';
 import { format } from 'date-fns';
 
-const STATUS_OPTIONS: TaskStatus[] = ['Pending', 'In Progress', 'Submitted', 'Approved', 'Revision Required'];
+const STATUS_OPTIONS = TASK_STATUS_FILTER_OPTIONS;
 const TYPE_OPTIONS: TaskType[] = ['Background', 'Shading', 'Effect', 'Screentone', 'Clean Line', 'Dialogue Edit'];
 
 export default function TaskManagementPage() {
@@ -87,7 +88,7 @@ export default function TaskManagementPage() {
 
       <div className="flex items-center gap-3 flex-wrap">
         <SearchInput value={search} onChange={setSearch} placeholder="Tìm kiếm nhiệm vụ…" className="flex-1 min-w-[200px] max-w-xs" />
-        <FilterDropdown label="Trạng thái" options={STATUS_OPTIONS} value={statusFilter} onChange={setStatusFilter} />
+        <FilterDropdown label="Trạng thái" options={STATUS_OPTIONS} value={statusFilter} onChange={setStatusFilter} formatOptionLabel={formatTaskStatusLabel} />
         <FilterDropdown label="Loại" options={TYPE_OPTIONS} value={typeFilter} onChange={setTypeFilter} />
       </div>
 
@@ -132,7 +133,7 @@ export default function TaskManagementPage() {
                       </td>
                       <td className="px-4 py-3"><TypeBadge type={task.type} /></td>
                       <td className="px-4 py-3 text-muted-foreground text-xs whitespace-nowrap">{task.deadline ? format(new Date(task.deadline), 'MMM d') : '—'}</td>
-                      <td className="px-4 py-3"><Badge status={task.status} /></td>
+                      <td className="px-4 py-3"><Badge status={task.status} statusKind="task" /></td>
                       <td className="px-4 py-3">
                         {(task.status === 'Submitted' || task.status === 'Revision Required') && (
                           <Button size="sm" variant={task.status === 'Submitted' ? 'primary' : 'outline'}

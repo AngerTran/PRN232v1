@@ -5,10 +5,11 @@ import FilterDropdown from '../../components/ui/FilterDropdown';
 import ChapterCard from '../../components/ui/ChapterCard';
 import EmptyState from '../../components/ui/EmptyState';
 import { usePageMeta } from '../../hooks/usePageMeta';
-import type { Chapter, ChapterStatus, Series } from '../../types/domain';
+import type { Chapter, Series } from '../../types/domain';
 import { getMySeries, getSeriesChapters } from '../../services/seriesApi';
+import { CHAPTER_STATUS_FILTER_OPTIONS, formatChapterStatusLabel } from '../../utils/statusLabels';
 
-const STATUS_OPTIONS: ChapterStatus[] = ['Draft', 'In Progress', 'Review', 'Approved', 'Published'];
+const STATUS_OPTIONS = CHAPTER_STATUS_FILTER_OPTIONS;
 
 export default function ChaptersOverviewPage() {
   const navigate = useNavigate();
@@ -68,7 +69,7 @@ export default function ChaptersOverviewPage() {
           <h1 className="text-xl font-bold">Tất cả chương</h1>
           <p className="text-sm text-muted-foreground">{allChapters.length} chương trong {seriesList.length} series</p>
         </div>
-        <FilterDropdown label="Trạng thái" options={STATUS_OPTIONS} value={statusFilter} onChange={setStatusFilter} />
+        <FilterDropdown label="Trạng thái" options={STATUS_OPTIONS} value={statusFilter} onChange={setStatusFilter} formatOptionLabel={formatChapterStatusLabel} />
       </div>
 
       {loading ? (

@@ -1,17 +1,18 @@
 import { TaskStatus } from '../../../../types/domain';
 import { Badge } from '../badge';
+import { TASK_STATUS_LABELS } from '../../../../utils/statusLabels';
 
 interface TaskStatusBadgeProps {
   status: TaskStatus;
   className?: string;
 }
 
-const statusConfig: Record<TaskStatus, { label: string; variant: 'default' | 'secondary' | 'outline' | 'destructive' }> = {
-  'Pending': { label: 'Chờ nhận', variant: 'secondary' },
-  'In Progress': { label: 'Đang làm', variant: 'default' },
-  'Submitted': { label: 'Đã nộp', variant: 'outline' },
-  'Approved': { label: 'Đã duyệt', variant: 'default' },
-  'Revision Required': { label: 'Cần chỉnh sửa', variant: 'destructive' },
+const statusConfig: Record<TaskStatus, { variant: 'default' | 'secondary' | 'outline' | 'destructive' }> = {
+  'Pending': { variant: 'secondary' },
+  'In Progress': { variant: 'default' },
+  'Submitted': { variant: 'outline' },
+  'Approved': { variant: 'default' },
+  'Revision Required': { variant: 'destructive' },
 };
 
 export function TaskStatusBadge({ status, className }: TaskStatusBadgeProps) {
@@ -19,7 +20,7 @@ export function TaskStatusBadge({ status, className }: TaskStatusBadgeProps) {
 
   return (
     <Badge variant={config.variant} className={className}>
-      {config.label}
+      {TASK_STATUS_LABELS[status]}
     </Badge>
   );
 }

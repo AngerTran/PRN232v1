@@ -97,7 +97,7 @@ export default function TaskReviewPage() {
           <h1 className="text-xl font-bold">{task.title}</h1>
           <p className="text-sm text-muted-foreground mt-0.5">{task.seriesTitle} · {task.chapterTitle} · Trang {task.pageNumber}</p>
         </div>
-        <Badge status={task.status} size="md" />
+        <Badge status={task.status} statusKind="task" size="md" />
       </div>
 
       {/* Result notification */}
@@ -125,7 +125,7 @@ export default function TaskReviewPage() {
             </div>
             <div className="flex justify-between items-center">
               <span className="text-muted-foreground">Trạng thái</span>
-              <Badge status={task.status} />
+              <Badge status={task.status} statusKind="task" />
             </div>
             <div className="flex items-center gap-2">
               <User size={14} className="text-muted-foreground shrink-0" />

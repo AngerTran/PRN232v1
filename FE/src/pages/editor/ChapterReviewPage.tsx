@@ -17,6 +17,7 @@ import PageRegionCanvas, {
   regionToShape,
   usePageRegionSelection,
 } from '../../components/workspace/PageRegionCanvas';
+import { formatChapterStatusLabel, formatPageStatusLabel } from '../../utils/statusLabels';
 import {
   ANNOTATION_TYPE_OPTIONS,
   createPageAnnotation,
@@ -224,7 +225,7 @@ export default function ChapterReviewPage() {
           <div className="min-w-0">
             <h1 className="font-semibold truncate">{chapter.title}</h1>
             <p className="text-xs text-muted-foreground truncate">
-              {series.title} · Chapter {chapter.number} · {chapter.status}
+              {series.title} · Chương {chapter.number} · {formatChapterStatusLabel(chapter.status)}
             </p>
           </div>
         </div>
@@ -271,7 +272,7 @@ export default function ChapterReviewPage() {
                 }`}
               >
                 Trang {page.pageNumber}
-                <span className="block text-xs text-muted-foreground">{page.status}</span>
+                <span className="block text-xs text-muted-foreground">{formatPageStatusLabel(page.status)}</span>
               </button>
             ))
           )}

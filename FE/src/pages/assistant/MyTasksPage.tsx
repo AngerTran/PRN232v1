@@ -21,6 +21,7 @@ import {
 } from '../../app/components/ui/table';
 import { TaskStatusBadge } from '../../app/components/ui/assistant';
 import type { Task } from '../../types/domain';
+import { TASK_STATUS_FILTER_OPTIONS, formatTaskStatusLabel } from '../../utils/statusLabels';
 import { getMyTasks } from '../../services/tasksApi';
 import { Search, Eye } from 'lucide-react';
 import { format } from 'date-fns';
@@ -85,11 +86,11 @@ export default function MyTasksPage() {
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="all">Tất cả trạng thái</SelectItem>
-            <SelectItem value="Pending">Chờ nhận</SelectItem>
-            <SelectItem value="In Progress">Đang làm</SelectItem>
-            <SelectItem value="Submitted">Đã nộp</SelectItem>
-            <SelectItem value="Approved">Đã duyệt</SelectItem>
-            <SelectItem value="Revision Required">Cần chỉnh sửa</SelectItem>
+            {TASK_STATUS_FILTER_OPTIONS.map(status => (
+              <SelectItem key={status} value={status}>
+                {formatTaskStatusLabel(status)}
+              </SelectItem>
+            ))}
           </SelectContent>
         </Select>
       </div>

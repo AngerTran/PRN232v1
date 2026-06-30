@@ -13,7 +13,12 @@ import {
 import { SeriesSummaryCard } from '../../app/components/ui/editor';
 import type { Series } from '../../types/domain';
 import { getEditorAssignedSeries } from '../../services/editorApi';
+import { SERIES_STATUS_FILTER_OPTIONS, formatSeriesStatusLabel } from '../../utils/statusLabels';
 import { Search } from 'lucide-react';
+
+const EDITOR_SERIES_STATUS_OPTIONS = SERIES_STATUS_FILTER_OPTIONS.filter(
+  status => status !== 'Submitted' && status !== 'Revision Required',
+);
 
 export default function AssignedSeriesPage() {
   usePageMeta({ title: 'Series Phụ Trách' });
@@ -90,12 +95,11 @@ export default function AssignedSeriesPage() {
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="all">Tất cả trạng thái</SelectItem>
-            <SelectItem value="Draft">Draft</SelectItem>
-            <SelectItem value="In Progress">In Progress</SelectItem>
-            <SelectItem value="Approved">Approved</SelectItem>
-            <SelectItem value="Completed">Completed</SelectItem>
-            <SelectItem value="Published">Published</SelectItem>
-            <SelectItem value="At Risk">At Risk</SelectItem>
+            {EDITOR_SERIES_STATUS_OPTIONS.map(status => (
+              <SelectItem key={status} value={status}>
+                {formatSeriesStatusLabel(status)}
+              </SelectItem>
+            ))}
           </SelectContent>
         </Select>
       </div>

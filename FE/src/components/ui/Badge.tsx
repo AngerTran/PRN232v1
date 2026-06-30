@@ -1,5 +1,6 @@
 import { clsx } from 'clsx';
 import type { SeriesStatus, TaskStatus, ChapterStatus, SubmissionStatus } from '../../types/domain';
+import { getStatusLabel, type StatusEntityKind } from '../../utils/statusLabels';
 
 type AnyStatus = SeriesStatus | TaskStatus | ChapterStatus | SubmissionStatus | string;
 
@@ -68,21 +69,6 @@ const STATUS_DOTS: Record<string, string> = {
   'Rejected': 'bg-[#374151]',
 };
 
-const STATUS_LABELS: Record<string, string> = {
-  'Draft': 'Bản nháp',
-  'Submitted': 'Chờ xét duyệt',
-  'Approved': 'Đã duyệt',
-  'In Progress': 'Đang thực hiện',
-  'Revision Required': 'Cần sửa đổi',
-  'At Risk': 'Nguy cơ',
-  'Completed': 'Đã hoàn thành',
-  'Published': 'Đã xuất bản',
-  'Cancelled': 'Đã hủy',
-  'Pending': 'Chờ duyệt',
-  'Review': 'Đang xét duyệt',
-  'Rejected': 'Bị từ chối',
-};
-
 const TYPE_LABELS: Record<string, string> = {
   'Background': 'Nền',
   'Shading': 'Bóng đổ',
@@ -97,10 +83,12 @@ interface BadgeProps {
   showDot?: boolean;
   size?: 'sm' | 'md';
   variant?: 'default' | 'overlay';
+  /** Ngữ cảnh entity — tránh nhầm nhãn chung như "In Progress". */
+  statusKind?: StatusEntityKind;
   className?: string;
 }
 
-export default function Badge({ status, showDot = true, size = 'sm', variant = 'default', className }: BadgeProps) {
+export default function Badge({ status, showDot = true, size = 'sm', variant = 'default', statusKind = 'series', className }: BadgeProps) {
   const style = variant === 'overlay'
     ? (OVERLAY_STATUS_STYLES[status] ?? 'bg-black/80 text-white border-white/30 shadow-lg')
     : (STATUS_STYLES[status] ?? 'bg-muted text-muted-foreground border-border');
@@ -119,7 +107,7 @@ export default function Badge({ status, showDot = true, size = 'sm', variant = '
       )}
     >
       {showDot && <span className={clsx('rounded-full shrink-0', size === 'sm' ? 'w-1.5 h-1.5' : 'w-2 h-2', dot)} />}
-      {STATUS_LABELS[status as string] ?? status}
+      {getStatusLabel(status as string, statusKind)}
     </span>
   );
 }

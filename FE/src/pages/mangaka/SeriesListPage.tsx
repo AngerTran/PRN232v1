@@ -9,11 +9,12 @@ import Button from '../../components/ui/Button';
 import EmptyState from '../../components/ui/EmptyState';
 import { usePageMeta } from '../../hooks/usePageMeta';
 import { useConfirm } from '../../components/ui/ConfirmDialog';
-import type { Series, SeriesStatus } from '../../types/domain';
+import type { Series } from '../../types/domain';
 import { deleteSeries, getMySeries, canMangakaDeleteSeries } from '../../services/seriesApi';
+import { SERIES_STATUS_FILTER_OPTIONS, formatSeriesStatusLabel } from '../../utils/statusLabels';
 import { BookOpen } from 'lucide-react';
 
-const STATUS_OPTIONS: SeriesStatus[] = ['Draft', 'Submitted', 'Approved', 'In Progress', 'Revision Required', 'At Risk', 'Published', 'Cancelled'];
+const STATUS_OPTIONS = SERIES_STATUS_FILTER_OPTIONS;
 const GENRE_OPTIONS = ['Action', 'Historical', 'Sci-fi', 'Fantasy', 'Drama', 'Supernatural'];
 
 export default function SeriesListPage() {
@@ -103,7 +104,7 @@ export default function SeriesListPage() {
       {/* Filters */}
       <div className="flex items-center gap-3 flex-wrap">
         <SearchInput value={search} onChange={setSearch} placeholder="Tìm kiếm series…" className="flex-1 min-w-[200px] max-w-xs" />
-        <FilterDropdown label="Trạng thái" options={STATUS_OPTIONS} value={statusFilter} onChange={setStatusFilter} />
+        <FilterDropdown label="Trạng thái" options={STATUS_OPTIONS} value={statusFilter} onChange={setStatusFilter} formatOptionLabel={formatSeriesStatusLabel} />
         <FilterDropdown label="Thể loại" options={GENRE_OPTIONS} value={genreFilter} onChange={setGenreFilter} />
         <div className="ml-auto flex items-center gap-1 bg-muted p-1 rounded-xl">
           <button onClick={() => setView('grid')} className={clsx('p-1.5 rounded-lg transition-all', view === 'grid' ? 'bg-card shadow-sm text-foreground' : 'text-muted-foreground hover:text-foreground')}>

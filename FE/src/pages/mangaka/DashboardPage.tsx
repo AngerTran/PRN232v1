@@ -6,14 +6,22 @@ import DeadlineCard from '../../components/ui/DeadlineCard';
 import Badge from '../../components/ui/Badge';
 import Button from '../../components/ui/Button';
 import { usePageMeta } from '../../hooks/usePageMeta';
+import { useConfirm } from '../../components/ui/ConfirmDialog';
 import type { Chapter, Series } from '../../types/domain';
-import { getMySeries, getSeriesChapters } from '../../services/seriesApi';
+import {
+  canMangakaDeleteChapter,
+  deleteChapter,
+  getMySeries,
+  getSeriesChapters,
+  isSeriesClosedForProduction,
+} from '../../services/seriesApi';
 
 type ChapterWithSeries = Chapter & { series?: Series };
 
 export default function DashboardPage() {
   const navigate = useNavigate();
   const { setPageMeta } = usePageMeta();
+  const confirm = useConfirm();
 
   const [series, setSeries] = useState<Series[]>([]);
   const [chapters, setChapters] = useState<ChapterWithSeries[]>([]);
@@ -45,18 +53,56 @@ export default function DashboardPage() {
     };
   }, []);
 
+  const handleDeleteChapter = async (chapterId: string) => {
+    const target = chapters.find(c => c.id === chapterId);
+    if (!target || !canMangakaDeleteChapter(target.status)) return;
+
+    const confirmed = await confirm({
+      title: 'Xóa chương nháp',
+      message: (
+        <>
+          Bạn có chắc muốn xóa chương nháp{' '}
+          <span className="font-semibold text-foreground">Ch.{target.number} {target.title}</span>?
+          <br />
+          Hành động này không thể hoàn tác.
+        </>
+      ),
+      confirmText: 'Xóa chương',
+    });
+    if (!confirmed) return;
+
+    const previous = chapters;
+    setChapters(prev => prev.filter(c => c.id !== chapterId));
+    try {
+      await deleteChapter(chapterId);
+    } catch {
+      setChapters(previous);
+    }
+  };
+
   const activeSeries = series.filter(s => s.status === 'In Progress' || s.status === 'Approved');
   const activeChapters = chapters.filter(c => c.status === 'In Progress');
   const atRiskSeries = series.filter(s => s.isAtRisk);
+
   const upcomingDeadlines = chapters
-    .filter(c => c.deadline && c.status !== 'Published')
+    .filter(c => {
+      if (!c.deadline || c.status === 'Published' || !c.series) return false;
+      return !isSeriesClosedForProduction(c.series.status);
+    })
     .sort((a, b) => new Date(a.deadline).getTime() - new Date(b.deadline).getTime())
     .slice(0, 6);
+
+  const orphanDraftChapters = chapters
+    .filter(c => {
+      if (c.status !== 'Draft' || !c.series) return false;
+      return isSeriesClosedForProduction(c.series.status);
+    })
+    .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+
   const rankedSeries = series.filter(s => s.currentRank > 0).sort((a, b) => a.currentRank - b.currentRank);
 
   return (
     <div className="p-6 space-y-6">
-      {/* At-risk alert banner */}
       {atRiskSeries.length > 0 && (
         <div className="flex items-center gap-3 p-4 bg-red-50 border border-red-200 rounded-2xl">
           <AlertTriangle size={20} className="text-red-600 shrink-0" />
@@ -70,7 +116,28 @@ export default function DashboardPage() {
         </div>
       )}
 
-      {/* Summary cards */}
+      {orphanDraftChapters.length > 0 && (
+        <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4 space-y-3">
+          <div>
+            <p className="text-sm font-semibold text-amber-900">Chương nháp cần dọn dẹp</p>
+            <p className="text-xs text-amber-800 mt-0.5">
+              Các chương nháp thuộc series đã hoàn thành hoặc đã đóng — không còn deadline thực tế. Bạn có thể xóa chúng để gỡ cảnh báo trễ hạn.
+              Series đã hoàn thành không thể xóa, chỉ xóa được chương nháp.
+            </p>
+          </div>
+          <div className="space-y-2">
+            {orphanDraftChapters.map(chapter => (
+              <DeadlineCard
+                key={chapter.id}
+                chapter={chapter}
+                onDelete={handleDeleteChapter}
+                hint="Series đã kết thúc — xóa chương nháp nếu không cần giữ."
+              />
+            ))}
+          </div>
+        </div>
+      )}
+
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         <StatCard
           label="Series của tôi"
@@ -100,7 +167,6 @@ export default function DashboardPage() {
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
-        {/* Upcoming deadlines */}
         <div className="lg:col-span-2 space-y-3">
           <div className="flex items-center justify-between">
             <h2 className="font-bold text-base">Thời hạn sắp tới</h2>
@@ -113,15 +179,17 @@ export default function DashboardPage() {
           ) : (
             <div className="space-y-2">
               {upcomingDeadlines.map(chapter => (
-                <DeadlineCard key={chapter.id} chapter={chapter} />
+                <DeadlineCard
+                  key={chapter.id}
+                  chapter={chapter}
+                  onDelete={canMangakaDeleteChapter(chapter.status) ? handleDeleteChapter : undefined}
+                />
               ))}
             </div>
           )}
         </div>
 
-        {/* Right column */}
         <div className="space-y-5">
-          {/* Active series shortcut */}
           <div>
             <div className="flex items-center justify-between mb-3">
               <h2 className="font-bold text-base">Series đang hoạt động</h2>
@@ -157,7 +225,6 @@ export default function DashboardPage() {
             </Card>
           </div>
 
-          {/* Ranking snapshot */}
           <div>
             <div className="flex items-center justify-between mb-3">
               <h2 className="font-bold text-base">Xếp hạng Series</h2>

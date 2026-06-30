@@ -1,5 +1,5 @@
 import { useNavigate } from 'react-router';
-import { Calendar, AlertTriangle } from 'lucide-react';
+import { Calendar, AlertTriangle, Trash2 } from 'lucide-react';
 import { clsx } from 'clsx';
 import ProgressBar from './ProgressBar';
 import Badge from './Badge';
@@ -8,9 +8,11 @@ import { format, differenceInDays } from 'date-fns';
 
 interface DeadlineCardProps {
   chapter: Chapter & { series?: Series };
+  onDelete?: (chapterId: string) => void;
+  hint?: string;
 }
 
-export default function DeadlineCard({ chapter }: DeadlineCardProps) {
+export default function DeadlineCard({ chapter, onDelete, hint }: DeadlineCardProps) {
   const navigate = useNavigate();
   const daysLeft = differenceInDays(new Date(chapter.deadline), new Date());
   const isUrgent = daysLeft <= 5;
@@ -34,6 +36,16 @@ export default function DeadlineCard({ chapter }: DeadlineCardProps) {
           <p className="text-sm font-semibold text-foreground truncate">Ch.{chapter.number} — {chapter.title}</p>
         </div>
         <div className="flex items-center gap-1.5 shrink-0">
+          {onDelete && chapter.status === 'Draft' && (
+            <button
+              type="button"
+              onClick={e => { e.stopPropagation(); onDelete(chapter.id); }}
+              title="Xóa chương nháp"
+              className="p-1.5 rounded-lg text-red-600 hover:bg-red-100 transition-colors"
+            >
+              <Trash2 size={14} />
+            </button>
+          )}
           {isUrgent && <AlertTriangle size={13} className={isOverdue ? 'text-red-500' : 'text-orange-500'} />}
           <span className={clsx(
             'text-xs font-bold',
@@ -44,12 +56,13 @@ export default function DeadlineCard({ chapter }: DeadlineCardProps) {
         </div>
       </div>
       <ProgressBar value={chapter.progress} showLabel className="mb-2" />
+      {hint && <p className="text-xs text-muted-foreground mb-2">{hint}</p>}
       <div className="flex items-center justify-between text-xs text-muted-foreground">
         <div className="flex items-center gap-1">
           <Calendar size={11} />
           <span>{format(new Date(chapter.deadline), 'MMM d, yyyy')}</span>
         </div>
-        <Badge status={chapter.status} size="sm" />
+        <Badge status={chapter.status} statusKind="chapter" size="sm" />
       </div>
     </div>
   );

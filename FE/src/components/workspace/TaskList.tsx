@@ -17,13 +17,7 @@ const STATUS_DOT: Record<string, string> = {
   'Revision Required': 'bg-orange-500',
 };
 
-const STATUS_LABEL_VI: Record<string, string> = {
-  'Pending': 'Chờ thực hiện',
-  'In Progress': 'Đang thực hiện',
-  'Submitted': 'Đã nộp',
-  'Approved': 'Đã duyệt',
-  'Revision Required': 'Cần chỉnh sửa',
-};
+import { TASK_STATUS_LABELS } from '../../utils/statusLabels';
 
 interface TaskListProps {
   tasks: WorkspaceTask[];
@@ -191,7 +185,7 @@ export default function TaskList({ tasks, assistants, onHoverTask, onDeleteTask,
                     'text-purple-400': task.status === 'In Progress',
                     'text-gray-400': task.status === 'Pending',
                   })}>
-                    {STATUS_LABEL_VI[task.status] ?? task.status}
+                    {TASK_STATUS_LABELS[task.status as keyof typeof TASK_STATUS_LABELS] ?? task.status}
                   </span>
                 </div>
 

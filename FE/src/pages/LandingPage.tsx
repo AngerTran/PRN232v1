@@ -6,6 +6,7 @@ import {
   ArrowRight, PenTool, Layers, Target, TrendingUp, Shield, Star,
   ChevronRight, Menu, X, Zap, Clock, MessageSquare, AlertTriangle,
 } from 'lucide-react';
+import { formatTaskStatusLabel } from '../utils/statusLabels';
 
 // ── Helpers ────────────────────────────────────────────────────────────────
 
@@ -196,7 +197,7 @@ function HeroDashboardMock() {
                 <span className="text-[11px] font-medium text-[#1F1F1F]">{t.title}</span>
               </div>
               <span className="text-[10px] px-2 py-0.5 rounded-full font-semibold" style={{ background: t.color + '20', color: t.color }}>
-                {t.status}
+                {formatTaskStatusLabel(t.status)}
               </span>
             </div>
           ))}
@@ -356,7 +357,7 @@ function TaskAssignmentMock() {
           { label: 'Loại công việc', value: 'Screentone', color: '#4B3F72' },
           { label: 'Trợ lý', value: 'Yamamoto Keiko', color: null },
           { label: 'Deadline', value: '28/05/2026', color: '#F97316' },
-          { label: 'Trạng thái', value: 'In Progress', color: '#4B3F72' },
+          { label: 'Trạng thái', value: formatTaskStatusLabel('In Progress'), color: '#4B3F72' },
         ].map(row => (
           <div key={row.label}>
             <p className="text-[10px] text-[#6B7280] uppercase tracking-wide font-semibold mb-0.5">{row.label}</p>

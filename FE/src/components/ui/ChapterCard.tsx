@@ -53,11 +53,11 @@ export default function ChapterCard({ chapter, seriesId, onDelete, chapterDetail
         <ProgressBar value={chapter.progress} showLabel />
       </div>
       <div className="flex items-center gap-3 shrink-0">
-        <Badge status={chapter.status} />
-        {onDelete && (
+        <Badge status={chapter.status} statusKind="chapter" />
+        {onDelete && chapter.status === 'Draft' && (
           <button
             onClick={e => { e.stopPropagation(); onDelete(chapter.id); }}
-            title="Xóa chương"
+            title="Xóa chương nháp"
             className="p-1.5 rounded-lg text-muted-foreground hover:text-red-600 hover:bg-red-50 transition-colors"
           >
             <Trash2 size={15} />

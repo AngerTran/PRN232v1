@@ -591,6 +591,16 @@ export function canMangakaDeleteSeries(status: SeriesStatus): boolean {
   return status === 'Draft';
 }
 
+/** Mangaka chỉ được xóa chương ở trạng thái bản nháp. */
+export function canMangakaDeleteChapter(status: ChapterStatus): boolean {
+  return status === 'Draft';
+}
+
+/** Series đã kết thúc sản xuất — deadline chương nháp còn sót không còn là việc cần làm. */
+export function isSeriesClosedForProduction(status: SeriesStatus): boolean {
+  return status === 'Completed' || status === 'Cancelled' || status === 'Published';
+}
+
 export async function deleteSeries(id: string): Promise<void> {
   await apiRequest<void>(`/api/series/${id}`, { method: 'DELETE' });
 }

@@ -276,7 +276,7 @@ export default function WorkspacePage() {
         <div className="flex items-center gap-3 px-4 py-2.5 bg-[#252525] border-b border-[#333]">
           <div className="flex items-center gap-2">
             {page && <span className="text-sm font-semibold text-white">Trang {page.pageNumber}</span>}
-            {page && <Badge status={page.status} />}
+            {page && <Badge status={page.status} statusKind="page" />}
           </div>
           <div className="flex-1" />
           {/* Zoom controls */}

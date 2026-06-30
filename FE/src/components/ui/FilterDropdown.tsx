@@ -8,9 +8,11 @@ interface FilterDropdownProps {
   value: string;
   onChange: (value: string) => void;
   className?: string;
+  /** Hiển thị nhãn tiếng Việt; giá trị lọc vẫn là `options` gốc. */
+  formatOptionLabel?: (value: string) => string;
 }
 
-export default function FilterDropdown({ label, options, value, onChange, className }: FilterDropdownProps) {
+export default function FilterDropdown({ label, options, value, onChange, className, formatOptionLabel }: FilterDropdownProps) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
 
@@ -22,6 +24,11 @@ export default function FilterDropdown({ label, options, value, onChange, classN
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
+  const displayLabel = (opt: string) => {
+    if (opt === 'All') return 'Tất cả';
+    return formatOptionLabel?.(opt) ?? opt;
+  };
+
   return (
     <div ref={ref} className={clsx('relative', className)}>
       <button
@@ -31,7 +38,7 @@ export default function FilterDropdown({ label, options, value, onChange, classN
           value !== 'All' && 'border-primary/50 bg-primary/5 text-primary'
         )}
       >
-        <span className="font-medium">{value === 'All' ? label : value}</span>
+        <span className="font-medium">{value === 'All' ? label : displayLabel(value)}</span>
         <ChevronDown size={14} className={clsx('text-muted-foreground transition-transform', open && 'rotate-180')} />
       </button>
 
@@ -46,7 +53,7 @@ export default function FilterDropdown({ label, options, value, onChange, classN
                 value === opt ? 'text-primary font-semibold' : 'text-foreground'
               )}
             >
-              <span>{opt === 'All' ? 'Tất cả' : opt}</span>
+              <span>{displayLabel(opt)}</span>
               {value === opt && <Check size={13} />}
             </button>
           ))}
