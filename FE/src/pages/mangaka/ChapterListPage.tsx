@@ -77,6 +77,7 @@ export default function ChapterListPage() {
 
     const confirmed = await confirm({
       title: 'Xóa chương',
+      variant: 'danger',
       message: (
         <>
           Bạn có chắc muốn xóa chương <span className="font-semibold text-foreground">Ch.{target?.number} {target?.title ?? ''}</span>?

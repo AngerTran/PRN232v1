@@ -222,10 +222,12 @@ export default function SeriesDetailPage() {
     if (!series) return;
     const confirmed = await confirm({
       title: 'Hoàn thành sản xuất',
+      variant: 'success',
       message: (
         <>
           Xác nhận series <span className="font-semibold text-foreground">{series.title}</span> đã hoàn thành?
-          Hội đồng chỉ có thể lên lịch xuất bản sau bước này.
+          <br />
+          <span className="text-xs">Hội đồng chỉ có thể lên lịch xuất bản sau bước này.</span>
         </>
       ),
       confirmText: 'Đánh dấu hoàn thành',
@@ -248,9 +250,16 @@ export default function SeriesDetailPage() {
     if (!series) return;
     const confirmed = await confirm({
       title: 'Gửi xét duyệt',
+      variant: 'submit',
       message: (
         <>
-          Gửi series <span className="font-semibold text-foreground">{series.title}</span> đến hội đồng xét duyệt?
+          Bạn sắp gửi series{' '}
+          <span className="font-semibold text-foreground">{series.title}</span>{' '}
+          đến hội đồng biên tập.
+          <br />
+          <span className="text-xs mt-1 inline-block">
+            Sau khi gửi, series chuyển sang <strong className="text-foreground font-medium">Chờ xét duyệt</strong> và tạm khóa chỉnh sửa hồ sơ cho đến khi có kết quả.
+          </span>
         </>
       ),
       confirmText: 'Gửi duyệt',

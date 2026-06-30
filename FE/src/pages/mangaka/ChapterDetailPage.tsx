@@ -111,6 +111,7 @@ export default function ChapterDetailPage() {
     const target = pages.find(p => p.id === pageId);
     const confirmed = await confirm({
       title: 'Xóa trang',
+      variant: 'danger',
       message: (
         <>
           Bạn có chắc muốn xóa <span className="font-semibold text-foreground">Trang {target?.pageNumber ?? ''}</span>?

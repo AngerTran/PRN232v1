@@ -62,6 +62,7 @@ export default function SeriesListPage() {
 
     const confirmed = await confirm({
       title: 'Xóa series',
+      variant: 'danger',
       message: (
         <>
           Bạn có chắc muốn xóa series <span className="font-semibold text-foreground">{target?.title ?? ''}</span>?

@@ -59,6 +59,7 @@ export default function DashboardPage() {
 
     const confirmed = await confirm({
       title: 'Xóa chương nháp',
+      variant: 'danger',
       message: (
         <>
           Bạn có chắc muốn xóa chương nháp{' '}

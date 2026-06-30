@@ -200,6 +200,7 @@ export default function WorkspacePage() {
     const target = pageTasks.find(t => t.id === taskId);
     const confirmed = await confirm({
       title: 'Hủy nhiệm vụ',
+      variant: 'danger',
       message: (
         <>
           Bạn có chắc muốn hủy nhiệm vụ <span className="font-semibold text-foreground">{target?.title ?? ''}</span>?

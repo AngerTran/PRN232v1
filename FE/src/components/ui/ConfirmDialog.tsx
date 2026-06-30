@@ -1,17 +1,46 @@
 import { createContext, useCallback, useContext, useRef, useState, type ReactNode } from 'react';
-import { AlertTriangle } from 'lucide-react';
+import { AlertTriangle, CheckCircle2, Send, type LucideIcon } from 'lucide-react';
+import { clsx } from 'clsx';
 import Modal from './Modal';
 import Button from './Button';
+
+export type ConfirmVariant = 'danger' | 'primary' | 'submit' | 'success';
 
 interface ConfirmOptions {
   title?: string;
   message: ReactNode;
   confirmText?: string;
   cancelText?: string;
-  variant?: 'danger' | 'primary';
+  variant?: ConfirmVariant;
 }
 
 type ConfirmFn = (options: ConfirmOptions) => Promise<boolean>;
+
+const VARIANT_STYLES: Record<
+  ConfirmVariant,
+  { icon: LucideIcon; iconWrap: string; confirmButton: 'danger' | 'primary' }
+> = {
+  danger: {
+    icon: AlertTriangle,
+    iconWrap: 'bg-red-100 text-red-600',
+    confirmButton: 'danger',
+  },
+  primary: {
+    icon: CheckCircle2,
+    iconWrap: 'bg-muted text-muted-foreground',
+    confirmButton: 'primary',
+  },
+  submit: {
+    icon: Send,
+    iconWrap: 'bg-amber-100 text-amber-700',
+    confirmButton: 'primary',
+  },
+  success: {
+    icon: CheckCircle2,
+    iconWrap: 'bg-emerald-100 text-emerald-700',
+    confirmButton: 'primary',
+  },
+};
 
 const ConfirmContext = createContext<ConfirmFn | null>(null);
 
@@ -42,25 +71,26 @@ export function ConfirmProvider({ children }: { children: ReactNode }) {
     resolverRef.current = null;
   }, []);
 
-  const isDanger = (options.variant ?? 'danger') === 'danger';
+  const variant = options.variant ?? 'primary';
+  const { icon: Icon, iconWrap, confirmButton } = VARIANT_STYLES[variant];
 
   return (
     <ConfirmContext.Provider value={confirm}>
       {children}
       <Modal open={open} onClose={() => settle(false)} size="sm">
-        <div className="flex flex-col items-center text-center gap-4">
-          <div className={`flex items-center justify-center w-12 h-12 rounded-full ${isDanger ? 'bg-red-100 text-red-600' : 'bg-primary/10 text-primary'}`}>
-            <AlertTriangle size={22} />
+        <div className="flex flex-col items-center text-center gap-4 px-1">
+          <div className={clsx('flex items-center justify-center w-12 h-12 rounded-full', iconWrap)}>
+            <Icon size={22} strokeWidth={variant === 'submit' ? 2.25 : 2} />
           </div>
-          <div className="space-y-1.5">
-            {options.title && <h3 className="font-semibold text-base">{options.title}</h3>}
-            <div className="text-sm text-muted-foreground">{options.message}</div>
+          <div className="space-y-2 w-full">
+            {options.title && <h3 className="font-semibold text-base text-foreground">{options.title}</h3>}
+            <div className="text-sm text-muted-foreground leading-relaxed">{options.message}</div>
           </div>
           <div className="flex items-center gap-2 w-full mt-1">
             <Button variant="outline" className="flex-1" onClick={() => settle(false)}>
               {options.cancelText ?? 'Hủy'}
             </Button>
-            <Button variant={isDanger ? 'danger' : 'primary'} className="flex-1" onClick={() => settle(true)}>
+            <Button variant={confirmButton} className="flex-1" onClick={() => settle(true)}>
               {options.confirmText ?? 'Xác nhận'}
             </Button>
           </div>
