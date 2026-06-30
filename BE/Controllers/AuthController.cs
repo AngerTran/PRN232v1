@@ -5,6 +5,7 @@ using DAL.Common;
 using BLL.Configuration;
 using BLL.Dtos.Auth;
 using BLL.Dtos.Profiles;
+using BLL.Common;
 using BLL.Services.Auth;
 using BLL.Services.Profiles;
 using Swashbuckle.AspNetCore.Annotations;
@@ -226,12 +227,12 @@ public class AuthController : ControllerBase
 
         if (!string.IsNullOrWhiteSpace(error))
         {
-            return Redirect($"{frontendBase}/auth/google/callback?error={Uri.EscapeDataString(error)}");
+            return Redirect($"{frontendBase}/auth/google/callback?error={Uri.EscapeDataString(AuthUserMessages.Localize(error))}");
         }
 
         if (string.IsNullOrWhiteSpace(code))
         {
-            return Redirect($"{frontendBase}/auth/google/callback?error={Uri.EscapeDataString("Missing authorization code.")}");
+            return Redirect($"{frontendBase}/auth/google/callback?error={Uri.EscapeDataString("Không nhận được mã xác thực từ Google.")}");
         }
 
         try
@@ -248,7 +249,7 @@ public class AuthController : ControllerBase
         }
         catch (AuthServiceException ex)
         {
-            return Redirect($"{frontendBase}/auth/google/callback?error={Uri.EscapeDataString(ex.Message)}");
+            return Redirect($"{frontendBase}/auth/google/callback?error={Uri.EscapeDataString(AuthUserMessages.Localize(ex.Message))}");
         }
     }
 

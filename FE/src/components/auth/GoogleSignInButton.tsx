@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { startGoogleLogin } from '../../services/authApi';
-import { formatAuthError } from '../../utils/authErrorMessages';
+import { formatAuthError, translateLoginError } from '../../utils/authErrorMessages';
 
 interface GoogleSignInButtonProps {
   label?: string;
@@ -37,7 +37,11 @@ export default function GoogleSignInButton({ label = 'Đăng nhập với Google
         </svg>
         {loading ? 'Đang chuyển hướng…' : label}
       </button>
-      {error && <p className="text-xs text-red-600 text-center">{error}</p>}
+      {error && (
+        <div className="flex items-center gap-2 p-3 bg-red-50 border border-red-200 rounded-lg text-red-600 text-xs">
+          {translateLoginError(error)}
+        </div>
+      )}
     </div>
   );
 }

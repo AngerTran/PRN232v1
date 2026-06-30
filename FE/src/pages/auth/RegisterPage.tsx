@@ -5,7 +5,7 @@ import { ImageWithFallback } from '@/app/components/figma/ImageWithFallback';
 import inkflowLogo from '@/imports/image-10.png';
 import workspacePhoto from '@/imports/image-4.png';
 import { registerWithApi } from '../../services/authApi';
-import { formatAuthError } from '../../utils/authErrorMessages';
+import { formatAuthError, translateRegisterError } from '../../utils/authErrorMessages';
 import GoogleSignInButton from '../../components/auth/GoogleSignInButton';
 
 export default function RegisterPage() {
@@ -208,7 +208,7 @@ export default function RegisterPage() {
 
             {error && (
               <p className="text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2">
-                {error}
+                {translateRegisterError(error)}
               </p>
             )}
 

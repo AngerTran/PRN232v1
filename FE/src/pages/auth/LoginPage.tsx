@@ -3,7 +3,7 @@ import { useNavigate, Link } from 'react-router';
 import { Eye, EyeOff, AlertCircle } from 'lucide-react';
 import { ImageWithFallback } from '@/app/components/figma/ImageWithFallback';
 import { login } from '../../services/authApi';
-import { formatAuthError } from '../../utils/authErrorMessages';
+import { formatAuthError, translateLoginError } from '../../utils/authErrorMessages';
 import GoogleSignInButton from '../../components/auth/GoogleSignInButton';
 import inkflowLogo from '@/imports/image-10.png';
 import workspacePhoto from '@/imports/image-4.png';
@@ -133,7 +133,7 @@ export default function LoginPage() {
             {error && (
               <div className="flex items-center gap-2 p-3 bg-red-50 border border-red-200 rounded-lg text-red-600 text-xs">
                 <AlertCircle size={14} className="shrink-0" />
-                {error}
+                {translateLoginError(error)}
               </div>
             )}
 

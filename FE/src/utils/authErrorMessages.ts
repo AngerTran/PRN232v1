@@ -29,6 +29,14 @@ function isVietnameseText(value: string): boolean {
   return /[ăâđêôơưáàảãạắằẳẵặấầẩẫậéèẻẽẹếềểễệíìỉĩịóòỏõọốồổỗộớờởỡợúùủũụứừửữựýỳỷỹỵ]/i.test(value);
 }
 
+export function translateLoginError(message: string): string {
+  return formatAuthError(new Error(message), 'login');
+}
+
+export function translateRegisterError(message: string): string {
+  return formatAuthError(new Error(message), 'register');
+}
+
 export function formatApiErrorMessage(raw: string, status?: number, path?: string): string {
   const context: AuthErrorContext = (() => {
     const normalizedPath = (path ?? '').toLowerCase();

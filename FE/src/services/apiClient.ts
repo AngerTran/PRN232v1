@@ -93,8 +93,20 @@ export async function apiRequest<T>(path: string, options: ApiRequestOptions = {
     let message = body;
 
     try {
-      const parsed = JSON.parse(body) as { message?: string; title?: string; error?: string };
-      message = parsed.message || parsed.title || parsed.error || body;
+      const parsed = JSON.parse(body) as {
+        message?: string;
+        title?: string;
+        error?: string;
+        error_description?: string;
+        msg?: string;
+      };
+      message =
+        parsed.message ||
+        parsed.error_description ||
+        parsed.msg ||
+        parsed.title ||
+        parsed.error ||
+        body;
     } catch {
       // Trang lỗi dev ASP.NET — chỉ lấy dòng đầu, bỏ stack trace / HEADERS.
       const trimmed = body.split(/\r?\nHEADERS\r?\n/)[0]?.trim() ?? body;
