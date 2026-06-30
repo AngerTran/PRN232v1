@@ -1,6 +1,7 @@
-import { useState, useEffect, type ChangeEvent, type FormEvent } from 'react';
+import { useState, useEffect, useRef, type ChangeEvent, type FormEvent } from 'react';
 import { useNavigate } from 'react-router';
 import { ChevronLeft, Check } from 'lucide-react';
+import { clsx } from 'clsx';
 import Button from '../../components/ui/Button';
 import Card, { CardHeader, CardTitle } from '../../components/ui/Card';
 import UploadBox from '../../components/ui/UploadBox';
@@ -24,6 +25,8 @@ interface FormState {
   mainCharacters: string;
 }
 
+type FormFieldKey = 'title' | 'genres' | 'synopsis' | 'manuscript';
+
 export default function CreateSeriesPage() {
   const navigate = useNavigate();
   const { setPageMeta } = usePageMeta();
@@ -36,6 +39,13 @@ export default function CreateSeriesPage() {
   const [submitting, setSubmitting] = useState(false);
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState('');
+  const [highlightField, setHighlightField] = useState<FormFieldKey | null>(null);
+
+  const errorRef = useRef<HTMLDivElement>(null);
+  const titleRef = useRef<HTMLInputElement>(null);
+  const genresRef = useRef<HTMLDivElement>(null);
+  const synopsisRef = useRef<HTMLTextAreaElement>(null);
+  const manuscriptRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     setPageMeta({
@@ -44,32 +54,63 @@ export default function CreateSeriesPage() {
     });
   }, []);
 
+  const scrollToField = (field: FormFieldKey | 'error') => {
+    requestAnimationFrame(() => {
+      const target =
+        field === 'error' ? errorRef.current
+          : field === 'title' ? titleRef.current
+            : field === 'genres' ? genresRef.current
+              : field === 'synopsis' ? synopsisRef.current
+                : manuscriptRef.current;
+
+      target?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+
+      if (field === 'title') titleRef.current?.focus();
+      if (field === 'synopsis') synopsisRef.current?.focus();
+    });
+  };
+
   const toggleGenre = (genre: string) => {
     setForm(f => ({
       ...f,
       genres: f.genres.includes(genre) ? f.genres.filter(g => g !== genre) : [...f.genres, genre],
     }));
+    if (highlightField === 'genres') {
+      setHighlightField(null);
+      setError('');
+    }
   };
 
-  const update = (k: keyof FormState) => (e: ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) =>
+  const update = (k: keyof FormState) => (e: ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
     setForm(f => ({ ...f, [k]: e.target.value }));
+    if (highlightField === k) {
+      setHighlightField(null);
+      setError('');
+    }
+  };
+
+  const failValidation = (message: string, field: FormFieldKey) => {
+    setError(message);
+    setHighlightField(field);
+    scrollToField(field);
+    return false;
+  };
 
   const validateForm = (forSubmit: boolean) => {
+    setError('');
+    setHighlightField(null);
+
     if (!form.title.trim()) {
-      setError('Vui lòng nhập tiêu đề series.');
-      return false;
+      return failValidation('Vui lòng nhập tiêu đề series.', 'title');
     }
     if (forSubmit && form.genres.length === 0) {
-      setError('Vui lòng chọn ít nhất một thể loại.');
-      return false;
+      return failValidation('Vui lòng chọn ít nhất một thể loại.', 'genres');
     }
     if (forSubmit && !form.synopsis.trim()) {
-      setError('Vui lòng nhập tóm tắt series.');
-      return false;
+      return failValidation('Vui lòng nhập tóm tắt series.', 'synopsis');
     }
     if (forSubmit && !manuscriptFile) {
-      setError('Vui lòng tải lên bản thảo nháp trước khi gửi xét duyệt.');
-      return false;
+      return failValidation('Vui lòng tải lên bản thảo nháp trước khi gửi xét duyệt.', 'manuscript');
     }
     return true;
   };
@@ -99,6 +140,11 @@ export default function CreateSeriesPage() {
     return created;
   };
 
+  const showApiError = (message: string) => {
+    setError(message);
+    scrollToField('error');
+  };
+
   const handleSaveDraft = async () => {
     if (!validateForm(false)) return;
 
@@ -108,7 +154,7 @@ export default function CreateSeriesPage() {
       setSaved(true);
       navigate(`/mangaka/series/${created.id}`);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Không thể tạo series trên backend.');
+      showApiError(err instanceof Error ? err.message : 'Không thể tạo series trên backend.');
     } finally {
       setSubmitting(false);
     }
@@ -123,16 +169,23 @@ export default function CreateSeriesPage() {
       const created = await persistSeries(true);
       navigate(`/mangaka/series/${created.id}`);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Không thể gửi series để xét duyệt.');
+      showApiError(err instanceof Error ? err.message : 'Không thể gửi series để xét duyệt.');
     } finally {
       setSubmitting(false);
     }
   };
 
   const inputClass = 'w-full px-4 py-2.5 text-sm bg-input-background border border-border rounded-xl focus:outline-none focus:ring-2 focus:ring-ring/30 focus:border-primary/50 transition-colors';
+  const fieldErrorClass = 'ring-2 ring-red-400 border-red-400';
 
   const assetsSection = (
     <>
+      {error && highlightField === 'manuscript' && (
+        <div className="rounded-xl border border-red-300 bg-red-50 px-4 py-3 text-sm text-red-700 font-medium">
+          {error}
+        </div>
+      )}
+
       <Card>
         <CardHeader><CardTitle>Tài nguyên Series</CardTitle></CardHeader>
         <div className="space-y-5">
@@ -145,9 +198,28 @@ export default function CreateSeriesPage() {
               onChange={file => setCoverFile(file)}
             />
           </div>
-          <div>
-            <label className="block text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-2">Bản thảo nháp</label>
-            <UploadBox label="Tải lên bản thảo" accept=".pdf,.zip,.cbz" hint="PDF hoặc ZIP của trang nháp" onChange={file => setManuscriptFile(file)} />
+          <div
+            ref={manuscriptRef}
+            className={clsx(
+              'rounded-xl transition-shadow',
+              highlightField === 'manuscript' && 'ring-2 ring-red-400 ring-offset-2',
+            )}
+          >
+            <label className="block text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-2">
+              Bản thảo nháp *
+            </label>
+            <UploadBox
+              label="Tải lên bản thảo"
+              accept=".pdf,.zip,.cbz"
+              hint="PDF hoặc ZIP của trang nháp — bắt buộc khi gửi xét duyệt"
+              onChange={file => {
+                setManuscriptFile(file);
+                if (file && highlightField === 'manuscript') {
+                  setHighlightField(null);
+                  setError('');
+                }
+              }}
+            />
           </div>
         </div>
       </Card>
@@ -165,10 +237,10 @@ export default function CreateSeriesPage() {
 
   return (
     <form
+      noValidate
       onSubmit={handleSubmit}
       className="flex flex-1 min-h-0 flex-col overflow-y-auto lg:flex-row lg:overflow-hidden"
     >
-      {/* Cột giữa — cuộn độc lập trên desktop */}
       <div className="flex-1 min-w-0 lg:min-h-0 lg:overflow-y-auto lg:overscroll-contain">
         <div className="p-6 space-y-5">
           <div className="flex items-center gap-3">
@@ -181,8 +253,12 @@ export default function CreateSeriesPage() {
             </div>
           </div>
 
-          {error && (
-            <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+          {error && highlightField !== 'manuscript' && (
+            <div
+              ref={errorRef}
+              className="rounded-xl border border-red-300 bg-red-50 px-4 py-3 text-sm text-red-700 font-medium"
+              role="alert"
+            >
               {error}
             </div>
           )}
@@ -192,13 +268,23 @@ export default function CreateSeriesPage() {
             <div className="space-y-4">
               <div>
                 <label className="block text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-1.5">Tiêu đề Series *</label>
-                <input type="text" value={form.title} onChange={update('title')} required
+                <input
+                  ref={titleRef}
+                  type="text"
+                  value={form.title}
+                  onChange={update('title')}
                   placeholder="Nhập tiêu đề series…"
-                  className={inputClass} />
+                  className={clsx(inputClass, highlightField === 'title' && fieldErrorClass)}
+                />
               </div>
-              <div>
+              <div ref={genresRef}>
                 <label className="block text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-2">Thể loại *</label>
-                <div className="flex flex-wrap gap-2">
+                <div
+                  className={clsx(
+                    'flex flex-wrap gap-2 rounded-xl p-1 -m-1',
+                    highlightField === 'genres' && 'ring-2 ring-red-400 ring-offset-2',
+                  )}
+                >
                   {GENRES.map(genre => (
                     <button key={genre} type="button" onClick={() => toggleGenre(genre)}
                       className={`px-3 py-1.5 text-xs font-semibold rounded-lg border transition-all duration-150 ${
@@ -215,9 +301,14 @@ export default function CreateSeriesPage() {
               </div>
               <div>
                 <label className="block text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-1.5">Tóm tắt *</label>
-                <textarea value={form.synopsis} onChange={update('synopsis')} required rows={5}
+                <textarea
+                  ref={synopsisRef}
+                  value={form.synopsis}
+                  onChange={update('synopsis')}
+                  rows={5}
                   placeholder="Mô tả ý tưởng, tiền đề và xung đột chính của câu chuyện…"
-                  className={`${inputClass} resize-none`} />
+                  className={clsx(inputClass, 'resize-none', highlightField === 'synopsis' && fieldErrorClass)}
+                />
                 <p className="text-xs text-muted-foreground mt-1">{form.synopsis.length}/500 ký tự</p>
               </div>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -248,7 +339,6 @@ export default function CreateSeriesPage() {
         </div>
       </div>
 
-      {/* Cột phải cố định — giống sidebar */}
       <aside className="shrink-0 w-full lg:w-[min(380px,36vw)] lg:min-w-[280px] lg:max-w-[420px] lg:min-h-0 lg:overflow-y-auto lg:overscroll-contain border-t lg:border-t-0 lg:border-l border-border bg-background p-6 space-y-5">
         {assetsSection}
       </aside>

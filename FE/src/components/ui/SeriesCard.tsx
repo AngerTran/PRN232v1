@@ -69,8 +69,8 @@ export default function SeriesCard({ series, view = 'grid', onDelete }: SeriesCa
       <div className="relative h-48 bg-muted overflow-hidden">
         <img src={series.coverUrl} alt={series.title} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" />
         <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent" />
-        <div className="absolute top-3 left-3">
-          <Badge status={series.status} />
+        <div className="absolute top-3 left-3 z-10">
+          <Badge status={series.status} variant="overlay" size="md" />
         </div>
         {series.isAtRisk && (
           <div className="absolute top-3 right-3">

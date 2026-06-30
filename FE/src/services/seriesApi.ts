@@ -279,14 +279,14 @@ export function canSchedulePublishing(status: SeriesStatus): boolean {
 
 export const SERIES_PRODUCTION_LOCK_HINT: Partial<Record<SeriesStatus, string>> = {
   Draft: 'Hoàn tất hồ sơ và gửi hội đồng xét duyệt trước khi bắt đầu sản xuất.',
-  Submitted: 'Series đang chờ hội đồng — tạm khóa mọi thao tác sản xuất.',
+  Submitted: 'Series đang chờ hội đồng xét duyệt — tạm khóa mọi thao tác sản xuất.',
   Cancelled: 'Series đã bị từ chối — không thể tiếp tục sản xuất.',
   Completed: 'Series đã hoàn thành — không thể thêm chương mới.',
 };
 
 export const SERIES_SUBMISSION_STATUS_HINT: Record<SeriesStatus, string> = {
   Draft: 'Series chưa được gửi lên hội đồng biên tập.',
-  Submitted: 'Đang chờ hội đồng biên tập xét duyệt.',
+  Submitted: 'Đang chờ hội đồng xét duyệt.',
   Approved: 'Hội đồng đã phê duyệt series.',
   'In Progress': 'Series đang trong quá trình xuất bản.',
   'Revision Required': 'Hội đồng yêu cầu chỉnh sửa trước khi duyệt.',
