@@ -9,7 +9,8 @@ Moi lan push len branch `main`, GitHub Actions se:
 3. Build Docker images `img-dotnet` va `img-fe` tren GitHub de kiem tra Dockerfile.
 4. SSH vao server.
 5. `cd /root/PRN232v1`, pull code moi tu `origin/main`.
-6. Build Docker images tren server va restart containers:
+6. Chay EF Core migrations len Supabase (container tam `mcr.microsoft.com/dotnet/sdk:9.0`, dung `ConnectionStrings__SupabaseConnection` tu `.deploy/be.env`).
+7. Build Docker images tren server va restart containers:
    - BE: `cons-dotnet`, public port `3001`
    - FE: `cons-fe`, public port `3002`
 
@@ -41,10 +42,15 @@ Neu SSH server khong dung port 22 thi them:
 SSH_PORT=22
 ```
 
-Nen them de deploy khong phu thuoc vao secret dang hard-code trong `appsettings.json`:
+Bat buoc neu muon migration tu dong chay sau moi deploy (neu thieu, workflow se fail o buoc migrate):
 
 ```text
 SUPABASE_CONNECTION_STRING=<connection string postgres cua Supabase>
+```
+
+Nen them de deploy khong phu thuoc vao secret dang hard-code trong `appsettings.json`:
+
+```text
 SUPABASE_URL=https://icoplbjqykxtpguxmcbf.supabase.co
 SUPABASE_ANON_KEY=<supabase anon/publishable key>
 SUPABASE_JWT_SECRET=<supabase jwt secret>

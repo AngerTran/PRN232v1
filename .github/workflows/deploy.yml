@@ -171,6 +171,17 @@ jobs:
           fi
           git pull --ff-only origin "$DEPLOY_BRANCH"
 
+          echo "Applying EF Core migrations..."
+          if ! docker run --rm \
+            -v "$SERVER_SRC_DIR:/src" \
+            -w /src \
+            --env-file "$SERVER_SRC_DIR/.deploy/be.env" \
+            mcr.microsoft.com/dotnet/sdk:9.0 \
+            bash -c 'set -euo pipefail; dotnet tool restore; dotnet ef database update --project DAL --startup-project BE'; then
+            echo "Database migration failed. Ensure SUPABASE_CONNECTION_STRING is set in GitHub Actions secrets."
+            exit 1
+          fi
+
           docker build . -t img-dotnet:latest
           docker build -t img-fe:latest --build-arg VITE_API_BASE_URL="http://${PUBLIC_HOST}:3001" ./FE
 
