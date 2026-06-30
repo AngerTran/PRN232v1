@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router';
 import { AlertCircle, Loader2 } from 'lucide-react';
 import { loginWithGoogleCode, loginWithGoogleHashTokens } from '../../services/authApi';
+import { formatAuthError } from '../../utils/authErrorMessages';
 import type { User } from '../../types/domain';
 
 function getDashboardPath(user: User): string {
@@ -25,7 +26,7 @@ export default function GoogleCallbackPage() {
       const oauthError = params.get('error') ?? hashParams.get('error');
 
       if (oauthError) {
-        if (!cancelled) setError(decodeURIComponent(oauthError));
+        if (!cancelled) setError(formatAuthError(decodeURIComponent(oauthError), 'google'));
         return;
       }
 
@@ -51,7 +52,7 @@ export default function GoogleCallbackPage() {
         }
       } catch (err) {
         if (!cancelled) {
-          setError(err instanceof Error ? err.message : 'Đăng nhập Google thất bại.');
+          setError(formatAuthError(err, 'google'));
         }
       }
     }

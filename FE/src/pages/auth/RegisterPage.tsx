@@ -5,6 +5,7 @@ import { ImageWithFallback } from '@/app/components/figma/ImageWithFallback';
 import inkflowLogo from '@/imports/image-10.png';
 import workspacePhoto from '@/imports/image-4.png';
 import { registerWithApi } from '../../services/authApi';
+import { formatAuthError } from '../../utils/authErrorMessages';
 import GoogleSignInButton from '../../components/auth/GoogleSignInButton';
 
 export default function RegisterPage() {
@@ -27,6 +28,10 @@ export default function RegisterPage() {
       setError('Mật khẩu phải có tối thiểu 6 ký tự.');
       return;
     }
+    if (!form.email.trim()) {
+      setError('Vui lòng nhập email.');
+      return;
+    }
     if (form.password !== form.confirm) {
       setError('Mật khẩu xác nhận không khớp.');
       return;
@@ -43,7 +48,7 @@ export default function RegisterPage() {
       // Nếu BE trả token luôn thì vào dashboard, ngược lại cần xác nhận email → về login.
       setTimeout(() => navigate(result.user ? '/' : '/login'), 1800);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Đăng ký thất bại. Vui lòng thử lại.');
+      setError(formatAuthError(err, 'register'));
     } finally {
       setLoading(false);
     }

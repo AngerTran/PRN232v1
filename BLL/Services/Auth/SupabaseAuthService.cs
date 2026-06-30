@@ -431,7 +431,7 @@ public class SupabaseAuthService
             if (root.TryGetProperty("confirmation_sent_at", out _) ||
                 root.TryGetProperty("email", out _))
             {
-                message = "Account created. Confirm your email in Supabase, then use POST /api/auth/login.";
+                message = "Đã tạo tài khoản. Vui lòng xác nhận email trước khi đăng nhập.";
                 return true;
             }
         }

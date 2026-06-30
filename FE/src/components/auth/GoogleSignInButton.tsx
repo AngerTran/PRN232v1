@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { startGoogleLogin } from '../../services/authApi';
+import { formatAuthError } from '../../utils/authErrorMessages';
 
 interface GoogleSignInButtonProps {
   label?: string;
@@ -15,7 +16,7 @@ export default function GoogleSignInButton({ label = 'Đăng nhập với Google
     try {
       await startGoogleLogin();
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Không thể bắt đầu đăng nhập Google.');
+      setError(formatAuthError(err, 'google'));
       setLoading(false);
     }
   };

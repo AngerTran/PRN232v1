@@ -3,6 +3,7 @@ import { useNavigate, Link } from 'react-router';
 import { Eye, EyeOff, AlertCircle } from 'lucide-react';
 import { ImageWithFallback } from '@/app/components/figma/ImageWithFallback';
 import { login } from '../../services/authApi';
+import { formatAuthError } from '../../utils/authErrorMessages';
 import GoogleSignInButton from '../../components/auth/GoogleSignInButton';
 import inkflowLogo from '@/imports/image-10.png';
 import workspacePhoto from '@/imports/image-4.png';
@@ -18,25 +19,27 @@ export default function LoginPage() {
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
     setError('');
+
+    const trimmedEmail = email.trim();
+    if (!trimmedEmail) {
+      setError('Vui lòng nhập email.');
+      return;
+    }
+    if (!password) {
+      setError('Vui lòng nhập mật khẩu.');
+      return;
+    }
+
     setLoading(true);
     try {
-      const user = await login(email, password);
-      if (user) {
-        if (user.role === 'admin') navigate('/admin/dashboard');
-        else if (user.role === 'assistant') navigate('/assistant/dashboard');
-        else if (user.role === 'editor') navigate('/editor/dashboard');
-        else if (user.role === 'board') navigate('/board/dashboard');
-        else navigate('/mangaka/dashboard');
-      } else {
-        setError('Email hoặc mật khẩu không đúng.');
-      }
+      const user = await login(trimmedEmail, password);
+      if (user.role === 'admin') navigate('/admin/dashboard');
+      else if (user.role === 'assistant') navigate('/assistant/dashboard');
+      else if (user.role === 'editor') navigate('/editor/dashboard');
+      else if (user.role === 'board') navigate('/board/dashboard');
+      else navigate('/mangaka/dashboard');
     } catch (err) {
-      const message = err instanceof Error ? err.message : '';
-      if (message && !message.toLowerCase().includes('failed to fetch')) {
-        setError(message);
-      } else {
-        setError('Cannot connect to backend. Please try again.');
-      }
+      setError(formatAuthError(err, 'login'));
     } finally {
       setLoading(false);
     }
