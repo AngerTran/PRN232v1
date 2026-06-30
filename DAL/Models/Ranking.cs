@@ -17,6 +17,8 @@ public partial class Ranking
 
     public decimal? PopularityScore { get; set; }
 
+    public string? Notes { get; set; }
+
     public DateTime? CreatedAt { get; set; }
 
     public virtual Series Series { get; set; } = null!;

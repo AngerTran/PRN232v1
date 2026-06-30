@@ -20,6 +20,8 @@ public partial class Submission
 
     public string? Note { get; set; }
 
+    public string? ReviewNote { get; set; }
+
     public string Status { get; set; } = TaskStatuses.Submitted;
 
     public Guid? ReviewedBy { get; set; }

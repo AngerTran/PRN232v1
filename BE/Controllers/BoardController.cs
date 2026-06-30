@@ -118,10 +118,11 @@ public class BoardController : ControllerBase
     }
 
     [HttpGet("leaderboard")]
-    [SwaggerOperation(Summary = "Get leaderboard", Description = "Returns leaderboard metrics for series performance. The metric query controls which ranking signal is used.")]
+    [SwaggerOperation(Summary = "Get leaderboard", Description = "Returns leaderboard metrics for series performance. Optional issueNumber filters to a single release period.")]
     [ProducesResponseType(typeof(IReadOnlyList<LeaderboardItemResponse>), StatusCodes.Status200OK)]
     public async Task<ActionResult<IReadOnlyList<LeaderboardItemResponse>>> Leaderboard(
         [FromQuery] string? metric,
+        [FromQuery] int? issueNumber,
         CancellationToken cancellationToken)
     {
         if (!this.TryGetUserId(out var userId))
@@ -129,7 +130,7 @@ public class BoardController : ControllerBase
             return Unauthorized();
         }
 
-        return Ok(await _boardService.GetLeaderboardAsync(userId, metric, cancellationToken));
+        return Ok(await _boardService.GetLeaderboardAsync(userId, metric, issueNumber, cancellationToken));
     }
 
     [HttpPost("danger-series/{seriesId:guid}/decision")]

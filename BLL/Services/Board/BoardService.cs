@@ -98,7 +98,7 @@ public class BoardService
         }
 
         var decision = accept ? VoteDecisions.Approve : VoteDecisions.Reject;
-        await UpsertBoardVoteAsync(seriesId, boardMemberId, decision, null, cancellationToken);
+        await UpsertBoardVoteAsync(seriesId, boardMemberId, decision, null, null, cancellationToken);
         await TryAutoUpdateSeriesStatusAsync(series, seriesId, cancellationToken);
         await _unitOfWork.SaveChangesAsync(cancellationToken);
 
@@ -146,10 +146,19 @@ public class BoardService
                 cancellationToken);
 
         var decision = request.Decision.Trim();
+        PublishingFrequency? voteFrequency = null;
+        if (decision == VoteDecisions.Approve
+            && !string.IsNullOrWhiteSpace(request.PublishingFrequency)
+            && PublishingFrequencies.IsValid(request.PublishingFrequency))
+        {
+            voteFrequency = PublishingFrequencies.ParseOrDefault(request.PublishingFrequency);
+        }
+
         if (existing is not null)
         {
             existing.Decision = decision;
             existing.Comment = request.Comment;
+            existing.PublishingFrequency = voteFrequency;
             VoteRepository.Update(existing);
             await _unitOfWork.SaveChangesAsync(cancellationToken);
             await TryAutoUpdateSeriesStatusAsync(series, request.SeriesId, cancellationToken);
@@ -157,7 +166,7 @@ public class BoardService
             return MapVote(existing, series.Title, caller.FullName);
         }
 
-        await UpsertBoardVoteAsync(request.SeriesId, callerId, decision, request.Comment, cancellationToken);
+        await UpsertBoardVoteAsync(request.SeriesId, callerId, decision, request.Comment, voteFrequency, cancellationToken);
         await TryAutoUpdateSeriesStatusAsync(series, request.SeriesId, cancellationToken);
         await _unitOfWork.SaveChangesAsync(cancellationToken);
 
@@ -388,6 +397,7 @@ public class BoardService
     public async Task<IReadOnlyList<LeaderboardItemResponse>> GetLeaderboardAsync(
         Guid callerId,
         string? metric,
+        int? issueNumber = null,
         CancellationToken cancellationToken = default)
     {
         await RequireBoardOrAdminAsync(callerId, cancellationToken);
@@ -397,32 +407,49 @@ public class BoardService
             .Include(r => r.Series)
             .ToListAsync(cancellationToken);
 
-        var latestBySeries = rankings
-            .GroupBy(r => r.SeriesId)
-            .Select(g =>
+        IEnumerable<Ranking> sourceRankings = rankings;
+        if (issueNumber is int issue)
+        {
+            sourceRankings = rankings.Where(r => r.IssueNumber == issue);
+        }
+        else
+        {
+            sourceRankings = rankings
+                .GroupBy(r => r.SeriesId)
+                .Select(g => g.OrderByDescending(r => r.IssueNumber).First());
+        }
+
+        var items = sourceRankings
+            .Select(r => new
             {
-                var latest = g.OrderByDescending(r => r.IssueNumber).First();
-                return new
-                {
-                    latest.SeriesId,
-                    latest.Series.Title,
-                    latest.RankPosition,
-                    TotalVotes = g.Sum(r => r.VoteCount ?? 0),
-                    Popularity = g.Max(r => r.PopularityScore ?? 0)
-                };
-            });
+                r.SeriesId,
+                r.Series.Title,
+                r.RankPosition,
+                IssueVotes = r.VoteCount ?? 0,
+                IssuePopularity = r.PopularityScore ?? 0,
+                TotalVotes = rankings.Where(x => x.SeriesId == r.SeriesId).Sum(x => x.VoteCount ?? 0),
+                Popularity = rankings.Where(x => x.SeriesId == r.SeriesId).Max(x => x.PopularityScore ?? 0)
+            })
+            .ToList();
 
         var usePopularity = string.Equals(metric, "popularity", StringComparison.OrdinalIgnoreCase);
-        var ordered = usePopularity
-            ? latestBySeries.OrderByDescending(x => x.Popularity).ThenBy(x => x.RankPosition)
-            : latestBySeries.OrderByDescending(x => x.TotalVotes).ThenBy(x => x.RankPosition);
+        var useRank = string.Equals(metric, "rank", StringComparison.OrdinalIgnoreCase)
+            || string.IsNullOrWhiteSpace(metric);
+
+        var ordered = useRank
+            ? items.OrderBy(x => x.RankPosition).ThenByDescending(x => x.IssueVotes)
+            : usePopularity
+                ? items.OrderByDescending(x => issueNumber is null ? x.Popularity : x.IssuePopularity)
+                    .ThenBy(x => x.RankPosition)
+                : items.OrderByDescending(x => issueNumber is null ? x.TotalVotes : x.IssueVotes)
+                    .ThenBy(x => x.RankPosition);
 
         return ordered.Select(x => new LeaderboardItemResponse(
             x.SeriesId,
             x.Title,
             x.RankPosition,
-            x.TotalVotes,
-            x.Popularity)).ToList();
+            issueNumber is null ? x.TotalVotes : x.IssueVotes,
+            issueNumber is null ? x.Popularity : x.IssuePopularity)).ToList();
     }
 
     public async Task<DangerSeriesDecisionResponse> DecideDangerSeriesAsync(
@@ -564,6 +591,15 @@ public class BoardService
         if (approves > rejects)
         {
             await EnsureSeriesLeadAssignedAsync(seriesId, cancellationToken);
+            var leadClaim = await _unitOfWork.Context.SeriesBoardReviewClaims
+                .AsNoTracking()
+                .FirstOrDefaultAsync(c => c.SeriesId == seriesId && c.IsLead, cancellationToken);
+            var resolvedFrequency = ResolveApprovedPublishingFrequency(votes, leadClaim?.BoardMemberId);
+            if (resolvedFrequency is not null)
+            {
+                series.PublishingFrequency = resolvedFrequency;
+            }
+
             series.Status = SeriesStatus.Approved;
             series.UpdatedAt = DateTime.UtcNow;
             SeriesRepository.Update(series);
@@ -614,6 +650,7 @@ public class BoardService
         Guid boardMemberId,
         string decision,
         string? comment,
+        PublishingFrequency? publishingFrequency,
         CancellationToken cancellationToken)
     {
         var existing = await _unitOfWork.Context.BoardVotes
@@ -625,6 +662,11 @@ public class BoardService
         {
             existing.Decision = decision;
             existing.Comment = comment;
+            if (publishingFrequency is not null)
+            {
+                existing.PublishingFrequency = publishingFrequency;
+            }
+
             VoteRepository.Update(existing);
             return;
         }
@@ -636,10 +678,33 @@ public class BoardService
             BoardMemberId = boardMemberId,
             Decision = decision,
             Comment = comment,
+            PublishingFrequency = publishingFrequency,
             CreatedAt = DateTime.UtcNow
         };
 
         await VoteRepository.AddAsync(vote, cancellationToken);
+    }
+
+    private static PublishingFrequency? ResolveApprovedPublishingFrequency(
+        IReadOnlyList<BoardVote> votes,
+        Guid? leadBoardMemberId)
+    {
+        if (leadBoardMemberId is Guid leadId)
+        {
+            var leadVote = votes.FirstOrDefault(
+                v => v.BoardMemberId == leadId && v.Decision == VoteDecisions.Approve);
+            if (leadVote?.PublishingFrequency is not null)
+            {
+                return leadVote.PublishingFrequency;
+            }
+        }
+
+        return votes
+            .Where(v => v.Decision == VoteDecisions.Approve && v.PublishingFrequency is not null)
+            .GroupBy(v => v.PublishingFrequency!.Value)
+            .OrderByDescending(g => g.Count())
+            .Select(g => (PublishingFrequency?)g.Key)
+            .FirstOrDefault();
     }
 
     private static int GetRequiredVoteQuorum(int totalBoardMembers) =>
@@ -947,5 +1012,14 @@ public class BoardService
     }
 
     private static BoardVoteResponse MapVote(BoardVote v, string? seriesTitle, string? memberName) =>
-        new(v.Id, v.SeriesId, seriesTitle, v.BoardMemberId, memberName, v.Decision, v.Comment, v.CreatedAt);
+        new(
+            v.Id,
+            v.SeriesId,
+            seriesTitle,
+            v.BoardMemberId,
+            memberName,
+            v.Decision,
+            v.Comment,
+            v.PublishingFrequency is null ? null : PublishingFrequencies.ToDbValue(v.PublishingFrequency.Value),
+            v.CreatedAt);
 }

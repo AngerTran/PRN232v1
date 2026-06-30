@@ -6,7 +6,7 @@ import EmptyState from '../../components/ui/EmptyState';
 import Button from '../../components/ui/Button';
 import { usePageMeta } from '../../hooks/usePageMeta';
 import type { Series, SeriesRanking } from '../../types/domain';
-import { getMySeries, getSeriesRanking, getSeriesRankingTrend } from '../../services/seriesApi';
+import { getMySeries, getSeriesRanking, getSeriesRankingTrend, mapUiStatusToApi } from '../../services/seriesApi';
 
 export default function RankingOverviewPage() {
   const navigate = useNavigate();
@@ -34,7 +34,7 @@ export default function RankingOverviewPage() {
 
         const trendEntries = await Promise.all(
           merged.map(async s => {
-            const trend = await getSeriesRankingTrend(s.id);
+            const trend = await getSeriesRankingTrend(s.id, mapUiStatusToApi(s.status));
             return trend ? ([s.id, { ...trend, isAtRisk: s.isAtRisk }] as const) : null;
           })
         );

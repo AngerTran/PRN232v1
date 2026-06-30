@@ -21,7 +21,13 @@ public record TaskItemResponse(
     IReadOnlyList<string>? ResourceUrls = null,
     string? AssignedByName = null,
     decimal Price = 0,
-    string PaymentStatus = "unpaid");
+    string PaymentStatus = "unpaid",
+    string? LatestSubmissionFileUrl = null,
+    string? LatestSubmissionPreviewUrl = null,
+    string? AssistantSubmissionNote = null,
+    string? ReviewNote = null,
+    DateTime? ReviewedAt = null,
+    DateTime? LatestSubmittedAt = null);
 
 public record KanbanColumnItemResponse(
     Guid Id,

@@ -56,6 +56,7 @@ import RankingWatchPage from '../pages/editor/RankingWatchPage';
 import SeriesDefensePage from '../pages/editor/SeriesDefensePage';
 import ChapterReviewPage from '../pages/editor/ChapterReviewPage';
 import EditorInvitationsPage from '../pages/editor/EditorInvitationsPage';
+import EditorStudioPage from '../pages/editor/EditorStudioPage';
 
 // Admin pages
 import AdminDashboardPage from '../pages/admin/AdminDashboardPage';
@@ -177,6 +178,7 @@ export const router = createBrowserRouter([
       { path: '/editor/dashboard', element: <EditorDashboardPage /> },
       { path: '/editor/series', element: <AssignedSeriesPage /> },
       { path: '/editor/invitations', element: <EditorInvitationsPage /> },
+      { path: '/editor/studio', element: <EditorStudioPage /> },
       { path: '/editor/series/:seriesId', element: <SeriesDetailPage /> },
       { path: '/editor/reviews', element: <ChapterReviewsPage /> },
       { path: '/editor/chapters/:chapterId/review', element: <ChapterReviewPage /> },

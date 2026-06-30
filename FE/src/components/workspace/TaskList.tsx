@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { ChevronDown, ChevronUp, Calendar, DollarSign, Trash2, CreditCard, Loader2 } from 'lucide-react';
+import { ChevronDown, ChevronUp, Calendar, DollarSign, Trash2, CreditCard, Loader2, CheckCircle, RotateCcw, ExternalLink } from 'lucide-react';
 import { clsx } from 'clsx';
 import type { WorkspaceAssistant, WorkspaceTask } from '../../services/workspaceApi';
 import { TypeBadge } from '../ui/Badge';
@@ -7,6 +7,7 @@ import { format } from 'date-fns';
 import { createTaskPayment } from '../../services/paymentApi';
 import { toast } from 'sonner';
 import { getStoredUser } from '../../services/authApi';
+import { getTaskSubmissions, reviewSubmission, type SubmissionItem } from '../../services/submissionsApi';
 
 const STATUS_DOT: Record<string, string> = {
   'Pending': 'bg-gray-400',
@@ -30,29 +31,31 @@ interface TaskListProps {
   onHoverTask?: (region: WorkspaceTask['region'] | null) => void;
   onDeleteTask?: (id: string) => void;
   deletingTaskId?: string | null;
+  onTaskReviewed?: () => void;
 }
 
-export default function TaskList({ tasks, assistants, onHoverTask, onDeleteTask, deletingTaskId }: TaskListProps) {
+export default function TaskList({ tasks, assistants, onHoverTask, onDeleteTask, deletingTaskId, onTaskReviewed }: TaskListProps) {
   const [expanded, setExpanded] = useState<string | null>(null);
   const [payingTaskId, setPayingTaskId] = useState<string | null>(null);
+  const [reviewingTaskId, setReviewingTaskId] = useState<string | null>(null);
+  const [revisionComment, setRevisionComment] = useState('');
+  const [submissionsByTask, setSubmissionsByTask] = useState<Record<string, SubmissionItem[]>>({});
+  const [loadingSubmissions, setLoadingSubmissions] = useState<string | null>(null);
   const assistantNames = new Map(assistants.map(assistant => [assistant.id, assistant.name]));
   const user = getStoredUser();
 
-    const handlePayment = async (taskId: string) => {
-      if (!user) {
-        toast.error('Vui lòng đăng nhập để thanh toán');
-        return;
-      }
+  const handlePayment = async (taskId: string) => {
+    if (!user) {
+      toast.error('Vui lòng đăng nhập để thanh toán');
+      return;
+    }
 
-      // Only mangaka/editor who assigned the task (or admin) can initiate payment
-      // Assistant should NOT be able to initiate payment for their own task
-      // For now, allow mangaka, editor, admin - actual check happens on backend
-      const isStaff = ['admin', 'mangaka', 'editor'].includes(user.role);
+    const isStaff = ['admin', 'mangaka', 'editor'].includes(user.role);
 
-      if (!isStaff) {
-        toast.error('Chỉ mangaka/editor/admin mới có quyền thanh toán cho task này');
-        return;
-      }
+    if (!isStaff) {
+      toast.error('Chỉ mangaka/editor/admin mới có quyền thanh toán cho task này');
+      return;
+    }
 
     setPayingTaskId(taskId);
     try {
@@ -70,6 +73,59 @@ export default function TaskList({ tasks, assistants, onHoverTask, onDeleteTask,
     }
   };
 
+  const loadSubmissions = async (taskId: string) => {
+    if (submissionsByTask[taskId]) return;
+    setLoadingSubmissions(taskId);
+    try {
+      const subs = await getTaskSubmissions(taskId);
+      setSubmissionsByTask(prev => ({ ...prev, [taskId]: subs }));
+    } catch {
+      toast.error('Không thể tải bản nộp');
+    } finally {
+      setLoadingSubmissions(null);
+    }
+  };
+
+  const handleExpand = async (task: WorkspaceTask) => {
+    const next = expanded === task.id ? null : task.id;
+    setExpanded(next);
+    setRevisionComment('');
+    if (next && task.status === 'Submitted') {
+      await loadSubmissions(task.id);
+    }
+  };
+
+  const handleApprove = async (taskId: string, submissionId: string) => {
+    setReviewingTaskId(taskId);
+    try {
+      await reviewSubmission(submissionId, true);
+      toast.success('Đã duyệt nhiệm vụ');
+      onTaskReviewed?.();
+    } catch {
+      toast.error('Không thể duyệt nhiệm vụ');
+    } finally {
+      setReviewingTaskId(null);
+    }
+  };
+
+  const handleRevise = async (taskId: string, submissionId: string) => {
+    if (!revisionComment.trim()) {
+      toast.error('Vui lòng nhập phản hồi chỉnh sửa');
+      return;
+    }
+    setReviewingTaskId(taskId);
+    try {
+      await reviewSubmission(submissionId, false, revisionComment.trim());
+      toast.success('Đã yêu cầu chỉnh sửa');
+      setRevisionComment('');
+      onTaskReviewed?.();
+    } catch {
+      toast.error('Không thể gửi yêu cầu chỉnh sửa');
+    } finally {
+      setReviewingTaskId(null);
+    }
+  };
+
   if (tasks.length === 0) {
     return (
       <div className="p-4 text-center text-gray-500 text-sm">
@@ -83,6 +139,9 @@ export default function TaskList({ tasks, assistants, onHoverTask, onDeleteTask,
       {tasks.map(task => {
         const assistantName = task.assistantName ?? assistantNames.get(task.assistantId) ?? 'Unknown assistant';
         const isExpanded = expanded === task.id;
+        const subs = submissionsByTask[task.id] ?? [];
+        const latest = [...subs].sort((a, b) => b.versionNumber - a.versionNumber)[0];
+        const previewUrl = latest?.previewImageUrl ?? latest?.fileUrl ?? task.submittedResult;
 
         return (
           <div
@@ -92,7 +151,7 @@ export default function TaskList({ tasks, assistants, onHoverTask, onDeleteTask,
             onMouseLeave={() => onHoverTask?.(null)}
           >
             <button
-              onClick={() => setExpanded(isExpanded ? null : task.id)}
+              onClick={() => handleExpand(task)}
               className="w-full flex items-start gap-3 px-4 py-3 text-left"
             >
               <div className={clsx('w-2 h-2 rounded-full mt-1.5 shrink-0', STATUS_DOT[task.status] ?? 'bg-gray-400')} />
@@ -135,6 +194,75 @@ export default function TaskList({ tasks, assistants, onHoverTask, onDeleteTask,
                     {STATUS_LABEL_VI[task.status] ?? task.status}
                   </span>
                 </div>
+
+                {task.status === 'Submitted' && (
+                  <div className="mt-2 space-y-2 rounded-lg border border-[#3A3A3A] bg-[#242424] p-2.5">
+                    <p className="text-[10px] font-semibold uppercase tracking-wide text-gray-300">Xét duyệt nhanh</p>
+                    {loadingSubmissions === task.id ? (
+                      <p className="text-gray-500">Đang tải bản nộp…</p>
+                    ) : previewUrl ? (
+                      <a
+                        href={previewUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="block relative aspect-video rounded-md overflow-hidden bg-[#1A1A1A] border border-[#3A3A3A]"
+                      >
+                        <img src={previewUrl} alt="Kết quả nộp" className="w-full h-full object-contain" />
+                        <span className="absolute top-1 right-1 inline-flex items-center gap-0.5 rounded bg-black/60 px-1.5 py-0.5 text-[9px] text-white">
+                          <ExternalLink size={9} /> Mở
+                        </span>
+                      </a>
+                    ) : (
+                      <p className="text-gray-500">Chưa có ảnh xem trước.</p>
+                    )}
+                    {latest?.note && (
+                      <p className="text-gray-400 italic">Ghi chú trợ lý: {latest.note}</p>
+                    )}
+                    {latest && (
+                      <div className="flex flex-col gap-2">
+                        <textarea
+                          value={revisionComment}
+                          onChange={e => setRevisionComment(e.target.value)}
+                          rows={2}
+                          placeholder="Phản hồi khi yêu cầu chỉnh sửa…"
+                          className="w-full px-2 py-1.5 text-xs bg-[#3A3A3A] border border-[#4A4A4A] rounded-lg text-white placeholder:text-gray-500 resize-none focus:outline-none focus:border-gray-500"
+                        />
+                        <div className="flex gap-2">
+                          <button
+                            type="button"
+                            onClick={() => handleApprove(task.id, latest.id)}
+                            disabled={reviewingTaskId === task.id}
+                            className="flex-1 inline-flex items-center justify-center gap-1 rounded-md bg-green-700 px-2 py-1.5 text-xs font-medium text-white hover:bg-green-600 disabled:opacity-50"
+                          >
+                            <CheckCircle size={12} />
+                            Duyệt
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleRevise(task.id, latest.id)}
+                            disabled={reviewingTaskId === task.id || !revisionComment.trim()}
+                            className="flex-1 inline-flex items-center justify-center gap-1 rounded-md bg-orange-700 px-2 py-1.5 text-xs font-medium text-white hover:bg-orange-600 disabled:opacity-50"
+                          >
+                            <RotateCcw size={12} />
+                            Chỉnh sửa
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {task.status === 'Approved' && task.submittedResult && (
+                  <a
+                    href={task.submittedFileUrl ?? task.submittedResult}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1 text-green-400 hover:text-green-300"
+                  >
+                    <ExternalLink size={11} /> Xem kết quả đã duyệt
+                  </a>
+                )}
+
                 {onDeleteTask && task.status !== 'Approved' && (
                   <button
                     onClick={() => onDeleteTask(task.id)}

@@ -5,7 +5,7 @@ import { usePageMeta } from '../../hooks/usePageMeta';
 import { Card, CardContent } from '../../app/components/ui/card';
 import { Button } from '../../app/components/ui/button';
 import type { Series } from '../../types/domain';
-import { getDangerZoneSeries } from '../../services/seriesApi';
+import { getDangerZoneSeries, getSeriesStats } from '../../services/seriesApi';
 import { decideDangerSeries, type DangerSeriesDecision } from '../../services/boardApi';
 
 export default function SeriesDecisionPage() {
@@ -20,7 +20,23 @@ export default function SeriesDecisionPage() {
     setLoading(true);
     setError('');
     getDangerZoneSeries()
-      .then(setSeries)
+      .then(async items => {
+        const enriched = await Promise.all(
+          items.map(async item => {
+            const stats = await getSeriesStats(item.id).catch(() => null);
+            if (!stats?.latestRanking) {
+              return { ...item, isAtRisk: stats?.inDangerZone ?? item.isAtRisk };
+            }
+            return {
+              ...item,
+              currentRank: stats.latestRanking.rankPosition,
+              voteScore: stats.latestRanking.voteCount,
+              isAtRisk: stats.inDangerZone || item.isAtRisk,
+            };
+          })
+        );
+        setSeries(enriched);
+      })
       .catch(err => setError(err instanceof Error ? err.message : 'Không thể tải danh sách danger zone.'))
       .finally(() => setLoading(false));
   };
@@ -62,6 +78,15 @@ export default function SeriesDecisionPage() {
                 <div className="min-w-0 flex-1">
                   <h3 className="font-semibold">{item.title}</h3>
                   <p className="text-sm text-muted-foreground">{item.mangakaName ?? 'Không rõ mangaka'}</p>
+                  <div className="mt-2 flex flex-wrap gap-3 text-xs">
+                    {item.currentRank > 0 && (
+                      <span className="font-semibold text-red-700">Hạng #{item.currentRank}</span>
+                    )}
+                    {item.voteScore > 0 && (
+                      <span className="text-muted-foreground">{item.voteScore.toLocaleString()} phiếu</span>
+                    )}
+                    <span className="text-red-600 font-medium">Xếp hạng thấp — cần quyết định</span>
+                  </div>
                   <p className="mt-2 line-clamp-2 text-xs text-muted-foreground">{item.synopsis}</p>
                 </div>
                 <div className="flex flex-wrap gap-2 md:max-w-sm md:justify-end">

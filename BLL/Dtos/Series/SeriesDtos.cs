@@ -17,7 +17,9 @@ public record SeriesResponse(
     string? PublishingFrequency,
     DateTime? CreatedAt,
     DateTime? UpdatedAt,
-    DateTime? SubmittedForReviewAt = null);
+    DateTime? SubmittedForReviewAt = null,
+    string? EditorDefenseNote = null,
+    DateTime? EditorDefenseNoteUpdatedAt = null);
 
 public record InviteSeriesBoardMemberRequest(
     [Required] Guid BoardMemberId);

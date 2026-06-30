@@ -60,6 +60,7 @@ export default function SubmissionDetailPage() {
   const [manuscriptUrl, setManuscriptUrl] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [decision, setDecision] = useState<BoardDecision | null>(null);
+  const [publishFrequency, setPublishFrequency] = useState<'weekly' | 'monthly'>('weekly');
   const [reason, setReason] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [claiming, setClaiming] = useState(false);
@@ -84,6 +85,7 @@ export default function SubmissionDetailPage() {
         setSeries(s);
         setVotes(v);
         setVoteProgress(progress);
+        setPublishFrequency(s.publishingType === 'Monthly' ? 'monthly' : 'weekly');
         const proposal = chapters.find(c => c.number === 0) ?? chapters.find(c => c.description);
         setManuscriptUrl(proposal?.description?.trim() || null);
 
@@ -161,7 +163,12 @@ export default function SubmissionDetailPage() {
     setSubmitting(true);
     setError('');
     try {
-      await castBoardVote(seriesId, decision, reason.trim() || undefined);
+      await castBoardVote(
+        seriesId,
+        decision,
+        reason.trim() || undefined,
+        decision === 'approve' ? publishFrequency : undefined
+      );
       const [refreshedVotes, refreshedSeries, refreshedProgress] = await Promise.all([
         listBoardVotes(seriesId).catch(() => votes),
         getSeries(seriesId).catch(() => series),
@@ -319,6 +326,33 @@ export default function SubmissionDetailPage() {
                 </button>
               ))}
             </div>
+            {decision === 'approve' && (
+              <div className="rounded-xl border border-border px-4 py-3 space-y-2">
+                <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                  Hình thức xuất bản (hội đồng)
+                </p>
+                <div className="flex gap-2">
+                  {(['weekly', 'monthly'] as const).map(freq => (
+                    <button
+                      key={freq}
+                      type="button"
+                      onClick={() => setPublishFrequency(freq)}
+                      className={clsx(
+                        'flex-1 rounded-lg border px-3 py-2 text-sm font-medium transition-colors',
+                        publishFrequency === freq
+                          ? 'border-primary bg-primary/10 text-primary'
+                          : 'border-border hover:bg-muted/50'
+                      )}
+                    >
+                      {freq === 'weekly' ? 'Hàng tuần' : 'Hàng tháng'}
+                    </button>
+                  ))}
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Đề xuất từ mangaka: {series.publishingType || '—'}. Quyết định của phụ trách chính được ưu tiên khi duyệt.
+                </p>
+              </div>
+            )}
             <textarea
               placeholder="Lý do / nhận xét (khuyến nghị nếu từ chối)..."
               rows={4}

@@ -12,11 +12,13 @@ import RankingTrend from '../../components/ui/RankingTrend';
 import EmptyState from '../../components/ui/EmptyState';
 import { usePageMeta } from '../../hooks/usePageMeta';
 import { useConfirm } from '../../components/ui/ConfirmDialog';
-import type { Chapter, Series } from '../../types/domain';
+import type { Chapter, Series, SeriesRanking } from '../../types/domain';
 import {
   getSeries,
   getSeriesChapters,
   getSeriesStats,
+  getSeriesRankingTrend,
+  mapUiStatusToApi,
   isSeriesSubmitted,
   canMangakaProduceOnSeries,
   SERIES_PRODUCTION_LOCK_HINT,
@@ -52,8 +54,12 @@ export default function SeriesDetailPage() {
   const [error, setError] = useState('');
   const [submissionStats, setSubmissionStats] = useState<SeriesStats | null>(null);
   const [submissionStatsLoading, setSubmissionStatsLoading] = useState(false);
+  const [ranking, setRanking] = useState<SeriesRanking | null>(null);
+  const [rankingLoading, setRankingLoading] = useState(false);
 
-  const ranking = null;
+  const showRankingTab = series
+    ? !['Draft', 'Submitted', 'Cancelled'].includes(series.status)
+    : false;
   const canProduce = series ? canMangakaProduceOnSeries(series.status) : false;
   const productionLockHint = series ? SERIES_PRODUCTION_LOCK_HINT[series.status] : undefined;
   const canInviteEditor = isMangakaView && series && canProduce && !series.editorId && !pendingEditorInvite;
@@ -172,6 +178,30 @@ export default function SeriesDetailPage() {
       active = false;
     };
   }, [isMangakaView, seriesId, series?.editorId]);
+
+  useEffect(() => {
+    if (!seriesId || !series || tab !== 'ranking' || !showRankingTab) {
+      setRanking(null);
+      return;
+    }
+
+    let active = true;
+    setRankingLoading(true);
+    getSeriesRankingTrend(seriesId, mapUiStatusToApi(series.status))
+      .then(data => {
+        if (active) setRanking(data);
+      })
+      .catch(() => {
+        if (active) setRanking(null);
+      })
+      .finally(() => {
+        if (active) setRankingLoading(false);
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [seriesId, series?.status, tab, showRankingTab]);
 
   const handleInviteEditor = async () => {
     if (!series || !selectedEditorId) return;
@@ -364,7 +394,7 @@ export default function SeriesDetailPage() {
         <TabsList>
           <Tab value="overview"><BookOpen size={14} className="inline mr-1.5" />Tổng quan</Tab>
           <Tab value="chapters"><FileText size={14} className="inline mr-1.5" />Chương ({chapters.length})</Tab>
-          {ranking && <Tab value="ranking"><BarChart2 size={14} className="inline mr-1.5" />Xếp hạng</Tab>}
+          {showRankingTab && <Tab value="ranking"><BarChart2 size={14} className="inline mr-1.5" />Xếp hạng</Tab>}
           <Tab value="submissions"><Send size={14} className="inline mr-1.5" />Nộp series</Tab>
         </TabsList>
 
@@ -457,14 +487,42 @@ export default function SeriesDetailPage() {
           ) : (
             <div className="space-y-2">
               {chapters.sort((a, b) => a.number - b.number).map(ch => (
-                <ChapterCard key={ch.id} chapter={ch} seriesId={series.id} />
+                <ChapterCard
+                  key={ch.id}
+                  chapter={ch}
+                  seriesId={series.id}
+                  chapterDetailPath={
+                    isAssignedEditor
+                      ? chapterId => `/editor/chapters/${chapterId}/review`
+                      : undefined
+                  }
+                />
               ))}
             </div>
           )}
         </TabPanel>
 
         <TabPanel value="ranking" className="mt-5">
-          {ranking ? <RankingTrend ranking={ranking} /> : <EmptyState title="Chưa có dữ liệu xếp hạng" description="Series phải được xuất bản để có dữ liệu xếp hạng." />}
+          {rankingLoading ? (
+            <p className="text-sm text-muted-foreground">Đang tải xếp hạng...</p>
+          ) : ranking ? (
+            <div className="space-y-4">
+              {ranking.isAtRisk && (
+                <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
+                  Series đang ở vùng nguy hiểm (hạng #{ranking.currentRank}). Hãy theo dõi thông báo từ hội đồng.
+                </div>
+              )}
+              <RankingTrend ranking={ranking} />
+              <Button variant="outline" size="sm" onClick={() => navigate(`/mangaka/series/${series.id}/ranking`)}>
+                Xem chi tiết xếp hạng
+              </Button>
+            </div>
+          ) : (
+            <EmptyState
+              title="Chưa có dữ liệu xếp hạng"
+              description="Hội đồng cần nhập dữ liệu bình chọn độc giả sau khi series xuất bản."
+            />
+          )}
         </TabPanel>
 
         <TabPanel value="submissions" className="mt-5">

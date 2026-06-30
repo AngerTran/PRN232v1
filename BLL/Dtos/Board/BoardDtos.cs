@@ -10,12 +10,14 @@ public record BoardVoteResponse(
     string? BoardMemberName,
     string Decision,
     string? Comment,
+    string? PublishingFrequency,
     DateTime? CreatedAt);
 
 public record CreateBoardVoteRequest(
     [Required] Guid SeriesId,
     [Required] string Decision,
-    string? Comment);
+    string? Comment,
+    string? PublishingFrequency);
 
 public record ClaimSeriesReviewRequest(bool WantLead = false);
 

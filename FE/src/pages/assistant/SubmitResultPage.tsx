@@ -8,7 +8,7 @@ import { UploadResultBox } from '../../app/components/ui/assistant';
 import type { Task } from '../../types/domain';
 import { getTask } from '../../services/tasksApi';
 import { submitTaskWork } from '../../services/submissionsApi';
-import { ArrowLeft, Send, Save } from 'lucide-react';
+import { ArrowLeft, Send } from 'lucide-react';
 import { toast } from 'sonner';
 
 export default function SubmitResultPage() {
@@ -89,10 +89,6 @@ export default function SubmitResultPage() {
     }
   };
 
-  const handleSaveDraft = () => {
-    toast.success('Đã lưu bản nháp');
-  };
-
   return (
     <div className="p-6 space-y-6">
       {/* Back Button */}
@@ -161,9 +157,17 @@ export default function SubmitResultPage() {
             <CardTitle>Preview File</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="aspect-video bg-muted rounded-lg flex items-center justify-center">
-              <p className="text-muted-foreground">Preview: {selectedFile.name}</p>
-            </div>
+            {selectedFile.type.startsWith('image/') ? (
+              <img
+                src={URL.createObjectURL(selectedFile)}
+                alt={selectedFile.name}
+                className="max-h-96 w-full rounded-lg object-contain bg-muted"
+              />
+            ) : (
+              <div className="aspect-video bg-muted rounded-lg flex items-center justify-center">
+                <p className="text-muted-foreground">Preview: {selectedFile.name}</p>
+              </div>
+            )}
           </CardContent>
         </Card>
       )}
@@ -191,19 +195,10 @@ export default function SubmitResultPage() {
         <CardContent className="py-6">
           <div className="flex flex-col sm:flex-row gap-3">
             <Button
-              variant="outline"
               size="lg"
-              className="flex-1"
-              onClick={handleSaveDraft}
-            >
-              <Save className="h-5 w-5 mr-2" />
-              Lưu Bản Nháp
-            </Button>
-            <Button
-              size="lg"
-              className="flex-1"
+              className="w-full sm:flex-1"
               onClick={handleSubmit}
-              disabled={submitting}
+              disabled={submitting || !selectedFile}
             >
               <Send className="h-5 w-5 mr-2" />
               {submitting ? 'Đang nộp…' : 'Nộp Cho Mangaka'}

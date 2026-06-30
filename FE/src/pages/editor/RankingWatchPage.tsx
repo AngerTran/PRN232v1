@@ -13,7 +13,7 @@ import {
   TableRow,
 } from '../../app/components/ui/table';
 import type { Series } from '../../types/domain';
-import { getSeriesRanking } from '../../services/seriesApi';
+import { getSeriesRanking, getSeriesRankingTrend, mapUiStatusToApi } from '../../services/seriesApi';
 import { getEditorAssignedSeries } from '../../services/editorApi';
 import { TrendingUp, TrendingDown, Minus, Eye, Shield } from 'lucide-react';
 
@@ -37,12 +37,20 @@ export default function RankingWatchPage() {
           getSeriesRanking().catch(() => []),
         ]);
         const rankById = new Map(rankings.map(r => [r.seriesId, r]));
-        const merged = items.map(s => {
-          const r = rankById.get(s.id);
-          return r
-            ? { ...s, currentRank: r.rankPosition, previousRank: r.rankPosition, voteScore: r.voteCount }
-            : s;
-        });
+        const merged = await Promise.all(
+          items.map(async s => {
+            const r = rankById.get(s.id);
+            if (!r) return s;
+            const trend = await getSeriesRankingTrend(s.id, mapUiStatusToApi(s.status)).catch(() => null);
+            return {
+              ...s,
+              currentRank: r.rankPosition,
+              previousRank: trend?.previousRank ?? r.rankPosition,
+              voteScore: r.voteCount,
+              isAtRisk: trend?.isAtRisk ?? s.isAtRisk,
+            };
+          })
+        );
         if (isActive) {
           setSeries(merged);
         }

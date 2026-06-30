@@ -52,6 +52,8 @@ export interface Series {
   submittedForReviewAt?: string;
   reviewExpiresAt?: string;
   isAtRisk: boolean;
+  editorDefenseNote?: string;
+  editorDefenseNoteUpdatedAt?: string;
 }
 
 export interface Chapter {
@@ -95,7 +97,10 @@ export interface Task {
   status: TaskStatus;
   region: { x: number; y: number; width: number; height: number };
   submittedResult?: string;
+  submittedFileUrl?: string;
   mangakaFeedback?: string;
+  reviewedAt?: string;
+  assistantSubmissionNote?: string;
   createdAt: string;
   resourceUrls?: string[];
   assignedByName?: string;

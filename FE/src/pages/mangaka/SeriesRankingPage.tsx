@@ -5,7 +5,7 @@ import Card, { CardHeader, CardTitle } from '../../components/ui/Card';
 import EmptyState from '../../components/ui/EmptyState';
 import { usePageMeta } from '../../hooks/usePageMeta';
 import type { Series, SeriesRanking } from '../../types/domain';
-import { getSeries, getSeriesRankingTrend } from '../../services/seriesApi';
+import { getSeries, getSeriesRankingTrend, mapUiStatusToApi } from '../../services/seriesApi';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar } from 'recharts';
 import { clsx } from 'clsx';
 
@@ -23,7 +23,13 @@ export default function SeriesRankingPage() {
     if (!seriesId) return;
     let isActive = true;
     setLoading(true);
-    Promise.all([getSeries(seriesId), getSeriesRankingTrend(seriesId).catch(() => null)])
+    getSeries(seriesId)
+      .then(s =>
+        Promise.all([
+          s,
+          getSeriesRankingTrend(seriesId, mapUiStatusToApi(s.status)).catch(() => null),
+        ])
+      )
       .then(([s, r]) => {
         if (!isActive) return;
         setSeries(s);

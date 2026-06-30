@@ -71,6 +71,22 @@ export default function SeriesDecisionDetailPage() {
         </CardContent>
       </Card>
 
+      {series.editorDefenseNote && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">Ghi chú bảo vệ từ Editor</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-2">
+            <p className="text-sm leading-relaxed whitespace-pre-wrap">{series.editorDefenseNote}</p>
+            {series.editorDefenseNoteUpdatedAt && (
+              <p className="text-xs text-muted-foreground">
+                Cập nhật {new Date(series.editorDefenseNoteUpdatedAt).toLocaleString('vi-VN')}
+              </p>
+            )}
+          </CardContent>
+        </Card>
+      )}
+
       <Card className="max-w-xl">
         <CardHeader><CardTitle>Ra quyết định</CardTitle></CardHeader>
         <CardContent>

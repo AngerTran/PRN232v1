@@ -20,6 +20,8 @@ interface ApiSeries {
   createdAt?: string | null;
   updatedAt?: string | null;
   submittedForReviewAt?: string | null;
+  editorDefenseNote?: string | null;
+  editorDefenseNoteUpdatedAt?: string | null;
 }
 
 interface ApiChapter {
@@ -57,6 +59,41 @@ function unwrap<T>(value: ApiEnvelope<T>): T {
     return (value as { data: T }).data;
   }
   return value as T;
+}
+
+export const DANGER_RANK_THRESHOLD = 30;
+
+export function mapUiStatusToApi(status: SeriesStatus): string {
+  const map: Record<SeriesStatus, string> = {
+    Draft: 'draft',
+    Submitted: 'pending_review',
+    Approved: 'approved',
+    'In Progress': 'publishing',
+    'At Risk': 'hiatus',
+    Cancelled: 'cancelled',
+    Completed: 'completed',
+  };
+  return map[status] ?? 'draft';
+}
+
+
+/** Series đang publishing và rank ≥ ngưỡng → vùng nguy hiểm. */
+export function computeSeriesAtRisk(apiStatus: string | undefined, rankPosition: number): boolean {
+  return (apiStatus?.toLowerCase() === 'publishing') && rankPosition >= DANGER_RANK_THRESHOLD;
+}
+
+function enrichSeriesWithRanking(
+  series: Series,
+  apiStatus: string,
+  ranking?: { rankPosition: number; voteCount: number }
+): Series {
+  const rank = ranking?.rankPosition ?? series.currentRank ?? 0;
+  return {
+    ...series,
+    currentRank: rank,
+    voteScore: ranking?.voteCount ?? series.voteScore,
+    isAtRisk: computeSeriesAtRisk(apiStatus, rank),
+  };
 }
 
 function mapSeriesStatus(status: string): SeriesStatus {
@@ -164,7 +201,11 @@ export function mapSeries(item: ApiSeries, chaptersCount = 0): Series {
     reviewExpiresAt: item.submittedForReviewAt
       ? dateOnly(new Date(new Date(item.submittedForReviewAt).getTime() + 30 * 86400000).toISOString())
       : undefined,
-    isAtRisk: item.status?.toLowerCase() === 'hiatus',
+    isAtRisk: false,
+    editorDefenseNote: item.editorDefenseNote ?? undefined,
+    editorDefenseNoteUpdatedAt: item.editorDefenseNoteUpdatedAt
+      ? dateOnly(item.editorDefenseNoteUpdatedAt)
+      : undefined,
   };
 }
 
@@ -204,10 +245,20 @@ async function enrichChapter(chapter: Chapter): Promise<Chapter> {
 }
 
 export async function getMySeries(): Promise<Series[]> {
-  const items = unwrap(await apiRequest<ApiEnvelope<ApiSeries[]>>('/api/series/my-series'));
+  const [items, rankings] = await Promise.all([
+    unwrap(await apiRequest<ApiEnvelope<ApiSeries[]>>('/api/series/my-series')),
+    getSeriesRanking().catch(() => [] as SeriesRankingItem[]),
+  ]);
+  const rankById = new Map(rankings.map(r => [r.seriesId, r]));
   return Promise.all(items.map(async item => {
     const chapters = await getSeriesChapters(item.id).catch(() => []);
-    return mapSeries(item, chapters.length);
+    const base = mapSeries(item, chapters.length);
+    const ranking = rankById.get(item.id);
+    return enrichSeriesWithRanking(
+      base,
+      item.status,
+      ranking ? { rankPosition: ranking.rankPosition, voteCount: ranking.voteCount } : undefined
+    );
   }));
 }
 
@@ -287,11 +338,21 @@ export async function getDangerZoneSeries(): Promise<Series[]> {
 }
 
 export async function getSeries(id: string): Promise<Series> {
-  const [item, chapters] = await Promise.all([
+  const [item, chapters, stats] = await Promise.all([
     apiRequest<ApiEnvelope<ApiSeries>>(`/api/series/${id}`).then(unwrap),
     getSeriesChapters(id).catch(() => []),
+    getSeriesStats(id).catch(() => null),
   ]);
-  return mapSeries(item, chapters.length);
+  let series = mapSeries(item, chapters.length);
+  if (stats?.latestRanking) {
+    series = enrichSeriesWithRanking(series, item.status, {
+      rankPosition: stats.latestRanking.rankPosition,
+      voteCount: stats.latestRanking.voteCount,
+    });
+  } else if (stats?.inDangerZone) {
+    series = { ...series, isAtRisk: true };
+  }
+  return series;
 }
 
 export async function getSeriesChapters(id: string): Promise<Chapter[]> {
@@ -782,7 +843,10 @@ export async function updateSchedule(id: string, input: UpdateScheduleInput): Pr
 }
 
 // Dựng SeriesRanking (định dạng UI lịch sử theo tuần) từ các issue ranking của BE.
-export async function getSeriesRankingTrend(seriesId: string): Promise<SeriesRanking | null> {
+export async function getSeriesRankingTrend(
+  seriesId: string,
+  apiStatus?: string
+): Promise<SeriesRanking | null> {
   const issues = await getRankingHistory(seriesId).catch(() => [] as RankingIssue[]);
   if (issues.length === 0) return null;
 
@@ -804,7 +868,7 @@ export async function getSeriesRankingTrend(seriesId: string): Promise<SeriesRan
     previousRank,
     voteScore: current.voteCount,
     trend: delta > 0 ? 'up' : delta < 0 ? 'down' : 'stable',
-    isAtRisk: false,
+    isAtRisk: computeSeriesAtRisk(apiStatus ?? 'publishing', currentRank),
     history,
   };
 }

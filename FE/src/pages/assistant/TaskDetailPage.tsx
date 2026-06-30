@@ -200,7 +200,9 @@ export default function TaskDetailPage() {
         <FeedbackBox
           feedback={task.mangakaFeedback}
           from={task.assignedByName || 'Tác giả'}
-          date={format(new Date(), 'dd/MM/yyyy HH:mm', { locale: vi })}
+          date={task.reviewedAt
+            ? format(new Date(task.reviewedAt), 'dd/MM/yyyy HH:mm', { locale: vi })
+            : format(new Date(), 'dd/MM/yyyy HH:mm', { locale: vi })}
         />
       )}
 
@@ -273,8 +275,16 @@ export default function TaskDetailPage() {
           <CardHeader>
             <CardTitle>Xem trước trang truyện</CardTitle>
           </CardHeader>
-          <CardContent>
+          <CardContent className="space-y-3">
             <MangaPagePreview task={task} imageUrl={task.pageImageUrl || undefined} />
+            {task.pageImageUrl && (
+              <Button asChild variant="outline" className="w-full">
+                <a href={task.pageImageUrl} target="_blank" rel="noopener noreferrer" download>
+                  <Download className="h-4 w-4 mr-2" />
+                  Tải file trang gốc
+                </a>
+              </Button>
+            )}
           </CardContent>
         </Card>
       </div>
@@ -321,9 +331,11 @@ export default function TaskDetailPage() {
               </Button>
             )}
             {task.submittedResult && (
-              <Button variant="outline" size="lg" className="flex-1">
-                <Download className="h-5 w-5 mr-2" />
-                Xem File Đã Nộp
+              <Button asChild variant="outline" size="lg" className="flex-1">
+                <a href={task.submittedFileUrl ?? task.submittedResult} target="_blank" rel="noopener noreferrer" download>
+                  <Download className="h-5 w-5 mr-2" />
+                  Xem / tải file đã nộp
+                </a>
               </Button>
             )}
           </div>

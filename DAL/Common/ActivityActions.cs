@@ -12,4 +12,5 @@ public static class ActivityActions
     public const string Vote = "vote";
     public const string Assign = "assign";
     public const string DangerDecision = "danger_decision";
+    public const string DangerAlert = "danger_alert";
 }

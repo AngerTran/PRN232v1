@@ -166,7 +166,7 @@ public class SubmissionService
         submission.ReviewedAt = now;
         if (!string.IsNullOrWhiteSpace(request.Note))
         {
-            submission.Note = request.Note;
+            submission.ReviewNote = request.Note.Trim();
         }
 
         task.Status = submission.Status;
@@ -222,16 +222,22 @@ public class SubmissionService
             .ToListAsync(cancellationToken);
 
         var taskIds = approved.Select(s => s.TaskId).Distinct().ToList();
-        var pageCount = await _unitOfWork.Context.Tasks
+        var approvedTasks = await _unitOfWork.Context.Tasks
             .AsNoTracking()
             .Where(t => taskIds.Contains(t.Id))
-            .Select(t => t.PageId)
-            .Distinct()
-            .CountAsync(cancellationToken);
+            .ToListAsync(cancellationToken);
+
+        var pageCount = approvedTasks.Select(t => t.PageId).Distinct().Count();
+        var totalEarnings = approvedTasks.Sum(t => t.Price);
+        var paidEarnings = approvedTasks
+            .Where(t => string.Equals(t.PaymentStatus, PaymentStatuses.Paid, StringComparison.OrdinalIgnoreCase))
+            .Sum(t => t.Price);
 
         return new AssistantEarningsResponse(
             approved.Count,
             pageCount,
+            totalEarnings,
+            paidEarnings,
             $"{y:D4}-{m:D2}");
     }
 
@@ -262,6 +268,7 @@ public class SubmissionService
             s.FileUrl,
             s.PreviewImageUrl,
             s.Note,
+            s.ReviewNote,
             s.Status,
             s.ReviewedBy,
             reviewedByName,

@@ -11,6 +11,7 @@ export interface SubmissionItem {
   fileUrl: string;
   previewImageUrl?: string;
   note?: string;
+  reviewNote?: string;
   status: SubmissionReviewStatus;
   reviewedBy?: string;
   reviewedByName?: string;
@@ -21,6 +22,8 @@ export interface SubmissionItem {
 export interface AssistantEarnings {
   approvedSubmissions: number;
   approvedPages: number;
+  totalEarnings: number;
+  paidEarnings: number;
   month: string;
 }
 
@@ -35,6 +38,7 @@ interface ApiSubmission {
   fileUrl: string;
   previewImageUrl?: string | null;
   note?: string | null;
+  reviewNote?: string | null;
   status: string;
   reviewedBy?: string | null;
   reviewedByName?: string | null;
@@ -45,6 +49,8 @@ interface ApiSubmission {
 interface ApiEarnings {
   approvedSubmissions: number;
   approvedPages: number;
+  totalEarnings: number;
+  paidEarnings: number;
   month: string;
 }
 
@@ -79,6 +85,7 @@ function mapSubmission(item: ApiSubmission): SubmissionItem {
     fileUrl: item.fileUrl,
     previewImageUrl: item.previewImageUrl ?? undefined,
     note: item.note ?? undefined,
+    reviewNote: item.reviewNote ?? undefined,
     status: mapStatus(item.status),
     reviewedBy: item.reviewedBy ?? undefined,
     reviewedByName: item.reviewedByName ?? undefined,

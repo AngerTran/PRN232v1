@@ -76,6 +76,7 @@ const EDITOR_GROUPS: NavGroup[] = [
       { label: 'Series phụ trách', icon: <BookOpen size={18} />, href: '/editor/series' },
       { label: 'Lời mời phụ trách', icon: <Mail size={18} />, href: '/editor/invitations' },
       { label: 'Chapter Reviews', icon: <FileText size={18} />, href: '/editor/reviews' },
+      { label: 'Tiến độ Studio', icon: <Activity size={18} />, href: '/editor/studio' },
     ],
   },
   {

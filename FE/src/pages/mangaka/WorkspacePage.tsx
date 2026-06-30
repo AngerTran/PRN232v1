@@ -1,6 +1,6 @@
 import { useState, useRef, useCallback, useEffect, type PointerEvent } from 'react';
 import { useParams, useNavigate } from 'react-router';
-import { ChevronLeft, ZoomIn, ZoomOut, RotateCcw, Target, X } from 'lucide-react';
+import { ChevronLeft, ZoomIn, ZoomOut, RotateCcw, Target, X, Layers } from 'lucide-react';
 import { clsx } from 'clsx';
 import TaskPanel, { type TaskFormData } from '../../components/workspace/TaskPanel';
 import TaskList from '../../components/workspace/TaskList';
@@ -32,8 +32,19 @@ export default function WorkspacePage() {
   const [isLoading, setIsLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [deletingTaskId, setDeletingTaskId] = useState<string | null>(null);
+  const [showComposite, setShowComposite] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const canvasRef = useRef<HTMLDivElement>(null);
+
+  const reloadWorkspace = useCallback(async () => {
+    if (!selectedPageId) return;
+    try {
+      const payload = await getWorkspace(selectedPageId);
+      setWorkspace(payload);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Không thể tải lại workspace.');
+    }
+  }, [selectedPageId]);
 
   const page = workspace?.page;
   const allPages = workspace?.pages ?? [];
@@ -224,6 +235,10 @@ export default function WorkspacePage() {
     }
   };
 
+  const compositeTasks = pageTasks.filter(
+    t => t.status === 'Approved' && (t.submittedResult ?? t.submittedFileUrl)
+  );
+
   const regionLabel = region
     ? `Region: ${Math.round(region.x)}%,${Math.round(region.y)}% — ${Math.round(region.width)}×${Math.round(region.height)}`
     : undefined;
@@ -281,6 +296,17 @@ export default function WorkspacePage() {
             </button>
           </div>
           <button
+            onClick={() => setShowComposite(v => !v)}
+            disabled={compositeTasks.length === 0}
+            className={clsx(
+              'flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all duration-150 disabled:opacity-40',
+              showComposite ? 'bg-green-700 text-white' : 'bg-[#333] text-gray-300 hover:bg-[#444] hover:text-white'
+            )}
+          >
+            <Layers size={13} />
+            {showComposite ? 'Ẩn tổng hợp' : 'Xem tổng hợp'}
+          </button>
+          <button
             onClick={() => {
               setIsSelecting(s => !s);
               setDragStart(null);
@@ -327,8 +353,28 @@ export default function WorkspacePage() {
               )}
             </div>
 
+            {/* Composite overlay — approved task results */}
+            {showComposite && compositeTasks.map(task => (
+                <div
+                  key={`composite-${task.id}`}
+                  className="absolute overflow-hidden pointer-events-none border border-green-500/40 z-10"
+                  style={{
+                    left: `${task.region.x}%`,
+                    top: `${task.region.y}%`,
+                    width: `${task.region.width}%`,
+                    height: `${task.region.height}%`,
+                  }}
+                >
+                  <img
+                    src={task.submittedResult ?? task.submittedFileUrl}
+                    alt={task.title}
+                    className="w-full h-full object-cover"
+                  />
+                </div>
+              ))}
+
             {/* Existing task regions */}
-            {pageTasks.map(task => (
+            {!showComposite && pageTasks.map(task => (
               <div
                 key={task.id}
                 className="absolute border-2 border-primary/60 bg-primary/10 pointer-events-none transition-all duration-150"
@@ -417,6 +463,7 @@ export default function WorkspacePage() {
                 onHoverTask={setHoverRegion}
                 onDeleteTask={handleDeleteTask}
                 deletingTaskId={deletingTaskId}
+                onTaskReviewed={reloadWorkspace}
               />
             )}
           </div>

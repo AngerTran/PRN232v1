@@ -10,17 +10,19 @@ interface ChapterCardProps {
   chapter: Chapter;
   seriesId: string;
   onDelete?: (id: string) => void;
+  chapterDetailPath?: (chapterId: string) => string;
 }
 
-export default function ChapterCard({ chapter, seriesId, onDelete }: ChapterCardProps) {
+export default function ChapterCard({ chapter, seriesId, onDelete, chapterDetailPath }: ChapterCardProps) {
   const navigate = useNavigate();
+  const detailPath = chapterDetailPath?.(chapter.id) ?? `/mangaka/chapters/${chapter.id}`;
   const deadlineDate = new Date(chapter.deadline);
   const daysLeft = differenceInDays(deadlineDate, new Date());
   const isOverdue = isPast(deadlineDate) && chapter.status !== 'Published' && chapter.status !== 'Approved';
 
   return (
     <div
-      onClick={() => navigate(`/mangaka/chapters/${chapter.id}`)}
+      onClick={() => navigate(detailPath)}
       className="flex items-center gap-4 p-4 bg-card border border-border rounded-xl hover:shadow-md hover:-translate-y-0.5 transition-all duration-150 cursor-pointer group"
     >
       <div className="w-9 h-9 rounded-lg bg-muted flex items-center justify-center shrink-0 font-bold text-sm text-muted-foreground">

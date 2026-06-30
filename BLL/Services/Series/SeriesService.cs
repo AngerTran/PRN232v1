@@ -910,6 +910,188 @@ public class SeriesService
       inDangerZone);
   }
 
+  public async Task<EditorStudioProgressResponse?> GetStudioProgressAsync(
+    Guid callerId,
+    Guid seriesId,
+    CancellationToken cancellationToken = default)
+  {
+    var caller = await RequireCallerAsync(callerId, cancellationToken);
+    var series = await SeriesRepository.GetByIdAsync(seriesId, cancellationToken: cancellationToken);
+    if (series is null)
+    {
+      return null;
+    }
+
+    if (!CanViewSeries(caller, series))
+    {
+      throw new SeriesForbiddenException("You do not have permission to view studio progress for this series.");
+    }
+
+    if (IsEditor(caller.Role) && series.EditorId != caller.Id)
+    {
+      throw new SeriesForbiddenException("Only the assigned editor can view studio progress for this series.");
+    }
+
+    var chapters = await _unitOfWork.Context.Chapters
+      .AsNoTracking()
+      .Where(c => c.SeriesId == seriesId && c.ChapterNumber > 0)
+      .OrderBy(c => c.ChapterNumber)
+      .ToListAsync(cancellationToken);
+
+    var chapterIds = chapters.Select(c => c.Id).ToList();
+    var pages = chapterIds.Count == 0
+      ? []
+      : await _unitOfWork.Context.Pages
+        .AsNoTracking()
+        .Where(p => chapterIds.Contains(p.ChapterId))
+        .Select(p => new { p.ChapterId, p.Status })
+        .ToListAsync(cancellationToken);
+
+    var pageChapterMap = chapterIds.Count == 0
+      ? new Dictionary<Guid, Guid>()
+      : await _unitOfWork.Context.Pages
+        .AsNoTracking()
+        .Where(p => chapterIds.Contains(p.ChapterId))
+        .Select(p => new { p.Id, p.ChapterId })
+        .ToDictionaryAsync(p => p.Id, p => p.ChapterId, cancellationToken);
+
+    var allPageIds = pageChapterMap.Keys.ToList();
+    var tasks = allPageIds.Count == 0
+      ? []
+      : await _unitOfWork.Context.Tasks
+        .AsNoTracking()
+        .Where(t => allPageIds.Contains(t.PageId))
+        .Select(t => new { t.PageId, t.Status })
+        .ToListAsync(cancellationToken);
+
+    var now = DateTime.UtcNow;
+    var chapterItems = new List<EditorChapterProgressItem>();
+    var totalPages = 0;
+    var completedPages = 0;
+    var totalTasks = 0;
+    var completedTasks = 0;
+    var overdueChapters = 0;
+
+    foreach (var chapter in chapters)
+    {
+      var chapterPages = pages.Where(p => p.ChapterId == chapter.Id).ToList();
+      var chapterPageIdSet = pageChapterMap
+        .Where(kv => kv.Value == chapter.Id)
+        .Select(kv => kv.Key)
+        .ToHashSet();
+
+      var chapterTasks = tasks.Where(t => chapterPageIdSet.Contains(t.PageId)).ToList();
+      var pageCount = chapterPages.Count;
+      var chapterCompletedPages = chapterPages.Count(p =>
+        p.Status is PageStatus.Approved or PageStatus.Published);
+      var pendingTasks = chapterTasks.Count(t => t.Status == TaskStatuses.Todo);
+      var activeTasks = chapterTasks.Count(t =>
+        t.Status is TaskStatuses.InProgress or TaskStatuses.Submitted);
+      var doneTasks = chapterTasks.Count(t =>
+        t.Status is TaskStatuses.Approved or TaskStatuses.Rejected);
+      var chapterTotalTasks = chapterTasks.Count;
+      var chapterCompletedTasks = chapterTasks.Count(t => t.Status == TaskStatuses.Approved);
+
+      var progressPercent = chapterTotalTasks > 0
+        ? (int)Math.Round(chapterCompletedTasks * 100.0 / chapterTotalTasks)
+        : chapter.Status is ChapterStatus.Completed or ChapterStatus.Published ? 100 : 0;
+
+      var isOverdue = chapter.Deadline is not null
+        && chapter.Deadline < now
+        && chapter.Status is not ChapterStatus.Completed and not ChapterStatus.Published;
+
+      if (isOverdue)
+      {
+        overdueChapters++;
+      }
+
+      totalPages += pageCount;
+      completedPages += chapterCompletedPages;
+      totalTasks += chapterTotalTasks;
+      completedTasks += chapterCompletedTasks;
+
+      chapterItems.Add(new EditorChapterProgressItem(
+        chapter.Id,
+        chapter.ChapterNumber,
+        chapter.Title ?? $"Chapter {chapter.ChapterNumber}",
+        ChapterStatuses.ToDbValue(chapter.Status),
+        chapter.Deadline,
+        progressPercent,
+        pageCount,
+        chapterCompletedPages,
+        pendingTasks,
+        activeTasks,
+        doneTasks,
+        isOverdue));
+    }
+
+    var overallProgress = totalTasks > 0
+      ? (int)Math.Round(completedTasks * 100.0 / totalTasks)
+      : totalPages > 0
+        ? (int)Math.Round(completedPages * 100.0 / totalPages)
+        : 0;
+
+    return new EditorStudioProgressResponse(
+      seriesId,
+      series.Title,
+      SeriesStatuses.ToDbValue(series.Status),
+      chapters.Count,
+      totalPages,
+      completedPages,
+      totalTasks,
+      completedTasks,
+      overdueChapters,
+      overallProgress,
+      chapterItems);
+  }
+
+  public async Task<EditorDefenseNoteResponse?> GetEditorDefenseNoteAsync(
+    Guid callerId,
+    Guid seriesId,
+    CancellationToken cancellationToken = default)
+  {
+    var caller = await RequireCallerAsync(callerId, cancellationToken);
+    var series = await SeriesRepository.GetByIdAsync(seriesId, cancellationToken: cancellationToken);
+    if (series is null)
+    {
+      return null;
+    }
+
+    if (!CanViewSeries(caller, series))
+    {
+      throw new SeriesForbiddenException("You do not have permission to view this defense note.");
+    }
+
+    return new EditorDefenseNoteResponse(seriesId, series.EditorDefenseNote, series.EditorDefenseNoteUpdatedAt);
+  }
+
+  public async Task<EditorDefenseNoteResponse?> UpdateEditorDefenseNoteAsync(
+    Guid callerId,
+    Guid seriesId,
+    UpdateEditorDefenseNoteRequest request,
+    CancellationToken cancellationToken = default)
+  {
+    var caller = await RequireCallerAsync(callerId, cancellationToken);
+    var series = await SeriesRepository.GetByIdAsync(seriesId, asNoTracking: false, cancellationToken);
+    if (series is null)
+    {
+      return null;
+    }
+
+    if (!IsEditor(caller.Role) || series.EditorId != caller.Id)
+    {
+      throw new SeriesForbiddenException("Only the assigned editor can update the defense note.");
+    }
+
+    series.EditorDefenseNote = string.IsNullOrWhiteSpace(request.Note) ? null : request.Note.Trim();
+    series.EditorDefenseNoteUpdatedAt = DateTime.UtcNow;
+    series.UpdatedAt = DateTime.UtcNow;
+    SeriesRepository.Update(series);
+    await _unitOfWork.SaveChangesAsync(cancellationToken);
+
+    return new EditorDefenseNoteResponse(seriesId, series.EditorDefenseNote, series.EditorDefenseNoteUpdatedAt);
+  }
+
   public async Task<SeriesResponse?> UploadCoverAsync(
     Guid callerId,
     Guid seriesId,
@@ -1293,7 +1475,9 @@ public class SeriesService
       s.PublishingFrequency == null ? null : PublishingFrequencies.ToDbValue(s.PublishingFrequency.Value),
       s.CreatedAt,
       s.UpdatedAt,
-      s.SubmittedForReviewAt);
+      s.SubmittedForReviewAt,
+      s.EditorDefenseNote,
+      s.EditorDefenseNoteUpdatedAt);
 
   private static ChapterResponse MapChapterToDto(Chapter c) =>
     new(

@@ -1,9 +1,16 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router';
 import { usePageMeta } from '../../hooks/usePageMeta';
 import { Card } from '../../app/components/ui/card';
 import { Badge } from '../../app/components/ui/badge';
 import { Button } from '../../app/components/ui/button';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '../../app/components/ui/select';
 import {
   Table,
   TableBody,
@@ -18,21 +25,40 @@ import { Eye, CheckCircle } from 'lucide-react';
 import { format } from 'date-fns';
 import { vi } from 'date-fns/locale';
 
+function currentMonthKey(): string {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+}
+
+function isPaid(status?: string | null): boolean {
+  return status?.toLowerCase() === 'paid';
+}
+
 export default function ApprovedTasksPage() {
   usePageMeta({ title: 'Task Đã Duyệt' });
   const navigate = useNavigate();
 
-  const [approvedTasks, setApprovedTasks] = useState<Task[]>([]);
+  const [tasks, setTasks] = useState<Task[]>([]);
   const [loading, setLoading] = useState(true);
+  const [monthFilter, setMonthFilter] = useState(currentMonthKey());
+
+  const monthOptions = useMemo(() => {
+    return Array.from({ length: 6 }, (_, i) => {
+      const d = new Date();
+      d.setMonth(d.getMonth() - i);
+      const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+      return { key, label: `Tháng ${d.getMonth() + 1}, ${d.getFullYear()}` };
+    });
+  }, []);
 
   useEffect(() => {
     let isActive = true;
     getMyTasks()
-      .then(tasks => {
-        if (isActive) setApprovedTasks(tasks.filter(t => t.status === 'Approved'));
+      .then(list => {
+        if (isActive) setTasks(list.filter(t => t.status === 'Approved'));
       })
       .catch(() => {
-        if (isActive) setApprovedTasks([]);
+        if (isActive) setTasks([]);
       })
       .finally(() => {
         if (isActive) setLoading(false);
@@ -42,20 +68,29 @@ export default function ApprovedTasksPage() {
     };
   }, []);
 
-  // Backend chưa có trạng thái thanh toán, nên hiển thị chờ thanh toán.
-  const getPaymentStatus = (taskId: string) => {
-    return 'Pending';
-  };
-
-  const getApprovedDate = (taskId: string) => {
-    return approvedTasks.find(task => task.id === taskId)?.createdAt || new Date().toISOString().split('T')[0];
-  };
+  const approvedTasks = tasks.filter(
+    t => t.reviewedAt?.startsWith(monthFilter) ?? false
+  );
 
   return (
     <div className="p-6 space-y-6">
-      <div className="flex items-center gap-2">
-        <CheckCircle className="h-5 w-5 text-green-600" />
-        <h1 className="text-2xl font-bold">Task Đã Duyệt</h1>
+      <div className="flex flex-wrap items-center justify-between gap-4">
+        <div className="flex items-center gap-2">
+          <CheckCircle className="h-5 w-5 text-green-600" />
+          <h1 className="text-2xl font-bold">Task Đã Duyệt</h1>
+        </div>
+        <Select value={monthFilter} onValueChange={setMonthFilter}>
+          <SelectTrigger className="w-[180px]">
+            <SelectValue placeholder="Chọn tháng" />
+          </SelectTrigger>
+          <SelectContent>
+            {monthOptions.map(opt => (
+              <SelectItem key={opt.key} value={opt.key}>
+                {opt.label}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
       </div>
 
       {loading ? (
@@ -66,7 +101,7 @@ export default function ApprovedTasksPage() {
         <Card>
           <div className="py-12 text-center text-muted-foreground">
             <CheckCircle className="h-12 w-12 mx-auto mb-4 text-muted-foreground/50" />
-            <p>Chưa có task nào được duyệt</p>
+            <p>Chưa có task nào được duyệt trong tháng này</p>
             <Button
               variant="outline"
               className="mt-4"
@@ -93,22 +128,23 @@ export default function ApprovedTasksPage() {
                 </TableHeader>
                 <TableBody>
                   {approvedTasks.map(task => {
-                    const paymentStatus = getPaymentStatus(task.id);
-                    const approvedDate = getApprovedDate(task.id);
+                    const paid = isPaid(task.paymentStatus);
 
                     return (
                       <TableRow key={task.id}>
                         <TableCell className="font-medium">{task.title}</TableCell>
                         <TableCell>{task.seriesTitle}</TableCell>
                         <TableCell>
-                          {format(new Date(approvedDate), 'dd/MM/yyyy', { locale: vi })}
+                          {task.reviewedAt
+                            ? format(new Date(task.reviewedAt), 'dd/MM/yyyy', { locale: vi })
+                            : '—'}
                         </TableCell>
                         <TableCell className="font-medium">
                           {task.price.toLocaleString('vi-VN')} ¥
                         </TableCell>
                         <TableCell>
-                          <Badge variant={paymentStatus === 'Paid' ? 'default' : 'secondary'}>
-                            {paymentStatus === 'Paid' ? 'Đã thanh toán' : 'Chờ thanh toán'}
+                          <Badge variant={paid ? 'default' : 'secondary'}>
+                            {paid ? 'Đã thanh toán' : 'Chờ thanh toán'}
                           </Badge>
                         </TableCell>
                         <TableCell className="text-right">
@@ -130,7 +166,7 @@ export default function ApprovedTasksPage() {
           </Card>
 
           <div className="text-sm text-muted-foreground">
-            {approvedTasks.length} task đã được duyệt
+            {approvedTasks.length} task đã được duyệt trong tháng đã chọn
           </div>
         </>
       )}

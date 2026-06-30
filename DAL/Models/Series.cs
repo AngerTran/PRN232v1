@@ -32,6 +32,10 @@ public partial class Series
 
     public DateTime? SubmittedForReviewAt { get; set; }
 
+    public string? EditorDefenseNote { get; set; }
+
+    public DateTime? EditorDefenseNoteUpdatedAt { get; set; }
+
     public virtual Profile Author { get; set; } = null!;
 
     public virtual ICollection<BoardVote> BoardVotes { get; set; } = new List<BoardVote>();

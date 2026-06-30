@@ -38,6 +38,7 @@ export interface PageAnnotation {
 export const ANNOTATION_TYPE_OPTIONS = [
   { value: 'content', label: 'Nội dung' },
   { value: 'dialogue', label: 'Hội thoại' },
+  { value: 'script', label: 'Kịch bản' },
   { value: 'warning', label: 'Cảnh báo' },
   { value: 'correction', label: 'Chỉnh sửa' },
   { value: 'approval', label: 'Phê duyệt' },

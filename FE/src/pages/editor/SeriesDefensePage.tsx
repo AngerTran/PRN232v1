@@ -5,7 +5,12 @@ import { usePageMeta } from '../../hooks/usePageMeta';
 import { Card, CardContent, CardHeader, CardTitle } from '../../app/components/ui/card';
 import { Button } from '../../app/components/ui/button';
 import { Badge } from '../../app/components/ui/badge';
-import { getEditorAssignedSeries } from '../../services/editorApi';
+import { Textarea } from '../../app/components/ui/textarea';
+import {
+  getEditorAssignedSeries,
+  getEditorDefenseNote,
+  saveEditorDefenseNote,
+} from '../../services/editorApi';
 import {
   getDangerZoneSeries,
   getRankingHistory,
@@ -19,6 +24,9 @@ interface DefenseItem {
   stats: SeriesStats | null;
   latestRank: number | null;
   voteCount: number;
+  defenseNote: string;
+  defenseNoteUpdatedAt?: string;
+  savingNote?: boolean;
 }
 
 export default function SeriesDefensePage() {
@@ -43,9 +51,10 @@ export default function SeriesDefensePage() {
 
         const enriched = await Promise.all(
           filtered.map(async series => {
-            const [stats, history] = await Promise.all([
+            const [stats, history, defense] = await Promise.all([
               getSeriesStats(series.id).catch(() => null),
               getRankingHistory(series.id).catch(() => []),
+              getEditorDefenseNote(series.id).catch(() => ({ seriesId: series.id, note: series.editorDefenseNote })),
             ]);
             const latest = history[0];
             return {
@@ -53,6 +62,8 @@ export default function SeriesDefensePage() {
               stats,
               latestRank: latest?.rankPosition ?? stats?.latestRanking?.rankPosition ?? null,
               voteCount: latest?.voteCount ?? stats?.latestRanking?.voteCount ?? series.voteScore,
+              defenseNote: defense.note ?? '',
+              defenseNoteUpdatedAt: defense.updatedAt ?? series.editorDefenseNoteUpdatedAt,
             } satisfies DefenseItem;
           })
         );
@@ -81,6 +92,43 @@ export default function SeriesDefensePage() {
       active = false;
     };
   }, [focusSeriesId]);
+
+  const handleSaveDefenseNote = async (seriesId: string) => {
+    const item = items.find(entry => entry.series.id === seriesId);
+    if (!item) return;
+
+    setItems(current =>
+      current.map(entry => entry.series.id === seriesId ? { ...entry, savingNote: true } : entry)
+    );
+    setError('');
+
+    try {
+      const saved = await saveEditorDefenseNote(seriesId, item.defenseNote);
+      setItems(current =>
+        current.map(entry =>
+          entry.series.id === seriesId
+            ? {
+                ...entry,
+                defenseNote: saved.note ?? '',
+                defenseNoteUpdatedAt: saved.updatedAt,
+                savingNote: false,
+              }
+            : entry
+        )
+      );
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Không thể lưu ghi chú bảo vệ.');
+      setItems(current =>
+        current.map(entry => entry.series.id === seriesId ? { ...entry, savingNote: false } : entry)
+      );
+    }
+  };
+
+  const updateDefenseNote = (seriesId: string, note: string) => {
+    setItems(current =>
+      current.map(entry => (entry.series.id === seriesId ? { ...entry, defenseNote: note } : entry))
+    );
+  };
 
   return (
     <div className="p-6 space-y-6">
@@ -114,7 +162,7 @@ export default function SeriesDefensePage() {
         </Card>
       ) : (
         <div className="space-y-4">
-          {items.map(({ series, stats, latestRank, voteCount }) => (
+          {items.map(({ series, stats, latestRank, voteCount, defenseNote, defenseNoteUpdatedAt, savingNote }) => (
             <Card
               key={series.id}
               className={series.id === focusSeriesId ? 'border-orange-300 shadow-md' : 'border-red-200'}
@@ -170,6 +218,35 @@ export default function SeriesDefensePage() {
                 <p className="text-sm text-muted-foreground leading-relaxed">
                   {series.synopsis || 'Chưa có tóm tắt series.'}
                 </p>
+
+                <div className="rounded-xl border border-border p-4 space-y-3">
+                  <div>
+                    <p className="text-sm font-semibold">Ghi chú bảo vệ trước hội đồng</p>
+                    <p className="text-xs text-muted-foreground mt-0.5">
+                      Soạn luận điểm, số liệu và đề xuất để hội đồng tham khảo khi quyết định.
+                    </p>
+                  </div>
+                  <Textarea
+                    rows={5}
+                    value={defenseNote}
+                    onChange={event => updateDefenseNote(series.id, event.target.value)}
+                    placeholder="Ví dụ: xu hướng vote ổn định, kế hoạch tăng tốc sản xuất, lý do nên tiếp tục xuất bản..."
+                  />
+                  <div className="flex items-center justify-between gap-2 flex-wrap">
+                    <p className="text-xs text-muted-foreground">
+                      {defenseNoteUpdatedAt
+                        ? `Cập nhật ${new Date(defenseNoteUpdatedAt).toLocaleString('vi-VN')}`
+                        : 'Chưa lưu ghi chú'}
+                    </p>
+                    <Button
+                      size="sm"
+                      disabled={savingNote}
+                      onClick={() => handleSaveDefenseNote(series.id)}
+                    >
+                      {savingNote ? 'Đang lưu...' : 'Lưu ghi chú'}
+                    </Button>
+                  </div>
+                </div>
 
                 <div className="flex flex-wrap gap-2">
                   <Button variant="outline" size="sm" onClick={() => navigate(`/editor/series/${series.id}`)}>

@@ -208,6 +208,9 @@ public partial class AppDbContext : DbContext
                     v => VoteEnumConversions.DecisionFromString(v),
                     v => VoteEnumConversions.DecisionToString(v))
                 .HasColumnName("decision");
+            entity.Property(e => e.PublishingFrequency)
+                .HasColumnName("publishing_frequency")
+                .HasColumnType("publishing_frequency");
             entity.Property(e => e.SeriesId).HasColumnName("series_id");
 
             entity.HasOne(d => d.BoardMember).WithMany(p => p.BoardVotes)
@@ -545,6 +548,8 @@ public partial class AppDbContext : DbContext
             entity.Property(e => e.VoteCount)
                 .HasDefaultValue(0)
                 .HasColumnName("vote_count");
+            entity.Property(e => e.Notes)
+                .HasColumnName("notes");
 
             entity.HasOne(d => d.Series).WithMany(p => p.Rankings)
                 .HasForeignKey(d => d.SeriesId)
@@ -592,6 +597,8 @@ public partial class AppDbContext : DbContext
                 .HasDefaultValueSql("now()")
                 .HasColumnName("updated_at");
             entity.Property(e => e.SubmittedForReviewAt).HasColumnName("submitted_for_review_at");
+            entity.Property(e => e.EditorDefenseNote).HasColumnName("editor_defense_note");
+            entity.Property(e => e.EditorDefenseNoteUpdatedAt).HasColumnName("editor_defense_note_updated_at");
 
             entity.HasOne(d => d.Author).WithMany(p => p.SeriesAuthors)
                 .HasForeignKey(d => d.AuthorId)
@@ -617,6 +624,7 @@ public partial class AppDbContext : DbContext
             entity.Property(e => e.AssistantId).HasColumnName("assistant_id");
             entity.Property(e => e.FileUrl).HasColumnName("file_url");
             entity.Property(e => e.Note).HasColumnName("note");
+            entity.Property(e => e.ReviewNote).HasColumnName("review_note");
             entity.Property(e => e.Status)
                 .HasConversion(
                     v => TaskEnumConversions.StatusFromString(v),

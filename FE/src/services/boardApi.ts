@@ -275,8 +275,11 @@ export async function getBoardVoteProgress(seriesId: string): Promise<BoardVoteP
   return mapVoteProgress(item);
 }
 
-export async function getLeaderboard(metric?: string): Promise<LeaderboardItem[]> {
-  const query = metric ? `?metric=${encodeURIComponent(metric)}` : '';
+export async function getLeaderboard(metric?: string, issueNumber?: number): Promise<LeaderboardItem[]> {
+  const params = new URLSearchParams();
+  if (metric) params.set('metric', metric);
+  if (issueNumber != null) params.set('issueNumber', String(issueNumber));
+  const query = params.toString() ? `?${params.toString()}` : '';
   const items = unwrap(await apiRequest<ApiEnvelope<ApiLeaderboardItem[]>>(`/api/board/leaderboard${query}`));
   return items.map(item => ({
     seriesId: item.seriesId,
@@ -285,6 +288,120 @@ export async function getLeaderboard(metric?: string): Promise<LeaderboardItem[]
     totalVotes: item.totalVotes,
     popularityScore: Number(item.popularityScore ?? 0),
   }));
+}
+
+export interface VoteInputSeriesRow {
+  seriesId: string;
+  title: string;
+  status: string;
+  existingRankPosition?: number | null;
+  existingVoteCount?: number | null;
+  existingPopularityScore?: number | null;
+  existingNotes?: string | null;
+  scheduleCountForIssue: number;
+}
+
+export interface VoteInputContext {
+  suggestedIssueNumber: number;
+  availableIssueNumbers: number[];
+  series: VoteInputSeriesRow[];
+}
+
+interface ApiVoteInputSeriesRow {
+  seriesId: string;
+  title: string;
+  status: string;
+  existingRankPosition?: number | null;
+  existingVoteCount?: number | null;
+  existingPopularityScore?: number | null;
+  existingNotes?: string | null;
+  scheduleCountForIssue: number;
+}
+
+interface ApiVoteInputContext {
+  suggestedIssueNumber: number;
+  availableIssueNumbers: number[];
+  series: ApiVoteInputSeriesRow[];
+}
+
+export async function getVoteInputContext(issueNumber?: number): Promise<VoteInputContext> {
+  const query = issueNumber != null ? `?issueNumber=${issueNumber}` : '';
+  const item = unwrap(await apiRequest<ApiEnvelope<ApiVoteInputContext>>(`/api/rankings/vote-input${query}`));
+  return {
+    suggestedIssueNumber: item.suggestedIssueNumber,
+    availableIssueNumbers: item.availableIssueNumbers,
+    series: item.series.map(row => ({
+      seriesId: row.seriesId,
+      title: row.title,
+      status: row.status,
+      existingRankPosition: row.existingRankPosition ?? undefined,
+      existingVoteCount: row.existingVoteCount ?? undefined,
+      existingPopularityScore: row.existingPopularityScore ?? undefined,
+      existingNotes: row.existingNotes ?? undefined,
+      scheduleCountForIssue: row.scheduleCountForIssue,
+    })),
+  };
+}
+
+export async function bulkSaveRankings(
+  issueNumber: number,
+  entries: Array<{
+    seriesId: string;
+    rankPosition: number;
+    voteCount?: number;
+    popularityScore?: number;
+    notes?: string;
+  }>
+): Promise<void> {
+  await apiRequest('/api/rankings/bulk', {
+    method: 'POST',
+    body: JSON.stringify({ issueNumber, entries }),
+  });
+}
+
+export interface RecentRankingInput {
+  id: string;
+  seriesId: string;
+  seriesTitle?: string;
+  issueNumber: number;
+  rankPosition: number;
+  voteCount: number;
+  popularityScore: number;
+  notes?: string;
+  createdAt?: string;
+}
+
+interface ApiRankingResponse {
+  id: string;
+  seriesId: string;
+  seriesTitle?: string | null;
+  issueNumber: number;
+  rankPosition: number;
+  voteCount?: number | null;
+  popularityScore?: number | null;
+  notes?: string | null;
+  createdAt?: string | null;
+}
+
+export async function getRecentRankingInputs(limit = 40): Promise<RecentRankingInput[]> {
+  const items = unwrap(
+    await apiRequest<ApiEnvelope<ApiRankingResponse[]>>(`/api/rankings/recent-inputs?limit=${limit}`)
+  );
+  return items.map(item => ({
+    id: item.id,
+    seriesId: item.seriesId,
+    seriesTitle: item.seriesTitle ?? undefined,
+    issueNumber: item.issueNumber,
+    rankPosition: item.rankPosition,
+    voteCount: item.voteCount ?? 0,
+    popularityScore: Number(item.popularityScore ?? 0),
+    notes: item.notes ?? undefined,
+    createdAt: item.createdAt ?? undefined,
+  }));
+}
+
+export async function listRankingIssues(): Promise<number[]> {
+  return unwrap(await apiRequest<ApiEnvelope<number[]>>('/api/rankings/issues'));
 }
 
 export async function listBoardVotes(seriesId?: string): Promise<BoardVote[]> {
@@ -296,12 +413,18 @@ export async function listBoardVotes(seriesId?: string): Promise<BoardVote[]> {
 export async function castBoardVote(
   seriesId: string,
   decision: BoardDecision,
-  comment?: string
+  comment?: string,
+  publishingFrequency?: 'weekly' | 'monthly'
 ): Promise<BoardVote> {
   const item = unwrap(
     await apiRequest<ApiEnvelope<ApiBoardVote>>('/api/board/votes', {
       method: 'POST',
-      body: JSON.stringify({ seriesId, decision, comment }),
+      body: JSON.stringify({
+        seriesId,
+        decision,
+        comment,
+        publishingFrequency: decision === 'approve' ? publishingFrequency : undefined,
+      }),
     })
   );
   return mapVote(item);

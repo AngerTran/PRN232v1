@@ -56,7 +56,11 @@ export interface WorkspaceTask {
   status: TaskStatus;
   region: Region;
   submittedResult?: string;
-  mangakaFeedback?: string;
+  submittedFileUrl?: string;
+  reviewNote?: string;
+  assistantSubmissionNote?: string;
+  reviewedAt?: string;
+  latestSubmittedAt?: string;
   createdAt?: string;
   resourceUrls?: string[];
   assignedBy?: string;
@@ -207,6 +211,12 @@ interface ApiTask {
   resourceUrls?: string[] | null;
   price?: number | null;
   paymentStatus?: string | null;
+  latestSubmissionFileUrl?: string | null;
+  latestSubmissionPreviewUrl?: string | null;
+  assistantSubmissionNote?: string | null;
+  reviewNote?: string | null;
+  reviewedAt?: string | null;
+  latestSubmittedAt?: string | null;
 }
 
 interface ApiKanbanItem {
@@ -324,6 +334,12 @@ function mapTask(
     price: Number(task.price) || 0,
     status: mapTaskStatus(task.status),
     region: normalizeRegion(task.region),
+    submittedResult: task.latestSubmissionPreviewUrl ?? task.latestSubmissionFileUrl ?? undefined,
+    submittedFileUrl: task.latestSubmissionFileUrl ?? undefined,
+    reviewNote: task.reviewNote ?? undefined,
+    assistantSubmissionNote: task.assistantSubmissionNote ?? undefined,
+    reviewedAt: task.reviewedAt?.slice(0, 10),
+    latestSubmittedAt: task.latestSubmittedAt?.slice(0, 10),
     createdAt: task.createdAt?.slice(0, 10),
     resourceUrls: task.resourceUrls ?? undefined,
     assignedBy: task.assignedBy ?? undefined,

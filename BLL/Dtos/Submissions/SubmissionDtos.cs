@@ -11,6 +11,7 @@ public record SubmissionResponse(
     string FileUrl,
     string? PreviewImageUrl,
     string? Note,
+    string? ReviewNote,
     string Status,
     Guid? ReviewedBy,
     string? ReviewedByName,
@@ -24,4 +25,6 @@ public record ReviewSubmissionRequest(
 public record AssistantEarningsResponse(
     int ApprovedSubmissions,
     int ApprovedPages,
+    decimal TotalEarnings,
+    decimal PaidEarnings,
     string Month);

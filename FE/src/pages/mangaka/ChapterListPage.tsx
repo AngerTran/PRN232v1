@@ -7,7 +7,7 @@ import EmptyState from '../../components/ui/EmptyState';
 import { usePageMeta } from '../../hooks/usePageMeta';
 import { useConfirm } from '../../components/ui/ConfirmDialog';
 import type { Chapter, Series } from '../../types/domain';
-import { getSeries, getSeriesChapters, deleteChapter } from '../../services/seriesApi';
+import { getSeries, getSeriesChapters, deleteChapter, canMangakaProduceOnSeries, SERIES_PRODUCTION_LOCK_HINT } from '../../services/seriesApi';
 import { FileText } from 'lucide-react';
 
 export default function ChapterListPage() {
@@ -92,6 +92,9 @@ export default function ChapterListPage() {
     }
   };
 
+  const canProduce = series ? canMangakaProduceOnSeries(series.status) : false;
+  const productionLockHint = series ? SERIES_PRODUCTION_LOCK_HINT[series.status] : undefined;
+
   if (loading) {
     return <div className="p-6 text-sm text-muted-foreground">Đang tải chương...</div>;
   }
@@ -109,10 +112,20 @@ export default function ChapterListPage() {
             <p className="text-sm text-muted-foreground">{chapters.length} chương</p>
           </div>
         </div>
-        <Button variant="primary" onClick={() => navigate(`/mangaka/series/${seriesId}/chapters/create`)}>
+        <Button
+          variant="primary"
+          disabled={!canProduce}
+          onClick={() => navigate(`/mangaka/series/${seriesId}/chapters/create`)}
+        >
           <Plus size={16} /> Chương mới
         </Button>
       </div>
+
+      {!canProduce && productionLockHint && (
+        <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+          {productionLockHint}
+        </div>
+      )}
 
       {error && (
         <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
@@ -126,9 +139,11 @@ export default function ChapterListPage() {
           title="Chưa có chương nào"
           description="Tạo chương đầu tiên cho series này."
           action={
-            <Button variant="primary" onClick={() => navigate(`/mangaka/series/${seriesId}/chapters/create`)}>
-              Tạo Chương Đầu Tiên
-            </Button>
+            canProduce ? (
+              <Button variant="primary" onClick={() => navigate(`/mangaka/series/${seriesId}/chapters/create`)}>
+                Tạo Chương Đầu Tiên
+              </Button>
+            ) : undefined
           }
         />
       ) : (

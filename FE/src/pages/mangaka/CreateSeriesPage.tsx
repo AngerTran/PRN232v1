@@ -9,7 +9,11 @@ import { createSeries, uploadSeriesCover, buildSeriesDescription, submitSeriesFo
 
 const GENRES = ['Action', 'Adventure', 'Comedy', 'Drama', 'Fantasy', 'Historical', 'Horror', 'Mystery', 'Romance', 'Sci-fi', 'Slice of Life', 'Sports', 'Supernatural', 'Thriller'];
 const AUDIENCES = ['Shōnen (12-18)', 'Shōjo (12-18)', 'Seinen (18-35)', 'Josei (20-40)', 'Kodomomuke (Trẻ em)'];
-const PUBLISHING_TYPES = ['Hàng tuần', 'Hai tuần một lần', 'Hàng tháng'];
+const PUBLISHING_OPTIONS = [
+  { value: 'weekly', label: 'Hàng tuần' },
+  { value: 'biweekly', label: 'Hai tuần một lần' },
+  { value: 'monthly', label: 'Hàng tháng' },
+];
 
 interface FormState {
   title: string;
@@ -25,7 +29,7 @@ export default function CreateSeriesPage() {
   const { setPageMeta } = usePageMeta();
   const [form, setForm] = useState<FormState>({
     title: '', genres: [], synopsis: '', targetAudience: AUDIENCES[0],
-    publishingType: 'Weekly', mainCharacters: '',
+    publishingType: 'weekly', mainCharacters: '',
   });
   const [coverFile, setCoverFile] = useState<File | null>(null);
   const [manuscriptFile, setManuscriptFile] = useState<File | null>(null);
@@ -61,6 +65,10 @@ export default function CreateSeriesPage() {
     }
     if (forSubmit && !form.synopsis.trim()) {
       setError('Vui lòng nhập tóm tắt series.');
+      return false;
+    }
+    if (forSubmit && !manuscriptFile) {
+      setError('Vui lòng tải lên bản thảo nháp trước khi gửi xét duyệt.');
       return false;
     }
     return true;
@@ -222,7 +230,9 @@ export default function CreateSeriesPage() {
                 <div>
                   <label className="block text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-1.5">Lịch xuất bản</label>
                   <select value={form.publishingType} onChange={update('publishingType')} className={inputClass}>
-                    {PUBLISHING_TYPES.map(t => <option key={t}>{t}</option>)}
+                    {PUBLISHING_OPTIONS.map(o => (
+                      <option key={o.value} value={o.value}>{o.label}</option>
+                    ))}
                   </select>
                 </div>
               </div>

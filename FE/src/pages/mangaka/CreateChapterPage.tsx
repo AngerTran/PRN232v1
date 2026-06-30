@@ -3,9 +3,9 @@ import { useParams, useNavigate } from 'react-router';
 import { ChevronLeft } from 'lucide-react';
 import Button from '../../components/ui/Button';
 import Card, { CardHeader, CardTitle } from '../../components/ui/Card';
-import { MultiUploadBox } from '../../components/ui/UploadBox';
+import UploadBox, { MultiUploadBox } from '../../components/ui/UploadBox';
 import { usePageMeta } from '../../hooks/usePageMeta';
-import { createChapter, getSeries, getSeriesChapters, canMangakaProduceOnSeries, SERIES_PRODUCTION_LOCK_HINT } from '../../services/seriesApi';
+import { createChapter, getSeries, getSeriesChapters, canMangakaProduceOnSeries, SERIES_PRODUCTION_LOCK_HINT, uploadChapterManuscript } from '../../services/seriesApi';
 import { uploadChapterPage } from '../../services/workspaceApi';
 
 export default function CreateChapterPage() {
@@ -22,6 +22,7 @@ export default function CreateChapterPage() {
     deadline: '',
   });
   const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
+  const [manuscriptFile, setManuscriptFile] = useState<File | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [productionBlocked, setProductionBlocked] = useState<string | null>(null);
@@ -81,9 +82,13 @@ export default function CreateChapterPage() {
         chapterNumber: Number(form.number) || 1,
         title: form.title || undefined,
         deadline: form.deadline || undefined,
+        manuscriptUrl: form.description.trim() || undefined,
       });
 
-      // Upload selected draft pages sequentially
+      if (manuscriptFile) {
+        await uploadChapterManuscript(created.id, manuscriptFile);
+      }
+
       if (selectedFiles.length > 0) {
         for (let i = 0; i < selectedFiles.length; i++) {
           await uploadChapterPage(created.id, {
@@ -152,6 +157,16 @@ export default function CreateChapterPage() {
               )}
             </div>
           </div>
+        </Card>
+
+        <Card>
+          <CardHeader><CardTitle>Bản thảo chương</CardTitle></CardHeader>
+          <UploadBox
+            label="Tải bản thảo (PDF/ZIP/CBZ)"
+            accept=".pdf,.zip,.cbz"
+            hint="Tuỳ chọn — file bản thảo đầy đủ của chương"
+            onChange={file => setManuscriptFile(file)}
+          />
         </Card>
 
         <Card>

@@ -5,6 +5,7 @@ using DAL.Common;
 using DAL.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
@@ -13,9 +14,11 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace DAL.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    partial class AppDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260630004227_AddEditorDefenseNoteAndAnnotationScript")]
+    partial class AddEditorDefenseNoteAndAnnotationScript
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -236,10 +239,6 @@ namespace DAL.Migrations
                     b.Property<VoteDecisionDb>("Decision")
                         .HasColumnType("vote_decision")
                         .HasColumnName("decision");
-
-                    b.Property<PublishingFrequency?>("PublishingFrequency")
-                        .HasColumnType("publishing_frequency")
-                        .HasColumnName("publishing_frequency");
 
                     b.Property<Guid?>("SeriesId")
                         .HasColumnType("uuid")
@@ -745,10 +744,6 @@ namespace DAL.Migrations
                         .HasDefaultValue(0)
                         .HasColumnName("vote_count");
 
-                    b.Property<string>("Notes")
-                        .HasColumnType("text")
-                        .HasColumnName("notes");
-
                     b.HasKey("Id")
                         .HasName("rankings_pkey");
 
@@ -979,10 +974,6 @@ namespace DAL.Migrations
                     b.Property<string>("PreviewImageUrl")
                         .HasColumnType("text")
                         .HasColumnName("preview_image_url");
-
-                    b.Property<string>("ReviewNote")
-                        .HasColumnType("text")
-                        .HasColumnName("review_note");
 
                     b.Property<DateTime?>("ReviewedAt")
                         .HasColumnType("timestamp with time zone")

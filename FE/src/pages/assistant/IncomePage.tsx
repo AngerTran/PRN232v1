@@ -22,13 +22,18 @@ import { IncomeSummaryCard } from '../../app/components/ui/assistant';
 import type { Task } from '../../types/domain';
 import { getMyTasks } from '../../services/tasksApi';
 import { getMyEarnings, type AssistantEarnings } from '../../services/submissionsApi';
-import { FileCheck, ClipboardCheck, Clock, CheckCircle, Eye } from 'lucide-react';
+import { FileCheck, ClipboardCheck, Clock, CheckCircle, Eye, Wallet } from 'lucide-react';
 import { format } from 'date-fns';
 import { vi } from 'date-fns/locale';
 
 function currentMonthKey(): string {
   const d = new Date();
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+}
+
+function taskReviewedInMonth(task: Task, monthKey: string): boolean {
+  if (!task.reviewedAt) return false;
+  return task.reviewedAt.startsWith(monthKey);
 }
 
 export default function IncomePage() {
@@ -39,7 +44,6 @@ export default function IncomePage() {
   const [earnings, setEarnings] = useState<AssistantEarnings | null>(null);
   const [monthFilter, setMonthFilter] = useState(currentMonthKey());
 
-  // 6 tháng gần nhất, tạo động theo ngày hiện tại.
   const monthOptions = useMemo(() => {
     return Array.from({ length: 6 }, (_, i) => {
       const d = new Date();
@@ -78,7 +82,9 @@ export default function IncomePage() {
     };
   }, [monthFilter]);
 
-  const approvedTasks = tasks.filter(t => t.status === 'Approved');
+  const approvedInMonth = tasks.filter(
+    t => t.status === 'Approved' && taskReviewedInMonth(t, monthFilter)
+  );
   const submittedTasks = tasks.filter(t => t.status === 'Submitted');
 
   return (
@@ -103,8 +109,13 @@ export default function IncomePage() {
         </Select>
       </div>
 
-      {/* Summary Cards */}
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-5">
+        <IncomeSummaryCard
+          title="Thu Nhập Tháng"
+          value={`${(earnings?.totalEarnings ?? 0).toLocaleString('vi-VN')} ¥`}
+          icon={Wallet}
+          description={`Đã thanh toán: ${(earnings?.paidEarnings ?? 0).toLocaleString('vi-VN')} ¥`}
+        />
         <IncomeSummaryCard
           title="Bài Được Duyệt"
           value={earnings?.approvedSubmissions ?? 0}
@@ -119,9 +130,9 @@ export default function IncomePage() {
         />
         <IncomeSummaryCard
           title="Task Đã Duyệt"
-          value={approvedTasks.length}
+          value={approvedInMonth.length}
           icon={ClipboardCheck}
-          description="Tổng số task đã duyệt"
+          description="Trong tháng đã chọn"
         />
         <IncomeSummaryCard
           title="Task Chờ Duyệt"
@@ -131,7 +142,6 @@ export default function IncomePage() {
         />
       </div>
 
-      {/* Approved tasks table */}
       <Card>
         <div className="overflow-x-auto">
           <Table>
@@ -140,27 +150,31 @@ export default function IncomePage() {
                 <TableHead>Task</TableHead>
                 <TableHead>Series</TableHead>
                 <TableHead>Trang</TableHead>
-                <TableHead>Hạn Nộp</TableHead>
+                <TableHead>Ngày duyệt</TableHead>
+                <TableHead className="text-right">Giá</TableHead>
                 <TableHead className="text-right">Hành Động</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
-              {approvedTasks.length === 0 ? (
+              {approvedInMonth.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={5} className="text-center py-8 text-muted-foreground">
-                    Chưa có task nào được duyệt
+                  <TableCell colSpan={6} className="text-center py-8 text-muted-foreground">
+                    Chưa có task được duyệt trong tháng này
                   </TableCell>
                 </TableRow>
               ) : (
-                approvedTasks.map(task => (
+                approvedInMonth.map(task => (
                   <TableRow key={task.id}>
                     <TableCell className="font-medium">{task.title}</TableCell>
                     <TableCell>{task.seriesTitle}</TableCell>
                     <TableCell>Trang {task.pageNumber}</TableCell>
                     <TableCell>
-                      {task.deadline
-                        ? format(new Date(task.deadline), 'dd/MM/yyyy', { locale: vi })
+                      {task.reviewedAt
+                        ? format(new Date(task.reviewedAt), 'dd/MM/yyyy', { locale: vi })
                         : '—'}
+                    </TableCell>
+                    <TableCell className="text-right font-medium">
+                      {task.price.toLocaleString('vi-VN')} ¥
                     </TableCell>
                     <TableCell className="text-right">
                       <Button
@@ -179,11 +193,6 @@ export default function IncomePage() {
           </Table>
         </div>
       </Card>
-
-      <p className="text-xs text-muted-foreground">
-        Backend hiện chưa cung cấp số tiền theo task; trang hiển thị số trang/bài được duyệt từ
-        thống kê thu nhập.
-      </p>
     </div>
   );
 }

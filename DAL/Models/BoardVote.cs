@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using DAL.Common;
 
 namespace DAL.Models;
 
@@ -14,6 +15,8 @@ public partial class BoardVote
     public string Decision { get; set; } = null!;
 
     public string? Comment { get; set; }
+
+    public PublishingFrequency? PublishingFrequency { get; set; }
 
     public DateTime? CreatedAt { get; set; }
 

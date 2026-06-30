@@ -103,6 +103,57 @@ public class SeriesController : ControllerBase
         return stats is null ? NotFound() : Ok(stats);
     }
 
+    [HttpGet("{id:guid}/studio-progress")]
+    [SwaggerOperation(Summary = "Get editor studio progress", Description = "Returns chapter, page, and task completion metrics for assigned editor studio monitoring.")]
+    [ProducesResponseType(typeof(EditorStudioProgressResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<ActionResult<EditorStudioProgressResponse>> GetStudioProgress(Guid id, CancellationToken cancellationToken)
+    {
+        if (!this.TryGetUserId(out var userId))
+        {
+            return Unauthorized();
+        }
+
+        var progress = await _seriesService.GetStudioProgressAsync(userId, id, cancellationToken);
+        return progress is null ? NotFound() : Ok(progress);
+    }
+
+    [HttpGet("{id:guid}/editor-defense-note")]
+    [SwaggerOperation(Summary = "Get editor defense note", Description = "Returns the editor defense note prepared for board review.")]
+    [ProducesResponseType(typeof(EditorDefenseNoteResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<ActionResult<EditorDefenseNoteResponse>> GetEditorDefenseNote(Guid id, CancellationToken cancellationToken)
+    {
+        if (!this.TryGetUserId(out var userId))
+        {
+            return Unauthorized();
+        }
+
+        var note = await _seriesService.GetEditorDefenseNoteAsync(userId, id, cancellationToken);
+        return note is null ? NotFound() : Ok(note);
+    }
+
+    [HttpPut("{id:guid}/editor-defense-note")]
+    [SwaggerOperation(Summary = "Update editor defense note", Description = "Assigned editor saves talking points for defending the series before the board.")]
+    [ProducesResponseType(typeof(EditorDefenseNoteResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<ActionResult<EditorDefenseNoteResponse>> UpdateEditorDefenseNote(
+        Guid id,
+        [FromBody] UpdateEditorDefenseNoteRequest request,
+        CancellationToken cancellationToken)
+    {
+        if (!this.TryGetUserId(out var userId))
+        {
+            return Unauthorized();
+        }
+
+        var note = await _seriesService.UpdateEditorDefenseNoteAsync(userId, id, request, cancellationToken);
+        return note is null ? NotFound() : Ok(note);
+    }
+
     [HttpPost("{id:guid}/cover")]
     [Consumes("multipart/form-data")]
     [SwaggerOperation(Summary = "Upload series cover", Description = "Uploads a cover image to Supabase Storage and updates the series cover URL. Requires permission to modify the series.")]

@@ -152,7 +152,16 @@ public class TaskService
             .OrderByDescending(t => t.CreatedAt)
             .ToListAsync(cancellationToken);
 
-        return tasks.Select(t => MapTaskItem(t, t.AssignedToNavigation?.FullName)).ToList();
+        var taskIds = tasks.Select(t => t.Id).ToList();
+        var latestSubmissions = await LoadLatestSubmissionsAsync(taskIds, cancellationToken);
+
+        return tasks
+            .Select(t => MapTaskItem(
+                t,
+                t.AssignedToNavigation?.FullName,
+                assignedByName: t.AssignedByNavigation?.FullName,
+                latestSubmissions.GetValueOrDefault(t.Id)))
+            .ToList();
     }
 
     public async Task<TaskItemResponse?> GetByIdAsync(
@@ -167,7 +176,12 @@ public class TaskService
         }
 
         await EnsureCanViewTaskAsync(callerId, task, cancellationToken);
-        return MapTaskItem(task, task.AssignedToNavigation?.FullName);
+        var latestSubmissions = await LoadLatestSubmissionsAsync([taskId], cancellationToken);
+        return MapTaskItem(
+            task,
+            task.AssignedToNavigation?.FullName,
+            assignedByName: task.AssignedByNavigation?.FullName,
+            latestSubmissions.GetValueOrDefault(taskId));
     }
 
     // Postgres `timestamptz` chỉ chấp nhận UTC. Deadline từ client thường có Kind=Unspecified
@@ -545,7 +559,11 @@ public class TaskService
     private static KanbanColumnItemResponse MapKanbanItem(EditorTask t) =>
         new(t.Id, t.TaskType, t.Status, t.PageId, t.Title, t.AssignedTo);
 
-    private static TaskItemResponse MapTaskItem(EditorTask t, string? assignedToName, string? assignedByName = null) =>
+    private static TaskItemResponse MapTaskItem(
+        EditorTask t,
+        string? assignedToName,
+        string? assignedByName = null,
+        Submission? latestSubmission = null) =>
         new(
             t.Id,
             t.PageId,
@@ -564,7 +582,37 @@ public class TaskService
             t.CreatedAt,
             t.ResourceUrls,
             assignedByName ?? t.AssignedByNavigation?.FullName,
-            t.Price);
+            t.Price,
+            string.IsNullOrWhiteSpace(t.PaymentStatus) ? PaymentStatuses.Unpaid : t.PaymentStatus,
+            latestSubmission?.FileUrl,
+            latestSubmission?.PreviewImageUrl,
+            latestSubmission?.Note,
+            latestSubmission?.ReviewNote,
+            latestSubmission?.ReviewedAt,
+            latestSubmission?.SubmittedAt);
+
+    private async Task<Dictionary<Guid, Submission>> LoadLatestSubmissionsAsync(
+        IReadOnlyCollection<Guid> taskIds,
+        CancellationToken cancellationToken)
+    {
+        if (taskIds.Count == 0)
+        {
+            return new Dictionary<Guid, Submission>();
+        }
+
+        var submissions = await _unitOfWork.Context.Submissions
+            .AsNoTracking()
+            .Where(s => taskIds.Contains(s.TaskId))
+            .ToListAsync(cancellationToken);
+
+        return submissions
+            .GroupBy(s => s.TaskId)
+            .ToDictionary(
+                g => g.Key,
+                g => g.OrderByDescending(s => s.VersionNumber ?? 0)
+                    .ThenByDescending(s => s.SubmittedAt)
+                    .First());
+    }
 
     private static string NormalizeRegionJson(string region)
     {

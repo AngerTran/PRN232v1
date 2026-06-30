@@ -8,6 +8,8 @@ public static class WorkflowNotificationPaths
 
     public static string MangakaSeries(Guid seriesId) => $"/mangaka/series/{seriesId}";
 
+    public static string MangakaSeriesRanking(Guid seriesId) => $"/mangaka/series/{seriesId}/ranking";
+
     public static string EditorSeries(Guid seriesId) => $"/editor/series/{seriesId}";
 
     public static string BoardSubmission(Guid seriesId) => $"/board/submissions/{seriesId}";
