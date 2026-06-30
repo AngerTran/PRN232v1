@@ -21,7 +21,7 @@ EXPOSE 3001
 
 ENV ASPNETCORE_URLS=http://+:3001
 ENV Swagger__Enabled=true
-ENV Google__RedirectUri=http://www.chaydev.me/auth/google/callback
-ENV Google__FrontendBaseUrl=http://www.chaydev.me
+ENV Google__RedirectUri=https://www.chaydev.me/auth/google/callback
+ENV Google__FrontendBaseUrl=https://www.chaydev.me
 
 ENTRYPOINT ["dotnet", "PRN232v1.dll"]
