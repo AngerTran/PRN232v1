@@ -99,8 +99,15 @@ export async function apiRequest<T>(path: string, options: ApiRequestOptions = {
         error?: string;
         error_description?: string;
         msg?: string;
+        errors?: Record<string, string[]>;
       };
+
+      const validationMessages = parsed.errors
+        ? Object.values(parsed.errors).flat().filter(Boolean)
+        : [];
+
       message =
+        validationMessages[0] ||
         parsed.message ||
         parsed.error_description ||
         parsed.msg ||

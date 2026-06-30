@@ -15,7 +15,7 @@ public record ChapterResponse(
     DateTime? UpdatedAt);
 
 public record CreateChapterRequest(
-    [Range(1, int.MaxValue)] int ChapterNumber,
+    [Range(0, int.MaxValue)] int ChapterNumber,
     [MaxLength(255)] string? Title,
     string? ManuscriptUrl,
     DateTime? Deadline,
