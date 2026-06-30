@@ -29,7 +29,22 @@ function isVietnameseText(value: string): boolean {
   return /[ăâđêôơưáàảãạắằẳẵặấầẩẫậéèẻẽẹếềểễệíìỉĩịóòỏõọốồổỗộớờởỡợúùủũụứừửữựýỳỷỹỵ]/i.test(value);
 }
 
-/** Chuyển lỗi API/Supabase sang thông báo tiếng Việt dễ hiểu cho người dùng. */
+export function formatApiErrorMessage(raw: string, status?: number, path?: string): string {
+  const context: AuthErrorContext = (() => {
+    const normalizedPath = (path ?? '').toLowerCase();
+    if (normalizedPath.includes('/auth/register')) return 'register';
+    if (normalizedPath.includes('/auth/google')) return 'google';
+    if (normalizedPath.includes('/auth/login') || normalizedPath.includes('/auth/refresh')) return 'login';
+    return 'generic';
+  })();
+
+  if (!raw.trim() && status === 401) {
+    return context === 'login' ? 'Email hoặc mật khẩu không đúng.' : 'Phiên đăng nhập không hợp lệ. Vui lòng đăng nhập lại.';
+  }
+
+  return formatAuthError(new Error(raw), context);
+}
+
 export function formatAuthError(error: unknown, context: AuthErrorContext = 'generic'): string {
   const raw = error instanceof Error ? error.message.trim() : String(error ?? '').trim();
   if (!raw) {

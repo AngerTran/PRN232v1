@@ -1,3 +1,5 @@
+import { formatApiErrorMessage } from '../utils/authErrorMessages';
+
 const PRODUCTION_API_BASE_URL = 'https://api.chaydev.me';
 
 function resolveApiBaseUrl(): string {
@@ -100,7 +102,7 @@ export async function apiRequest<T>(path: string, options: ApiRequestOptions = {
       if (firstLine) message = firstLine;
     }
 
-    throw new Error(message || `Request failed with status ${response.status}`);
+    throw new Error(formatApiErrorMessage(message, response.status, path));
   }
 
   if (response.status === 204) {

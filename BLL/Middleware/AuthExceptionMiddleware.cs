@@ -1,6 +1,7 @@
 using System.Net;
 using System.Text.Json;
 using Npgsql;
+using BLL.Common;
 using BLL.Services.ActivityLogs;
 using BLL.Services.Auth;
 using BLL.Services.Profiles;
@@ -41,7 +42,7 @@ public class AuthExceptionMiddleware
 
             context.Response.StatusCode = (int)ex.StatusCode;
             context.Response.ContentType = "application/json";
-            await context.Response.WriteAsync(JsonSerializer.Serialize(new { message = ex.Message }));
+            await context.Response.WriteAsync(JsonSerializer.Serialize(new { message = AuthUserMessages.Localize(ex.Message) }));
         }
         catch (ProfileForbiddenException ex)
         {
