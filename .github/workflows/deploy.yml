@@ -16,6 +16,8 @@ env:
   BE_CONTAINER: cons-dotnet
   FE_CONTAINER: cons-fe
   SERVER_SRC_DIR: /root/PRN232v1
+  PUBLIC_API_BASE_URL: https://api.chaydev.me
+  PUBLIC_FRONTEND_BASE_URL: https://www.chaydev.me
 
 jobs:
   build:
@@ -50,13 +52,15 @@ jobs:
 
       - name: Build FE
         working-directory: FE
+        env:
+          VITE_API_BASE_URL: ${{ secrets.PUBLIC_API_BASE_URL || env.PUBLIC_API_BASE_URL }}
         run: npm run build
 
       - name: Build BE Docker image
         run: docker build . -t ${{ env.BE_IMAGE }}:latest
 
       - name: Build FE Docker image
-        run: docker build -t ${{ env.FE_IMAGE }}:latest ./FE
+        run: docker build -t ${{ env.FE_IMAGE }}:latest --build-arg VITE_API_BASE_URL=${{ secrets.PUBLIC_API_BASE_URL || env.PUBLIC_API_BASE_URL }} ./FE
 
   deploy:
     name: Deploy to server
@@ -81,6 +85,8 @@ jobs:
       - name: Create BE env file
         env:
           SSH_HOST: ${{ secrets.SSH_HOST }}
+          PUBLIC_FRONTEND_BASE_URL: ${{ secrets.PUBLIC_FRONTEND_BASE_URL || 'https://www.chaydev.me' }}
+          PUBLIC_API_BASE_URL: ${{ secrets.PUBLIC_API_BASE_URL || 'https://api.chaydev.me' }}
           SUPABASE_CONNECTION_STRING: ${{ secrets.SUPABASE_CONNECTION_STRING }}
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
@@ -102,8 +108,8 @@ jobs:
           ASPNETCORE_ENVIRONMENT=Production
           ASPNETCORE_URLS=http://+:3001
           Swagger__Enabled=true
-          Google__RedirectUri=http://${SSH_HOST}:3002/auth/google/callback
-          Google__FrontendBaseUrl=http://${SSH_HOST}:3002
+          Google__RedirectUri=${PUBLIC_FRONTEND_BASE_URL}/auth/google/callback
+          Google__FrontendBaseUrl=${PUBLIC_FRONTEND_BASE_URL}
           EOF
 
           add_optional() {
@@ -157,7 +163,7 @@ jobs:
           SSH_PORT="${SSH_PORT:-22}"
           DEPLOY_BRANCH="${{ github.ref_name }}"
           ssh -i ~/.ssh/prn232_deploy_key -p "$SSH_PORT" "$SSH_USER@$SSH_HOST" \
-            "DEPLOY_BRANCH='$DEPLOY_BRANCH' SERVER_SRC_DIR='${{ env.SERVER_SRC_DIR }}' PUBLIC_HOST='${{ secrets.SSH_HOST }}' bash -s" <<'EOF'
+            "DEPLOY_BRANCH='$DEPLOY_BRANCH' SERVER_SRC_DIR='${{ env.SERVER_SRC_DIR }}' PUBLIC_API_BASE_URL='${{ secrets.PUBLIC_API_BASE_URL || env.PUBLIC_API_BASE_URL }}' bash -s" <<'EOF'
           set -e
 
           cd "$SERVER_SRC_DIR"
@@ -181,7 +187,7 @@ jobs:
           fi
 
           docker build . -t img-dotnet:latest
-          docker build -t img-fe:latest ./FE
+          docker build -t img-fe:latest --build-arg VITE_API_BASE_URL="$PUBLIC_API_BASE_URL" ./FE
 
           docker rm -f cons-dotnet cons-fe cons-react || true
 
@@ -195,7 +201,6 @@ jobs:
           docker run -d \
             --name cons-fe \
             --restart unless-stopped \
-            --add-host=host.docker.internal:host-gateway \
             -p 3002:3002 \
             img-fe:latest
 

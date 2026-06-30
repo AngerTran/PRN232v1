@@ -6,8 +6,8 @@ RUN npm ci
 
 COPY . .
 
-# Empty = same-origin /api (nginx proxies to backend). Set explicitly for local cross-port dev.
-ARG VITE_API_BASE_URL=
+# Production API. Local dev: override in .env with http://localhost:3001
+ARG VITE_API_BASE_URL=https://api.chaydev.me
 ENV VITE_API_BASE_URL=$VITE_API_BASE_URL
 
 RUN npm run build

@@ -1,11 +1,13 @@
+const PRODUCTION_API_BASE_URL = 'https://api.chaydev.me';
+
 function resolveApiBaseUrl(): string {
   const configured = import.meta.env.VITE_API_BASE_URL?.trim();
   if (configured) {
     return configured.replace(/\/$/, '');
   }
 
-  if (import.meta.env.PROD && typeof window !== 'undefined' && window.location.origin) {
-    return window.location.origin;
+  if (import.meta.env.PROD) {
+    return PRODUCTION_API_BASE_URL;
   }
 
   return 'http://localhost:3001';

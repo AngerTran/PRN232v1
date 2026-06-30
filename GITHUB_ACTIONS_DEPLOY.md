@@ -5,14 +5,23 @@ Workflow deploy nam o `.github/workflows/deploy.yml`.
 Moi lan push len branch `main`, GitHub Actions se:
 
 1. Build BE bang .NET 9.
-2. Build FE bang Node 22.
+2. Build FE bang Node 22 (`VITE_API_BASE_URL=https://api.chaydev.me`).
 3. Build Docker images `img-dotnet` va `img-fe` tren GitHub de kiem tra Dockerfile.
 4. SSH vao server.
 5. `cd /root/PRN232v1`, pull code moi tu `origin/main`.
 6. Chay EF Core migrations len Supabase (container tam `mcr.microsoft.com/dotnet/sdk:9.0`, dung `ConnectionStrings__SupabaseConnection` tu `.deploy/be.env`).
 7. Build Docker images tren server va restart containers:
-   - BE: `cons-dotnet`, public port `3001`
-   - FE: `cons-fe`, public port `3002`, nginx proxy `/api/` -> BE (same-origin, ho tro HTTPS qua domain nhu `www.chaydev.me`)
+   - BE: `cons-dotnet`, port `3001` (reverse proxy: `https://api.chaydev.me`)
+   - FE: `cons-fe`, port `3002` (reverse proxy: `https://www.chaydev.me`)
+
+## Domain Production
+
+```text
+Frontend:  https://www.chaydev.me
+Backend:   https://api.chaydev.me
+```
+
+FE goi API truc tiep toi `https://api.chaydev.me` (bake vao bundle luc build Docker).
 
 ## GitHub Secrets Can Tao
 
@@ -48,6 +57,13 @@ Bat buoc neu muon migration tu dong chay sau moi deploy (neu thieu, workflow se 
 SUPABASE_CONNECTION_STRING=<connection string postgres cua Supabase>
 ```
 
+Tuy chon (override domain mac dinh):
+
+```text
+PUBLIC_API_BASE_URL=https://api.chaydev.me
+PUBLIC_FRONTEND_BASE_URL=https://www.chaydev.me
+```
+
 Nen them de deploy khong phu thuoc vao secret dang hard-code trong `appsettings.json`:
 
 ```text
@@ -69,6 +85,13 @@ Source code tren server phai nam dung duong dan:
 /root/PRN232v1
 ```
 
+Reverse proxy (openresty/nginx) can map:
+
+```text
+www.chaydev.me  -> 127.0.0.1:3002
+api.chaydev.me  -> 127.0.0.1:3001
+```
+
 Neu dung user `root`, thu lenh nay tren may local:
 
 ```bash
@@ -87,10 +110,10 @@ Supabase Authentication -> URL Configuration:
 
 ```text
 Site URL:
-http://146.190.94.40:3002
+https://www.chaydev.me
 
 Redirect URLs:
-http://146.190.94.40:3002/auth/google/callback
+https://www.chaydev.me/auth/google/callback
 http://localhost:5173/auth/google/callback
 ```
 
@@ -101,7 +124,7 @@ Sau khi them secrets, vao tab `Actions` tren GitHub, chon `Build and Deploy`, ba
 Kiem tra sau khi deploy:
 
 ```bash
-curl http://146.190.94.40:3001/swagger/index.html
-curl http://146.190.94.40:3002
-curl http://146.190.94.40:3001/api/auth/google/supabase-url
+curl https://api.chaydev.me/swagger/index.html
+curl https://www.chaydev.me
+curl https://api.chaydev.me/api/auth/google/supabase-url
 ```
