@@ -9,7 +9,7 @@ import EmptyState from '../../components/ui/EmptyState';
 import { usePageMeta } from '../../hooks/usePageMeta';
 import { useConfirm } from '../../components/ui/ConfirmDialog';
 import type { Chapter, Series } from '../../types/domain';
-import { getChapter, getSeries } from '../../services/seriesApi';
+import { getChapter, getSeries, canMangakaProduceOnSeries, SERIES_PRODUCTION_LOCK_HINT } from '../../services/seriesApi';
 import { getChapterPages, uploadChapterPage, deleteChapterPage, type WorkspacePageItem } from '../../services/workspaceApi';
 import { format } from 'date-fns';
 
@@ -166,6 +166,16 @@ export default function ChapterDetailPage() {
     return p;
   });
 
+  const canProduce = series ? canMangakaProduceOnSeries(series.status) : false;
+  const productionLockHint = series ? SERIES_PRODUCTION_LOCK_HINT[series.status] : undefined;
+  const canOpenWorkspace = canProduce && pages.length > 0;
+
+  const openWorkspace = () => {
+    const firstPage = pages[0];
+    if (!firstPage) return;
+    navigate(`/mangaka/pages/${firstPage.id}/workspace`);
+  };
+
   return (
     <div className="p-6 space-y-5">
       {/* Header */}
@@ -178,7 +188,7 @@ export default function ChapterDetailPage() {
           <div className="flex items-center gap-3 mb-1 flex-wrap">
             <span className="text-sm font-semibold text-muted-foreground">Ch.{chapter.number}</span>
             <h1 className="text-xl font-bold">{chapter.title}</h1>
-            <Badge status={displayChapterStatus} size="md" />
+            <Badge status={displayChapterStatus} statusKind="chapter" size="md" />
           </div>
           <p className="text-sm text-muted-foreground mb-3">{series?.title}</p>
 
@@ -201,16 +211,41 @@ export default function ChapterDetailPage() {
             <ProgressBar value={progress} showLabel size="md" />
           </div>
         </div>
-        <Button variant="primary" size="sm" onClick={() => pages[0] && navigate(`/mangaka/pages/${pages[0].id}/workspace`)}>
+        <Button
+          variant="primary"
+          size="sm"
+          disabled={!canOpenWorkspace}
+          title={
+            !canProduce
+              ? (productionLockHint ?? 'Series không còn trong giai đoạn sản xuất.')
+              : pages.length === 0
+                ? 'Thêm ít nhất một trang manga trước khi mở workspace.'
+                : 'Mở studio sản xuất — giao task cho trợ lý trên trang truyện.'
+          }
+          onClick={openWorkspace}
+        >
           Mở Workspace
         </Button>
       </div>
+
+      {!canProduce && productionLockHint && (
+        <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+          {productionLockHint}
+        </div>
+      )}
+
+      {canProduce && pages.length === 0 && (
+        <div className="rounded-xl border border-border bg-muted/40 px-4 py-3 text-sm text-muted-foreground">
+          <strong className="text-foreground font-semibold">Workspace</strong> là studio sản xuất: tải trang truyện, khoanh vùng panel, giao việc cho trợ lý và theo dõi tiến độ.
+          Bấm <strong className="text-foreground">Thêm trang</strong> để bắt đầu, sau đó mở workspace hoặc bấm trực tiếp vào thẻ trang.
+        </div>
+      )}
 
       {/* Page grid */}
       <div>
         <div className="flex items-center justify-between mb-4">
           <h2 className="font-semibold">Trang Manga</h2>
-          <Button variant="outline" size="sm" onClick={handleAddPageClick}>
+          <Button variant="outline" size="sm" onClick={handleAddPageClick} disabled={!canProduce}>
             <Plus size={14} /> Thêm trang
           </Button>
           <input
