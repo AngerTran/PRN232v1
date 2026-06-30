@@ -827,11 +827,12 @@ public class SeriesService
       .ToListAsync(cancellationToken);
 
     return rankings
+      .Where(r => r.Series is not null)
       .GroupBy(r => r.SeriesId)
       .Select(g => g.OrderByDescending(r => r.IssueNumber).First())
       .Select(r => new SeriesRankingItemResponse(
         r.SeriesId,
-        r.Series.Title,
+        r.Series!.Title,
         SeriesStatuses.ToDbValue(r.Series.Status),
         r.IssueNumber,
         r.RankPosition,

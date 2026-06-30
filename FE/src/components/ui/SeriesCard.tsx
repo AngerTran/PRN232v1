@@ -46,10 +46,10 @@ export default function SeriesCard({ series, view = 'grid', onDelete }: SeriesCa
               <span className="font-semibold">#{series.currentRank}</span>
             </div>
           )}
-          {onDelete && (
+          {onDelete && series.status === 'Draft' && (
             <button
               onClick={e => { e.stopPropagation(); onDelete(series.id); }}
-              title="Xóa series"
+              title="Xóa bản nháp"
               className="p-1.5 rounded-lg text-muted-foreground hover:text-red-600 hover:bg-red-50 transition-colors"
             >
               <Trash2 size={15} />
@@ -77,10 +77,10 @@ export default function SeriesCard({ series, view = 'grid', onDelete }: SeriesCa
             <span className="text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 bg-red-600 text-white rounded-full">Nguy cơ</span>
           </div>
         )}
-        {onDelete && (
+        {onDelete && series.status === 'Draft' && (
           <button
             onClick={e => { e.stopPropagation(); onDelete(series.id); }}
-            title="Xóa series"
+            title="Xóa bản nháp"
             className="absolute top-3 right-3 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center w-7 h-7 bg-red-600/90 hover:bg-red-600 text-white rounded-lg"
           >
             <Trash2 size={13} />

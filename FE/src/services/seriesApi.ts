@@ -586,6 +586,11 @@ export async function getSeriesBoardReviewStatus(seriesId: string): Promise<Seri
   return unwrap(await apiRequest<ApiEnvelope<SeriesBoardReviewStatus>>(`/api/series/${seriesId}/board-review-status`));
 }
 
+/** Mangaka chỉ được xóa series của mình khi còn ở trạng thái nháp. */
+export function canMangakaDeleteSeries(status: SeriesStatus): boolean {
+  return status === 'Draft';
+}
+
 export async function deleteSeries(id: string): Promise<void> {
   await apiRequest<void>(`/api/series/${id}`, { method: 'DELETE' });
 }

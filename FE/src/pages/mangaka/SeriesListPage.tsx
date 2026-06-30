@@ -10,7 +10,7 @@ import EmptyState from '../../components/ui/EmptyState';
 import { usePageMeta } from '../../hooks/usePageMeta';
 import { useConfirm } from '../../components/ui/ConfirmDialog';
 import type { Series, SeriesStatus } from '../../types/domain';
-import { deleteSeries, getMySeries } from '../../services/seriesApi';
+import { deleteSeries, getMySeries, canMangakaDeleteSeries } from '../../services/seriesApi';
 import { BookOpen } from 'lucide-react';
 
 const STATUS_OPTIONS: SeriesStatus[] = ['Draft', 'Submitted', 'Approved', 'In Progress', 'Revision Required', 'At Risk', 'Published', 'Cancelled'];
@@ -52,6 +52,13 @@ export default function SeriesListPage() {
 
   const handleDeleteSeries = async (seriesId: string) => {
     const target = series.find(s => s.id === seriesId);
+    if (!target) return;
+
+    if (!canMangakaDeleteSeries(target.status)) {
+      setError('Chỉ có thể xóa series ở trạng thái bản nháp. Series đã gửi xét duyệt hoặc đang xuất bản không thể xóa.');
+      return;
+    }
+
     const confirmed = await confirm({
       title: 'Xóa series',
       message: (
