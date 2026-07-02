@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate, useLocation } from 'react-router';
-import { ArrowLeft, BookOpen, FileText, BarChart2, Send, Plus, UserPlus, CheckCircle2 } from 'lucide-react';
+import { ArrowLeft, BookOpen, FileText, BarChart2, Send, Plus, UserPlus, CheckCircle2, Pencil, FileDown } from 'lucide-react';
 import { getStoredUser } from '../../services/authApi';
 import { getEditors, type ProfileSummary } from '../../services/profilesApi';
 import { Tabs, TabsList, Tab, TabPanel } from '../../components/ui/Tabs';
@@ -41,7 +41,7 @@ export default function SeriesDetailPage() {
   const isEditorView = user?.role === 'editor' && location.pathname.startsWith('/editor/');
   const isMangakaView = !isEditorView;
 
-  const [tab, setTab] = useState('chapters');
+  const [tab, setTab] = useState('overview');
   const [series, setSeries] = useState<Series | null>(null);
   const [chapters, setChapters] = useState<Chapter[]>([]);
   const [loading, setLoading] = useState(true);
@@ -65,6 +65,9 @@ export default function SeriesDetailPage() {
   const canInviteEditor = isMangakaView && series && canProduce && !series.editorId && !pendingEditorInvite;
   const isAssignedEditor = Boolean(isEditorView && series && user && series.editorId === user.id);
   const canMarkComplete = isAssignedEditor && canProduce;
+  const canEditProfile = isMangakaView && series && (series.status === 'Draft' || series.status === 'Cancelled');
+  const proposalChapter = chapters.find(c => c.number === 0);
+  const productionChapters = chapters.filter(c => c.number > 0);
 
   useEffect(() => {
     if (!seriesId) return;
@@ -84,7 +87,8 @@ export default function SeriesDetailPage() {
         });
 
         if (!active) return;
-        setSeries({ ...seriesItem, chaptersCount: chapterItems.length });
+        const productionOnly = chapterItems.filter(c => c.number > 0);
+        setSeries({ ...seriesItem, chaptersCount: productionOnly.length });
         setChapters(chapterItems);
       } catch (err) {
         if (active) {
@@ -102,6 +106,10 @@ export default function SeriesDetailPage() {
     return () => {
       active = false;
     };
+  }, [seriesId]);
+
+  useEffect(() => {
+    setTab('overview');
   }, [seriesId]);
 
   useEffect(() => {
@@ -365,6 +373,11 @@ export default function SeriesDetailPage() {
               <span className="font-bold text-lg text-foreground">{series.chaptersCount}</span>
             </div>
             <div className="flex gap-2 ml-auto flex-wrap">
+              {canEditProfile && (
+                <Button variant="outline" size="sm" onClick={() => navigate(`/mangaka/series/${series.id}/edit`)}>
+                  <Pencil size={14} /> Chỉnh sửa hồ sơ
+                </Button>
+              )}
               {isMangakaView && series.status === 'Draft' && (
                 <Button variant="primary" size="sm" loading={submitting} onClick={handleSubmitForReview}>
                   <Send size={14} /> Gửi xét duyệt
@@ -402,7 +415,7 @@ export default function SeriesDetailPage() {
       <Tabs value={tab} onChange={setTab}>
         <TabsList>
           <Tab value="overview"><BookOpen size={14} className="inline mr-1.5" />Tổng quan</Tab>
-          <Tab value="chapters"><FileText size={14} className="inline mr-1.5" />Chương ({chapters.length})</Tab>
+          <Tab value="chapters"><FileText size={14} className="inline mr-1.5" />Chương ({productionChapters.length})</Tab>
           {showRankingTab && <Tab value="ranking"><BarChart2 size={14} className="inline mr-1.5" />Xếp hạng</Tab>}
           <Tab value="submissions"><Send size={14} className="inline mr-1.5" />Nộp series</Tab>
         </TabsList>
@@ -438,6 +451,37 @@ export default function SeriesDetailPage() {
                 ))}
               </dl>
             </Card>
+            {canEditProfile && (
+              <Card>
+                <CardHeader><CardTitle>Bản thảo đề xuất</CardTitle></CardHeader>
+                <p className="text-sm text-muted-foreground mb-3">
+                  File PDF/ZIP/CBZ gửi kèm hồ sơ khi hội đồng xét duyệt series. Tải lên hoặc thay thế trong phần chỉnh sửa hồ sơ.
+                </p>
+                {proposalChapter?.description ? (
+                  <div className="flex flex-wrap items-center gap-3">
+                    <a
+                      href={proposalChapter.description}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-2 text-sm font-semibold text-primary hover:underline"
+                    >
+                      <FileDown size={15} />
+                      Xem / tải bản thảo
+                    </a>
+                    <Button variant="outline" size="sm" onClick={() => navigate(`/mangaka/series/${series.id}/edit`)}>
+                      Thay bản thảo
+                    </Button>
+                  </div>
+                ) : (
+                  <div className="rounded-xl border border-dashed border-amber-300 bg-amber-50/80 px-4 py-3 text-sm text-amber-900">
+                    Chưa có bản thảo đính kèm — cần tải lên trước khi gửi xét duyệt.
+                    <Button variant="outline" size="sm" className="mt-3" onClick={() => navigate(`/mangaka/series/${series.id}/edit`)}>
+                      Tải bản thảo
+                    </Button>
+                  </div>
+                )}
+              </Card>
+            )}
             {canInviteEditor && (
               <Card>
                 <CardHeader><CardTitle>Mời Editor phụ trách</CardTitle></CardHeader>
@@ -476,7 +520,7 @@ export default function SeriesDetailPage() {
 
         <TabPanel value="chapters" className="mt-5">
           <div className="flex items-center justify-between mb-4">
-            <p className="text-sm text-muted-foreground">{chapters.length} chương</p>
+            <p className="text-sm text-muted-foreground">{productionChapters.length} chương</p>
             {isMangakaView && (
               <Button
                 variant="primary"
@@ -488,14 +532,14 @@ export default function SeriesDetailPage() {
               </Button>
             )}
           </div>
-          {chapters.length === 0 ? (
+          {productionChapters.length === 0 ? (
             <EmptyState
               title="Chưa có chương nào"
               description={canProduce ? 'Tạo chương đầu tiên để bắt đầu.' : (productionLockHint ?? 'Chưa thể tạo chương.')}
             />
           ) : (
             <div className="space-y-2">
-              {chapters.sort((a, b) => a.number - b.number).map(ch => (
+              {productionChapters.sort((a, b) => a.number - b.number).map(ch => (
                 <ChapterCard
                   key={ch.id}
                   chapter={ch}

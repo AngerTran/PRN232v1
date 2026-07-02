@@ -21,6 +21,7 @@ import PaymentReturnPage from '../pages/common/PaymentReturnPage';
 import DashboardPage from '../pages/mangaka/DashboardPage';
 import SeriesListPage from '../pages/mangaka/SeriesListPage';
 import CreateSeriesPage from '../pages/mangaka/CreateSeriesPage';
+import EditSeriesPage from '../pages/mangaka/EditSeriesPage';
 import SeriesDetailPage from '../pages/mangaka/SeriesDetailPage';
 import ChapterListPage from '../pages/mangaka/ChapterListPage';
 import CreateChapterPage from '../pages/mangaka/CreateChapterPage';
@@ -135,6 +136,7 @@ export const router = createBrowserRouter([
       // Series
       { path: '/mangaka/series', element: <SeriesListPage /> },
       { path: '/mangaka/series/create', element: <CreateSeriesPage /> },
+      { path: '/mangaka/series/:seriesId/edit', element: <EditSeriesPage /> },
       { path: '/mangaka/series/:seriesId', element: <SeriesDetailPage /> },
       { path: '/mangaka/series/:seriesId/read', element: <SeriesReaderPage /> },
       { path: '/mangaka/series/:seriesId/chapters', element: <ChapterListPage /> },

@@ -467,6 +467,43 @@ export async function updateSeries(id: string, input: { editorId?: string }): Pr
   return mapSeries(updated);
 }
 
+export interface UpdateSeriesProfileInput {
+  title?: string;
+  description?: string;
+  genre?: string;
+  targetAudience?: string;
+  publishingFrequency?: string;
+}
+
+/** Cập nhật metadata series (tiêu đề, tóm tắt, thể loại, …). */
+export async function updateSeriesProfile(id: string, input: UpdateSeriesProfileInput): Promise<Series> {
+  const updated = unwrap(await apiRequest<ApiEnvelope<ApiSeries>>(`/api/series/${id}`, {
+    method: 'PUT',
+    body: JSON.stringify({
+      title: input.title,
+      description: input.description,
+      genre: input.genre,
+      targetAudience: input.targetAudience,
+      publishingFrequency: input.publishingFrequency
+        ? toApiPublishingFrequency(input.publishingFrequency)
+        : undefined,
+    }),
+  }));
+  return mapSeries(updated);
+}
+
+/** Upload hoặc thay file bản thảo đề xuất (chapter 0). */
+export async function upsertSeriesProposalManuscript(
+  seriesId: string,
+  file: File,
+  existingProposalChapterId?: string,
+): Promise<Chapter> {
+  if (existingProposalChapterId) {
+    return uploadChapterManuscript(existingProposalChapterId, file);
+  }
+  return uploadSeriesProposalManuscript(seriesId, file);
+}
+
 export interface SeriesEditorInvitation {
   seriesId: string;
   seriesTitle: string;
