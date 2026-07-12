@@ -4,7 +4,7 @@ import { clsx } from 'clsx';
 import Badge from './Badge';
 import ProgressBar from './ProgressBar';
 import type { Chapter } from '../../types/domain';
-import { format, isPast, differenceInDays } from 'date-fns';
+import { format, isPast, differenceInDays, isValid } from 'date-fns';
 
 interface ChapterCardProps {
   chapter: Chapter;
@@ -16,9 +16,10 @@ interface ChapterCardProps {
 export default function ChapterCard({ chapter, seriesId, onDelete, chapterDetailPath }: ChapterCardProps) {
   const navigate = useNavigate();
   const detailPath = chapterDetailPath?.(chapter.id) ?? `/mangaka/chapters/${chapter.id}`;
-  const deadlineDate = new Date(chapter.deadline);
-  const daysLeft = differenceInDays(deadlineDate, new Date());
-  const isOverdue = isPast(deadlineDate) && chapter.status !== 'Published' && chapter.status !== 'Approved';
+  const deadlineDate = chapter.deadline ? new Date(chapter.deadline) : null;
+  const hasDeadline = deadlineDate !== null && isValid(deadlineDate);
+  const daysLeft = hasDeadline ? differenceInDays(deadlineDate, new Date()) : null;
+  const isOverdue = hasDeadline && isPast(deadlineDate) && chapter.status !== 'Published' && chapter.status !== 'Approved';
 
   return (
     <div
@@ -40,12 +41,14 @@ export default function ChapterCard({ chapter, seriesId, onDelete, chapterDetail
           </span>
           <span className={clsx(
             'flex items-center gap-1',
-            isOverdue ? 'text-red-500 font-semibold' : daysLeft <= 7 ? 'text-orange-500' : ''
+            isOverdue ? 'text-red-500 font-semibold' : hasDeadline && daysLeft !== null && daysLeft <= 7 ? 'text-orange-500' : ''
           )}>
             <Calendar size={11} />
-            {isOverdue
+            {!hasDeadline
+              ? 'Chưa có hạn'
+              : isOverdue
               ? `Trễ hạn (${format(deadlineDate, 'dd/MM')})`
-              : daysLeft <= 0
+              : daysLeft! <= 0
               ? 'Hạn hôm nay'
               : `${format(deadlineDate, 'dd/MM')} · còn ${daysLeft} ngày`}
           </span>

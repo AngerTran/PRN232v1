@@ -4,7 +4,7 @@ import { clsx } from 'clsx';
 import ProgressBar from './ProgressBar';
 import Badge from './Badge';
 import type { Chapter, Series } from '../../types/domain';
-import { format, differenceInDays } from 'date-fns';
+import { format, differenceInDays, isValid } from 'date-fns';
 
 interface DeadlineCardProps {
   chapter: Chapter & { series?: Series };
@@ -14,9 +14,11 @@ interface DeadlineCardProps {
 
 export default function DeadlineCard({ chapter, onDelete, hint }: DeadlineCardProps) {
   const navigate = useNavigate();
-  const daysLeft = differenceInDays(new Date(chapter.deadline), new Date());
-  const isUrgent = daysLeft <= 5;
-  const isOverdue = daysLeft < 0;
+  const deadlineDate = chapter.deadline ? new Date(chapter.deadline) : null;
+  const hasDeadline = deadlineDate !== null && isValid(deadlineDate);
+  const daysLeft = hasDeadline ? differenceInDays(deadlineDate, new Date()) : null;
+  const isUrgent = hasDeadline && daysLeft! <= 5;
+  const isOverdue = hasDeadline && daysLeft! < 0;
 
   return (
     <div
@@ -51,7 +53,7 @@ export default function DeadlineCard({ chapter, onDelete, hint }: DeadlineCardPr
             'text-xs font-bold',
             isOverdue ? 'text-red-600' : isUrgent ? 'text-orange-600' : 'text-muted-foreground'
           )}>
-            {isOverdue ? `Trễ ${Math.abs(daysLeft)} ngày` : daysLeft === 0 ? 'Hạn hôm nay' : `Còn ${daysLeft} ngày`}
+            {!hasDeadline ? 'Chưa có hạn' : isOverdue ? `Trễ ${Math.abs(daysLeft!)} ngày` : daysLeft === 0 ? 'Hạn hôm nay' : `Còn ${daysLeft} ngày`}
           </span>
         </div>
       </div>
@@ -60,7 +62,7 @@ export default function DeadlineCard({ chapter, onDelete, hint }: DeadlineCardPr
       <div className="flex items-center justify-between text-xs text-muted-foreground">
         <div className="flex items-center gap-1">
           <Calendar size={11} />
-          <span>{format(new Date(chapter.deadline), 'MMM d, yyyy')}</span>
+          <span>{hasDeadline ? format(deadlineDate, 'MMM d, yyyy') : '—'}</span>
         </div>
         <Badge status={chapter.status} statusKind="chapter" size="sm" />
       </div>

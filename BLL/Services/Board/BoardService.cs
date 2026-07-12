@@ -402,10 +402,12 @@ public class BoardService
     {
         await RequireBoardOrAdminAsync(callerId, cancellationToken);
 
-        var rankings = await _unitOfWork.Context.Rankings
+        var rankings = (await _unitOfWork.Context.Rankings
             .AsNoTracking()
             .Include(r => r.Series)
-            .ToListAsync(cancellationToken);
+            .ToListAsync(cancellationToken))
+            .Where(r => r.Series is not null)
+            .ToList();
 
         IEnumerable<Ranking> sourceRankings = rankings;
         if (issueNumber is int issue)
@@ -423,7 +425,7 @@ public class BoardService
             .Select(r => new
             {
                 r.SeriesId,
-                r.Series.Title,
+                r.Series!.Title,
                 r.RankPosition,
                 IssueVotes = r.VoteCount ?? 0,
                 IssuePopularity = r.PopularityScore ?? 0,

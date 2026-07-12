@@ -99,7 +99,9 @@ try
         alter table public.mangaka_assistants add column if not exists status varchar(20) not null default 'accepted';
         alter table public.mangaka_assistants add column if not exists responded_at timestamptz null;
         create index if not exists idx_mangaka_assistants_assistant
-            on public.mangaka_assistants(assistant_id);";
+            on public.mangaka_assistants(assistant_id);
+
+        alter table public.rankings add column if not exists notes text null;";
     await ensureCmd.ExecuteNonQueryAsync();
 }
 catch (Exception ex)

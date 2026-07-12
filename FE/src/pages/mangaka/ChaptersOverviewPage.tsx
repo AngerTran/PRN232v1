@@ -30,7 +30,7 @@ export default function ChaptersOverviewPage() {
         );
         if (!isActive) return;
         setSeriesList(list);
-        setAllChapters(chapterLists.flat());
+        setAllChapters(chapterLists.flat().filter(c => c.number > 0));
       })
       .catch(() => {
         if (isActive) {
