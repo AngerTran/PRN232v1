@@ -2,7 +2,7 @@ import { apiRequest } from './apiClient';
 import { getVisibleSeries } from './seriesApi';
 
 export type RoleName = 'admin' | 'mangaka' | 'assistant' | 'editor' | 'board';
-export type UserStatus = 'Active' | 'Inactive' | 'Locked' | 'Pending';
+export type UserStatus = 'Active' | 'Inactive';
 
 interface ApiProfile {
   id: string;
@@ -79,9 +79,8 @@ function normalizeRole(role: string): RoleName {
 }
 
 function mapProfile(profile: ApiProfile): AdminUser {
-  const status: UserStatus = profile.isActive === false
-    ? 'Inactive'
-    : profile.emailConfirmed ? 'Active' : 'Pending';
+  // Không dùng emailConfirmed — chỉ phân biệt đang bật / đã tắt.
+  const status: UserStatus = profile.isActive === false ? 'Inactive' : 'Active';
   return {
     id: profile.id,
     name: profile.fullName || profile.email,
@@ -183,7 +182,7 @@ export async function getAdminStats(users: AdminUser[]) {
     activeUsers: users.filter(user => user.status === 'Active').length,
     inactiveUsers: users.filter(user => user.status === 'Inactive').length,
     lockedUsers: users.filter(user => user.status === 'Inactive').length,
-    pendingUsers: users.filter(user => user.status === 'Pending').length,
+    pendingUsers: 0,
     publishingSeries: series.filter(item => item.status === 'In Progress' || item.status === 'Published').length,
     newUsersThisMonth: users.filter(user => user.createdAt.startsWith(month)).length,
     roleDistribution,

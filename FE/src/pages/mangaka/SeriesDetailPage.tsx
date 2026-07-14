@@ -10,6 +10,7 @@ import Card, { CardHeader, CardTitle } from '../../components/ui/Card';
 import ChapterCard from '../../components/ui/ChapterCard';
 import RankingTrend from '../../components/ui/RankingTrend';
 import EmptyState from '../../components/ui/EmptyState';
+import SeriesTeamCard from '../../components/series/SeriesTeamCard';
 import { usePageMeta } from '../../hooks/usePageMeta';
 import { useConfirm } from '../../components/ui/ConfirmDialog';
 import type { Chapter, Series, SeriesRanking } from '../../types/domain';
@@ -18,6 +19,7 @@ import {
   getSeriesChapters,
   getSeriesStats,
   getSeriesRankingTrend,
+  getSeriesTeam,
   mapUiStatusToApi,
   isSeriesSubmitted,
   canMangakaProduceOnSeries,
@@ -29,6 +31,7 @@ import {
   markSeriesCompleted,
   type SeriesEditorInvitation,
   type SeriesStats,
+  type SeriesTeam,
 } from '../../services/seriesApi';
 
 export default function SeriesDetailPage() {
@@ -56,6 +59,8 @@ export default function SeriesDetailPage() {
   const [submissionStatsLoading, setSubmissionStatsLoading] = useState(false);
   const [ranking, setRanking] = useState<SeriesRanking | null>(null);
   const [rankingLoading, setRankingLoading] = useState(false);
+  const [team, setTeam] = useState<SeriesTeam | null>(null);
+  const [teamLoading, setTeamLoading] = useState(false);
 
   const showRankingTab = series
     ? !['Draft', 'Submitted', 'Cancelled'].includes(series.status)
@@ -110,6 +115,25 @@ export default function SeriesDetailPage() {
 
   useEffect(() => {
     setTab('overview');
+  }, [seriesId]);
+
+  useEffect(() => {
+    if (!seriesId) return;
+    let active = true;
+    setTeamLoading(true);
+    getSeriesTeam(seriesId)
+      .then(data => {
+        if (active) setTeam(data);
+      })
+      .catch(() => {
+        if (active) setTeam(null);
+      })
+      .finally(() => {
+        if (active) setTeamLoading(false);
+      });
+    return () => {
+      active = false;
+    };
   }, [seriesId]);
 
   useEffect(() => {
@@ -263,10 +287,11 @@ export default function SeriesDetailPage() {
         <>
           Bạn sắp gửi series{' '}
           <span className="font-semibold text-foreground">{series.title}</span>{' '}
-          đến hội đồng biên tập.
+          đến hội đồng xét duyệt.
           <br />
           <span className="text-xs mt-1 inline-block">
-            Sau khi gửi, series chuyển sang <strong className="text-foreground font-medium">Chờ xét duyệt</strong> và tạm khóa chỉnh sửa hồ sơ cho đến khi có kết quả.
+            Ba board cố định sẽ nhận thông báo và có <strong className="text-foreground font-medium">48 giờ</strong> để bỏ phiếu.
+            Series chuyển sang <strong className="text-foreground font-medium">Chờ xét duyệt</strong> và tạm khóa chỉnh sửa hồ sơ cho đến khi có kết quả.
           </span>
         </>
       ),
@@ -314,7 +339,7 @@ export default function SeriesDetailPage() {
 
       {series.status === 'Submitted' && (
         <div className="rounded-xl border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-800">
-          Series đang chờ hội đồng xét duyệt — mọi thao tác sản xuất tạm khóa.
+          Series đang chờ 3 board cố định xét duyệt (hạn 48 giờ) — mọi thao tác sản xuất tạm khóa.
         </div>
       )}
 
@@ -437,7 +462,6 @@ export default function SeriesDetailPage() {
               <dl className="space-y-3">
                 {[
                   { label: 'Trạng thái', value: <Badge status={series.status} /> },
-                  { label: 'Editor phụ trách', value: series.editorName ?? 'Chưa mời' },
                   { label: 'Thể loại', value: series.genre },
                   { label: 'Đối tượng độc giả', value: series.targetAudience },
                   { label: 'Lịch xuất bản', value: series.publishingType },
@@ -451,6 +475,7 @@ export default function SeriesDetailPage() {
                 ))}
               </dl>
             </Card>
+            <SeriesTeamCard team={team} loading={teamLoading} />
             {canEditProfile && (
               <Card>
                 <CardHeader><CardTitle>Bản thảo đề xuất</CardTitle></CardHeader>
@@ -582,7 +607,7 @@ export default function SeriesDetailPage() {
           {!isSeriesSubmitted(series.status) ? (
             <EmptyState
               title="Series chưa được nộp"
-              description="Gửi series lên hội đồng biên tập để bắt đầu quy trình duyệt."
+              description="Gửi series cho 3 board cố định xét duyệt (hạn 48 giờ)."
               action={
                 <Button variant="primary" size="sm" loading={submitting} onClick={handleSubmitForReview}>
                   <Send size={14} /> Gửi xét duyệt

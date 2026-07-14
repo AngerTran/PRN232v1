@@ -163,9 +163,9 @@ export default function BoardDashboardPage() {
               <p className="text-white/60 text-sm font-medium mb-1">Hội Đồng Biên Tập</p>
               <h1 className="text-2xl font-bold text-white mb-2">Chào mừng trở lại, {boardName}</h1>
               <p className="text-white/70 text-sm">
-                Có <span className="text-white font-semibold">{stats.pending} series</span> đang chờ phê duyệt.
+                Có <span className="text-white font-semibold">{stats.pending} series</span> chờ 3 board bỏ phiếu (48 giờ).
                 {stats.approved > 0 && (
-                  <span className="text-green-300"> {stats.approved} series đã được thông qua.</span>
+                  <span className="text-green-300"> {stats.approved} series đã duyệt.</span>
                 )}
                 {stats.atRisk > 0 && (
                   <span className="text-red-300"> Cảnh báo: {stats.atRisk} series đang At Risk.</span>
@@ -201,7 +201,7 @@ export default function BoardDashboardPage() {
         title="Series Chờ Phê Duyệt"
         viewAllLabel="Xem tất cả"
         onViewAll={() => navigate('/board/submissions')}
-        emptyText="Không có series nào đang chờ phê duyệt"
+        emptyText="Không có series chờ xét duyệt"
       >
         {pendingTop.length > 0 ? (
           <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3">

@@ -51,7 +51,9 @@ public class BoardController : ControllerBase
     }
 
     [HttpGet("pending-series")]
-    [SwaggerOperation(Summary = "List pending series", Description = "Lists series waiting for board review or decision.")]
+    [SwaggerOperation(
+        Summary = "List pending series",
+        Description = "Lists all pending-review series for the fixed 3 board members. Auto-heals missing review claims and expires after 48 hours.")]
     [ProducesResponseType(typeof(IReadOnlyList<PendingSeriesItemResponse>), StatusCodes.Status200OK)]
     public async Task<ActionResult<IReadOnlyList<PendingSeriesItemResponse>>> PendingSeries(
         CancellationToken cancellationToken)
@@ -67,7 +69,7 @@ public class BoardController : ControllerBase
     [HttpGet("in-review-series")]
     [SwaggerOperation(
         Summary = "List in-review series",
-        Description = "Lists pending-review series that already have 3 reviewers assigned (claimed).")]
+        Description = "Lists all pending-review series for the fixed 3 board members (auto-assigned on submit).")]
     [ProducesResponseType(typeof(IReadOnlyList<PendingSeriesItemResponse>), StatusCodes.Status200OK)]
     public async Task<ActionResult<IReadOnlyList<PendingSeriesItemResponse>>> InReviewSeries(
         CancellationToken cancellationToken)
@@ -80,14 +82,14 @@ public class BoardController : ControllerBase
         return Ok(await _boardService.ListInReviewSeriesAsync(userId, cancellationToken));
     }
 
-    [HttpPost("series/{seriesId:guid}/claim-review")]
+    [HttpPut("series/{seriesId:guid}/lead")]
     [SwaggerOperation(
-        Summary = "Claim series for review",
-        Description = "Reserves a review slot for the caller before they can cast a vote.")]
+        Summary = "Assign series lead (admin)",
+        Description = "Admin assigns one of the three fixed board reviewers as Lead for the series.")]
     [ProducesResponseType(typeof(BoardReviewClaimResponse), StatusCodes.Status200OK)]
-    public async Task<ActionResult<BoardReviewClaimResponse>> ClaimReview(
+    public async Task<ActionResult<BoardReviewClaimResponse>> AssignLead(
         Guid seriesId,
-        [FromBody] ClaimSeriesReviewRequest? request,
+        [FromBody] AssignSeriesLeadRequest request,
         CancellationToken cancellationToken)
     {
         if (!this.TryGetUserId(out var userId))
@@ -95,19 +97,13 @@ public class BoardController : ControllerBase
             return Unauthorized();
         }
 
-        return Ok(await _boardService.ClaimReviewAsync(
-            userId,
-            seriesId,
-            request?.WantLead ?? false,
-            cancellationToken));
+        return Ok(await _boardService.AssignLeadByAdminAsync(userId, seriesId, request.BoardMemberId, cancellationToken));
     }
 
-    [HttpPost("series/{seriesId:guid}/claim-lead")]
-    [SwaggerOperation(
-        Summary = "Claim board lead after approval",
-        Description = "One of the three reviewers claims lead responsibility after the series is approved. Expires after 7 days then auto-assigns.")]
-    [ProducesResponseType(typeof(BoardReviewClaimResponse), StatusCodes.Status200OK)]
-    public async Task<ActionResult<BoardReviewClaimResponse>> ClaimLead(
+    [HttpGet("series/{seriesId:guid}/reviewers")]
+    [SwaggerOperation(Summary = "List series board reviewers", Description = "Returns the fixed board reviewers and lead flag for a series.")]
+    [ProducesResponseType(typeof(IReadOnlyList<BoardReviewerSummaryItem>), StatusCodes.Status200OK)]
+    public async Task<ActionResult<IReadOnlyList<BoardReviewerSummaryItem>>> ListReviewers(
         Guid seriesId,
         CancellationToken cancellationToken)
     {
@@ -116,7 +112,7 @@ public class BoardController : ControllerBase
             return Unauthorized();
         }
 
-        return Ok(await _boardService.ClaimLeadAsync(userId, seriesId, cancellationToken));
+        return Ok(await _boardService.ListSeriesReviewersAsync(userId, seriesId, cancellationToken));
     }
 
     [HttpGet("vote-progress")]

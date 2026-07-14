@@ -35,7 +35,6 @@ import RankingOverviewPage from '../pages/mangaka/RankingOverviewPage';
 import ChaptersOverviewPage from '../pages/mangaka/ChaptersOverviewPage';
 import AssistantsPage from '../pages/mangaka/AssistantsPage';
 import EditorsPage from '../pages/mangaka/EditorsPage';
-import BoardInvitePage from '../pages/mangaka/BoardInvitePage';
 import SeriesReaderPage from '../pages/mangaka/SeriesReaderPage';
 
 // Assistant pages
@@ -68,11 +67,11 @@ import EditUserPage from '../pages/admin/EditUserPage';
 import RoleManagementPage from '../pages/admin/RoleManagementPage';
 import SystemActivityPage from '../pages/admin/SystemActivityPage';
 import AdminSettingsPage from '../pages/admin/AdminSettingsPage';
+import AdminSeriesPage from '../pages/admin/AdminSeriesPage';
 
 // Board pages
 import BoardDashboardPage from '../pages/board/BoardDashboardPage';
 import BoardSubmissionsPage from '../pages/board/BoardSubmissionsPage';
-import BoardReviewInvitationsPage from '../pages/board/BoardReviewInvitationsPage';
 import SubmissionDetailPage from '../pages/board/SubmissionDetailPage';
 import BoardApprovedSeriesPage from '../pages/board/BoardApprovedSeriesPage';
 import ApprovedSeriesDetailPage from '../pages/board/ApprovedSeriesDetailPage';
@@ -157,7 +156,6 @@ export const router = createBrowserRouter([
       { path: '/mangaka/tasks/:taskId/review', element: <TaskReviewPage /> },
       { path: '/mangaka/assistants', element: <AssistantsPage /> },
       { path: '/mangaka/editors', element: <EditorsPage /> },
-      { path: '/mangaka/board-invite', element: <BoardInvitePage /> },
 
       // Series submission history
       { path: '/mangaka/submissions', element: <SubmissionHistoryPage /> },
@@ -193,6 +191,7 @@ export const router = createBrowserRouter([
       { path: '/admin/users/create', element: <CreateUserPage /> },
       { path: '/admin/users/:userId', element: <UserDetailPage /> },
       { path: '/admin/users/:userId/edit', element: <EditUserPage /> },
+      { path: '/admin/series', element: <AdminSeriesPage /> },
       { path: '/admin/roles', element: <RoleManagementPage /> },
       { path: '/admin/activity', element: <SystemActivityPage /> },
       { path: '/admin/settings', element: <AdminSettingsPage /> },
@@ -203,7 +202,6 @@ export const router = createBrowserRouter([
         children: [
           { path: '/board/dashboard', element: <BoardDashboardPage /> },
           { path: '/board/submissions', element: <BoardSubmissionsPage /> },
-          { path: '/board/review-invitations', element: <BoardReviewInvitationsPage /> },
           { path: '/board/submissions/:submissionId', element: <SubmissionDetailPage /> },
           { path: '/board/approved-series', element: <BoardApprovedSeriesPage /> },
           { path: '/board/approved-series/:seriesId', element: <ApprovedSeriesDetailPage /> },

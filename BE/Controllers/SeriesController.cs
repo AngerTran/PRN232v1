@@ -304,69 +304,8 @@ public class SeriesController : ControllerBase
         return invitation is null ? NotFound() : Ok(invitation);
     }
 
-    [HttpPost("{seriesId:guid}/board-review-invitations")]
-    [SwaggerOperation(Summary = "Invite board member", Description = "Mangaka invites a board member to review a pending series.")]
-    [ProducesResponseType(typeof(SeriesBoardReviewInvitationResponse), StatusCodes.Status201Created)]
-    [ProducesResponseType(StatusCodes.Status403Forbidden)]
-    public async Task<ActionResult<SeriesBoardReviewInvitationResponse>> InviteBoardMember(
-        Guid seriesId,
-        [FromBody] InviteSeriesBoardMemberRequest request,
-        CancellationToken cancellationToken)
-    {
-        if (!this.TryGetUserId(out var userId))
-        {
-            return Unauthorized();
-        }
-
-        var invitation = await _seriesService.InviteBoardMemberAsync(userId, seriesId, request, cancellationToken);
-        return CreatedAtAction(nameof(GetById), new { id = seriesId }, invitation);
-    }
-
-    [HttpGet("board-review-invitations/sent")]
-    [SwaggerOperation(Summary = "List sent board review invitations", Description = "Lists board review invitations sent by the authenticated mangaka.")]
-    [ProducesResponseType(typeof(IReadOnlyList<SeriesBoardReviewInvitationResponse>), StatusCodes.Status200OK)]
-    public async Task<ActionResult<IReadOnlyList<SeriesBoardReviewInvitationResponse>>> SentBoardReviewInvitations(
-        CancellationToken cancellationToken)
-    {
-        if (!this.TryGetUserId(out var userId))
-        {
-            return Unauthorized();
-        }
-
-        return Ok(await _seriesService.ListSentBoardReviewInvitationsAsync(userId, cancellationToken));
-    }
-
-    [HttpGet("{seriesId:guid}/board-review-invitations")]
-    [SwaggerOperation(Summary = "List board review invitations for series", Description = "Lists board review invitations for a specific series.")]
-    [ProducesResponseType(typeof(IReadOnlyList<SeriesBoardReviewInvitationResponse>), StatusCodes.Status200OK)]
-    public async Task<ActionResult<IReadOnlyList<SeriesBoardReviewInvitationResponse>>> BoardReviewInvitationsForSeries(
-        Guid seriesId,
-        CancellationToken cancellationToken)
-    {
-        if (!this.TryGetUserId(out var userId))
-        {
-            return Unauthorized();
-        }
-
-        return Ok(await _seriesService.ListBoardReviewInvitationsForSeriesAsync(userId, seriesId, cancellationToken));
-    }
-
-    [HttpGet("board-review-invitations/mine")]
-    [SwaggerOperation(Summary = "List my board review invitations", Description = "Lists board review invitations received by the authenticated board member.")]
-    [ProducesResponseType(typeof(IReadOnlyList<SeriesBoardReviewInvitationResponse>), StatusCodes.Status200OK)]
-    public async Task<ActionResult<IReadOnlyList<SeriesBoardReviewInvitationResponse>>> MyBoardReviewInvitations(
-        CancellationToken cancellationToken)
-    {
-        if (!this.TryGetUserId(out var userId))
-        {
-            return Unauthorized();
-        }
-
-        return Ok(await _seriesService.ListMyBoardReviewInvitationsAsync(userId, cancellationToken));
-    }
-
     [HttpGet("{seriesId:guid}/board-review-status")]
-    [SwaggerOperation(Summary = "Get board review status", Description = "Returns vote progress, invite slots, and review expiry for a series.")]
+    [SwaggerOperation(Summary = "Get board review status", Description = "Returns vote progress and review expiry for a series.")]
     [ProducesResponseType(typeof(SeriesBoardReviewStatusResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<ActionResult<SeriesBoardReviewStatusResponse>> BoardReviewStatus(
@@ -382,13 +321,12 @@ public class SeriesController : ControllerBase
         return status is null ? NotFound() : Ok(status);
     }
 
-    [HttpPatch("board-review-invitations/{seriesId:guid}/{action}")]
-    [SwaggerOperation(Summary = "Respond to board review invitation", Description = "Board member accepts or rejects a series review invitation.")]
-    [ProducesResponseType(typeof(SeriesBoardReviewInvitationResponse), StatusCodes.Status200OK)]
+    [HttpGet("{id:guid}/team")]
+    [SwaggerOperation(Summary = "Get series team", Description = "Returns mangaka, editor, board reviewers (with lead), and studio assistants for a series.")]
+    [ProducesResponseType(typeof(SeriesTeamResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
-    public async Task<ActionResult<SeriesBoardReviewInvitationResponse>> RespondBoardReviewInvitation(
-        Guid seriesId,
-        string action,
+    public async Task<ActionResult<SeriesTeamResponse>> GetTeam(
+        Guid id,
         CancellationToken cancellationToken)
     {
         if (!this.TryGetUserId(out var userId))
@@ -396,17 +334,8 @@ public class SeriesController : ControllerBase
             return Unauthorized();
         }
 
-        if (action is not ("accept" or "reject"))
-        {
-            return BadRequest("Action must be 'accept' or 'reject'.");
-        }
-
-        var invitation = await _seriesService.RespondToBoardReviewInvitationAsync(
-            userId,
-            seriesId,
-            action == "accept",
-            cancellationToken);
-        return invitation is null ? NotFound() : Ok(invitation);
+        var team = await _seriesService.GetTeamAsync(userId, id, cancellationToken);
+        return team is null ? NotFound() : Ok(team);
     }
 
     [HttpPut("{id:guid}/status")]

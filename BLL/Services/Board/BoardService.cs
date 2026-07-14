@@ -14,6 +14,7 @@ namespace BLL.Services.Board;
 public class BoardService
 {
     public const int MinimumBoardVotesForDecision = SeriesReviewRules.MinimumReviewDecisions;
+    public const int ReviewExpiryHours = SeriesReviewRules.ReviewExpiryHours;
     public const int ReviewExpiryDays = SeriesReviewRules.ReviewExpiryDays;
     public const int MaxReviewClaims = SeriesReviewRules.MaxActiveReviewSlots;
     public const int LeadClaimExpiryDays = SeriesReviewRules.LeadClaimExpiryDays;
@@ -41,7 +42,7 @@ public class BoardService
 
     public async Task ExpireStalePendingReviewsAsync(CancellationToken cancellationToken = default)
     {
-        var cutoff = DateTime.UtcNow.AddDays(-ReviewExpiryDays);
+        var cutoff = DateTime.UtcNow.AddHours(-ReviewExpiryHours);
         var expired = await _unitOfWork.Context.Series
             .AsNoTracking()
             .Where(s => s.Status == SeriesStatus.PendingReview
@@ -70,32 +71,13 @@ public class BoardService
             await _notificationService.CreateAsync(
                 item.AuthorId,
                 "Series hết hạn xét duyệt",
-                $"Series \"{item.Title}\" đã hết hạn {ReviewExpiryDays} ngày chờ xét duyệt. Bạn có thể chỉnh sửa và gửi lại.",
+                $"Series \"{item.Title}\" đã hết hạn {ReviewExpiryHours} giờ chờ xét duyệt. Bạn có thể chỉnh sửa và gửi lại.",
                 WorkflowNotificationPaths.MangakaSeries(item.Id),
                 WorkflowNotificationPaths.CategorySubmission,
                 cancellationToken: cancellationToken);
         }
 
         await _unitOfWork.SaveChangesAsync(cancellationToken);
-
-        // Tự gán Lead sau 7 ngày nếu series đã duyệt mà chưa có người nhận.
-        var approvedWithoutLead = await _unitOfWork.Context.Series
-            .Where(s => s.Status == SeriesStatus.Approved
-                || s.Status == SeriesStatus.Publishing
-                || s.Status == SeriesStatus.Completed
-                || s.Status == SeriesStatus.Hiatus)
-            .Where(s => !_unitOfWork.Context.SeriesBoardReviewClaims.Any(c => c.SeriesId == s.Id && c.IsLead))
-            .ToListAsync(cancellationToken);
-
-        foreach (var series in approvedWithoutLead)
-        {
-            await EnsureLeadAssignedAfterExpiryAsync(series, cancellationToken);
-        }
-
-        if (approvedWithoutLead.Count > 0)
-        {
-            await _unitOfWork.SaveChangesAsync(cancellationToken);
-        }
     }
 
     public async Task RecordInvitationDecisionAsync(
@@ -159,15 +141,7 @@ public class BoardService
             .AnyAsync(c => c.SeriesId == request.SeriesId && c.BoardMemberId == callerId, cancellationToken);
         if (!hasClaim)
         {
-            throw new WorkflowForbiddenException("Bạn cần nhận xét duyệt series trước khi bỏ phiếu.");
-        }
-
-        var claimCount = await _unitOfWork.Context.SeriesBoardReviewClaims
-            .CountAsync(c => c.SeriesId == request.SeriesId, cancellationToken);
-        if (claimCount < MaxReviewClaims)
-        {
-            throw new WorkflowForbiddenException(
-                $"Cần đủ {MaxReviewClaims} reviewer nhận series trước khi bỏ phiếu (hiện {claimCount}/{MaxReviewClaims}).");
+            throw new WorkflowForbiddenException("Bạn không thuộc nhóm 3 board được gán xét duyệt series này.");
         }
 
         var existing = await _unitOfWork.Context.BoardVotes
@@ -207,7 +181,7 @@ public class BoardService
         Guid? seriesId,
         CancellationToken cancellationToken = default)
     {
-        await RequireBoardOrAdminAsync(callerId, cancellationToken);
+        var caller = await RequireBoardMemberAsync(callerId, allowAdmin: true, cancellationToken);
 
         var query = _unitOfWork.Context.BoardVotes
             .AsNoTracking()
@@ -221,7 +195,45 @@ public class BoardService
         }
 
         var votes = await query.OrderByDescending(v => v.CreatedAt).ToListAsync(cancellationToken);
-        return votes.Select(v => MapVote(v, v.Series?.Title, v.BoardMember?.FullName)).ToList();
+        var mapped = votes.Select(v => MapVote(v, v.Series?.Title, v.BoardMember?.FullName)).ToList();
+
+        // Admin luôn xem đủ. Vote ẩn chỉ áp khi lọc theo 1 series đang pending_review.
+        if (seriesId is null || PageAccessService.IsAdmin(caller.Role))
+        {
+            return mapped;
+        }
+
+        var series = await SeriesRepository.GetByIdAsync(seriesId.Value, cancellationToken: cancellationToken);
+        if (series is null || series.Status != SeriesStatus.PendingReview)
+        {
+            return mapped;
+        }
+
+        var distinctVoters = votes
+            .Where(v => v.BoardMemberId is not null)
+            .Select(v => v.BoardMemberId!.Value)
+            .Distinct()
+            .ToList();
+        var votedCount = distinctVoters.Count;
+        var callerHasVoted = distinctVoters.Contains(callerId);
+
+        // Đủ 3 phiếu → mọi board xem đầy đủ.
+        if (votedCount >= MinimumBoardVotesForDecision)
+        {
+            return mapped;
+        }
+
+        // Người thứ 3 (chưa vote, đã có ≥2 phiếu) được xem đủ để quyết định cuối.
+        if (votedCount >= 2 && !callerHasVoted)
+        {
+            return mapped;
+        }
+
+        // Ẩn decision/comment của người khác (vẫn hiện đã bỏ phiếu / tên nếu cần).
+        return mapped.Select(v =>
+            v.BoardMemberId == callerId
+                ? v
+                : v with { Decision = "hidden", Comment = null, PublishingFrequency = null }).ToList();
     }
 
     public async Task<IReadOnlyList<PendingSeriesItemResponse>> ListPendingSeriesAsync(
@@ -230,42 +242,21 @@ public class BoardService
     {
         await RequireBoardOrAdminAsync(callerId, cancellationToken);
         await ExpireStalePendingReviewsAsync(cancellationToken);
+        await HealPendingReviewSeriesAsync(cancellationToken);
 
-        var pending = await _unitOfWork.Context.Series
-            .AsNoTracking()
-            .Include(s => s.Author)
-            .Where(s => s.Status == SeriesStatus.PendingReview)
-            .ToListAsync(cancellationToken);
-
-        var seriesIds = pending.Select(s => s.Id).ToList();
-        var boardMemberIds = await GetActiveBoardMemberIdsAsync(cancellationToken);
-        var votes = await _unitOfWork.Context.BoardVotes
-            .AsNoTracking()
-            .Where(v => v.SeriesId != null && seriesIds.Contains(v.SeriesId.Value))
-            .ToListAsync(cancellationToken);
-        var invitations = await _unitOfWork.Context.SeriesBoardReviewInvitations
-            .AsNoTracking()
-            .Where(i => seriesIds.Contains(i.SeriesId))
-            .ToListAsync(cancellationToken);
-        var claims = await _unitOfWork.Context.SeriesBoardReviewClaims
-            .AsNoTracking()
-            .Include(c => c.BoardMember)
-            .Where(c => seriesIds.Contains(c.SeriesId))
-            .ToListAsync(cancellationToken);
-
-        return pending
-            .Select(s => MapPendingSeriesItem(s, votes, invitations, claims, boardMemberIds, callerId))
-            .Where(item => item.ClaimedBoardMembers < MaxReviewClaims)
-            .ToList();
+        return await LoadPendingSeriesItemsAsync(callerId, cancellationToken);
     }
 
     public async Task<IReadOnlyList<PendingSeriesItemResponse>> ListInReviewSeriesAsync(
         Guid callerId,
         CancellationToken cancellationToken = default)
     {
-        await RequireBoardOrAdminAsync(callerId, cancellationToken);
-        await ExpireStalePendingReviewsAsync(cancellationToken);
+        // Cùng danh sách Duyệt Series — mọi pending đã auto-gán 3 board cố định.
+        return await ListPendingSeriesAsync(callerId, cancellationToken);
+    }
 
+    private async Task HealPendingReviewSeriesAsync(CancellationToken cancellationToken)
+    {
         var pendingTracked = await _unitOfWork.Context.Series
             .Where(s => s.Status == SeriesStatus.PendingReview)
             .ToListAsync(cancellationToken);
@@ -273,38 +264,53 @@ public class BoardService
         foreach (var series in pendingTracked)
         {
             await TryAutoUpdateSeriesStatusAsync(series, series.Id, cancellationToken);
+            if (series.Status == SeriesStatus.PendingReview)
+            {
+                await EnsureFixedBoardClaimsIfMissingAsync(series, cancellationToken);
+            }
         }
 
         if (pendingTracked.Count > 0)
         {
             await _unitOfWork.SaveChangesAsync(cancellationToken);
         }
+    }
 
+    private async Task<IReadOnlyList<PendingSeriesItemResponse>> LoadPendingSeriesItemsAsync(
+        Guid callerId,
+        CancellationToken cancellationToken)
+    {
         var pending = await _unitOfWork.Context.Series
             .AsNoTracking()
             .Include(s => s.Author)
             .Where(s => s.Status == SeriesStatus.PendingReview)
+            .OrderByDescending(s => s.SubmittedForReviewAt)
             .ToListAsync(cancellationToken);
 
         var seriesIds = pending.Select(s => s.Id).ToList();
         var boardMemberIds = await GetActiveBoardMemberIdsAsync(cancellationToken);
-        var votes = await _unitOfWork.Context.BoardVotes
-            .AsNoTracking()
-            .Where(v => v.SeriesId != null && seriesIds.Contains(v.SeriesId.Value))
-            .ToListAsync(cancellationToken);
-        var invitations = await _unitOfWork.Context.SeriesBoardReviewInvitations
-            .AsNoTracking()
-            .Where(i => seriesIds.Contains(i.SeriesId))
-            .ToListAsync(cancellationToken);
-        var claims = await _unitOfWork.Context.SeriesBoardReviewClaims
-            .AsNoTracking()
-            .Include(c => c.BoardMember)
-            .Where(c => seriesIds.Contains(c.SeriesId))
-            .ToListAsync(cancellationToken);
+        var votes = seriesIds.Count == 0
+            ? new List<BoardVote>()
+            : await _unitOfWork.Context.BoardVotes
+                .AsNoTracking()
+                .Where(v => v.SeriesId != null && seriesIds.Contains(v.SeriesId.Value))
+                .ToListAsync(cancellationToken);
+        var invitations = seriesIds.Count == 0
+            ? new List<SeriesBoardReviewInvitation>()
+            : await _unitOfWork.Context.SeriesBoardReviewInvitations
+                .AsNoTracking()
+                .Where(i => seriesIds.Contains(i.SeriesId))
+                .ToListAsync(cancellationToken);
+        var claims = seriesIds.Count == 0
+            ? new List<SeriesBoardReviewClaim>()
+            : await _unitOfWork.Context.SeriesBoardReviewClaims
+                .AsNoTracking()
+                .Include(c => c.BoardMember)
+                .Where(c => seriesIds.Contains(c.SeriesId))
+                .ToListAsync(cancellationToken);
 
         return pending
             .Select(s => MapPendingSeriesItem(s, votes, invitations, claims, boardMemberIds, callerId))
-            .Where(item => item.ClaimedBoardMembers >= MaxReviewClaims)
             .ToList();
     }
 
@@ -314,70 +320,8 @@ public class BoardService
         bool wantLead,
         CancellationToken cancellationToken = default)
     {
-        _ = await RequireBoardMemberAsync(callerId, allowAdmin: false, cancellationToken);
-        var caller = await _unitOfWork.Repository<Profile>().GetByIdAsync(callerId, cancellationToken: cancellationToken)
-            ?? throw new WorkflowForbiddenException("Caller profile not found.");
-        var series = await SeriesRepository.GetByIdAsync(seriesId, asNoTracking: false, cancellationToken)
-            ?? throw new ArgumentException("Series not found.");
-
-        if (series.Status != SeriesStatus.PendingReview)
-        {
-            throw new WorkflowForbiddenException("Chỉ series đang chờ xét duyệt mới có thể nhận.");
-        }
-
-        var pendingInvitation = await _unitOfWork.Context.SeriesBoardReviewInvitations
-            .AsNoTracking()
-            .FirstOrDefaultAsync(
-                i => i.SeriesId == seriesId && i.BoardMemberId == callerId && i.Status == "pending",
-                cancellationToken);
-        if (pendingInvitation is not null)
-        {
-            throw new WorkflowForbiddenException(
-                "Bạn có lời mời xét duyệt đang chờ — hãy chấp nhận hoặc từ chối trong mục Lời mời xét duyệt.");
-        }
-
-        var existingClaim = await _unitOfWork.Context.SeriesBoardReviewClaims
-            .Include(c => c.BoardMember)
-            .FirstOrDefaultAsync(c => c.SeriesId == seriesId && c.BoardMemberId == callerId, cancellationToken);
-        if (existingClaim is not null)
-        {
-            var existingClaims = await LoadSeriesClaimsAsync(seriesId, cancellationToken);
-            return BuildClaimResponse(seriesId, callerId, existingClaim, existingClaims);
-        }
-
-        await using var transaction = await _unitOfWork.Context.Database.BeginTransactionAsync(
-            IsolationLevel.Serializable,
-            cancellationToken);
-
-        var claimCount = await _unitOfWork.Context.SeriesBoardReviewClaims
-            .CountAsync(c => c.SeriesId == seriesId, cancellationToken);
-        if (claimCount >= MaxReviewClaims)
-        {
-            throw new WorkflowForbiddenException("Đã đủ 3 reviewer nhận series này.");
-        }
-
-        var hasLead = await _unitOfWork.Context.SeriesBoardReviewClaims
-            .AnyAsync(c => c.SeriesId == seriesId && c.IsLead, cancellationToken);
-        // Lead chỉ nhận sau khi series đã duyệt thành công — không gán Lead lúc claim xét duyệt.
-        _ = wantLead;
-        _ = hasLead;
-
-        var claimedAt = DateTime.UtcNow;
-        var claim = new SeriesBoardReviewClaim
-        {
-            SeriesId = seriesId,
-            BoardMemberId = callerId,
-            Source = "public",
-            ClaimedAt = claimedAt,
-            IsLead = false
-        };
-        _unitOfWork.Context.SeriesBoardReviewClaims.Add(claim);
-        await _unitOfWork.SaveChangesAsync(cancellationToken);
-        await transaction.CommitAsync(cancellationToken);
-
-        var allClaims = await LoadSeriesClaimsAsync(seriesId, cancellationToken);
-        await NotifyAfterReviewClaimAsync(series, caller, allClaims, fromPublicClaim: true, cancellationToken);
-        return BuildClaimResponse(seriesId, callerId, claim, allClaims);
+        throw new WorkflowForbiddenException(
+            "Không cần nhận series — 3 board cố định được gán tự động khi mangaka nộp duyệt.");
     }
 
     public async Task<BoardVoteProgressResponse> GetVoteProgressAsync(
@@ -392,12 +336,7 @@ public class BoardService
         if (series is not null && series.Status == SeriesStatus.PendingReview)
         {
             await TryAutoUpdateSeriesStatusAsync(series, seriesId, cancellationToken);
-            await _unitOfWork.SaveChangesAsync(cancellationToken);
-        }
-
-        if (series is not null)
-        {
-            await EnsureLeadAssignedAfterExpiryAsync(series, cancellationToken);
+            await EnsureFixedBoardClaimsIfMissingAsync(series, cancellationToken);
             await _unitOfWork.SaveChangesAsync(cancellationToken);
         }
 
@@ -414,34 +353,35 @@ public class BoardService
             .AsNoTracking()
             .Include(c => c.BoardMember)
             .FirstOrDefaultAsync(c => c.SeriesId == seriesId && c.IsLead, cancellationToken);
-        var pendingInvitation = await _unitOfWork.Context.SeriesBoardReviewInvitations
-            .AsNoTracking()
-            .AnyAsync(
-                i => i.SeriesId == seriesId && i.BoardMemberId == callerId && i.Status == "pending",
-                cancellationToken);
         var claimsFull = claimCount >= MaxReviewClaims;
         var hasLead = leadClaim is not null;
-        var canClaim = series?.Status == SeriesStatus.PendingReview
-            && !currentUserHasClaimed
-            && !claimsFull
-            && !pendingInvitation;
-        var canVote = series?.Status == SeriesStatus.PendingReview
-            && currentUserHasClaimed
-            && claimsFull;
-        var approvedAt = await GetBoardApprovedAtAsync(seriesId, cancellationToken);
-        var leadClaimExpiresAt = approvedAt?.AddDays(LeadClaimExpiryDays);
-        var seriesReadyForLead = series is not null
-            && series.Status is SeriesStatus.Approved or SeriesStatus.Publishing or SeriesStatus.Completed or SeriesStatus.Hiatus;
-        var canClaimLead = seriesReadyForLead
-            && currentUserHasClaimed
-            && !hasLead;
+        var canClaim = false;
+        var canVote = series?.Status == SeriesStatus.PendingReview && currentUserHasClaimed;
+        var canClaimLead = false;
         var canManagePublishingSchedule = currentUserIsLead;
+        var expiresAt = series?.SubmittedForReviewAt?.AddHours(ReviewExpiryHours);
+
+        var approveVotes = boardVotes.Count(v => v.Decision == VoteDecisions.Approve);
+        var rejectVotes = boardVotes.Count(v => v.Decision == VoteDecisions.Reject);
+        var callerHasVoted = boardVotes.Any(v => v.BoardMemberId == callerId);
+        var callerProfile = await _unitOfWork.Repository<Profile>().GetByIdAsync(callerId, cancellationToken: cancellationToken);
+        var callerIsAdmin = callerProfile is not null && PageAccessService.IsAdmin(callerProfile.Role);
+        // Không lộ approve/reject khi đang ẩn phiếu (khớp ListVotesAsync).
+        if (series?.Status == SeriesStatus.PendingReview
+            && !callerIsAdmin
+            && votedCount < MinimumBoardVotesForDecision
+            && !(votedCount >= 2 && !callerHasVoted))
+        {
+            var myVote = boardVotes.FirstOrDefault(v => v.BoardMemberId == callerId);
+            approveVotes = myVote?.Decision == VoteDecisions.Approve ? 1 : 0;
+            rejectVotes = myVote?.Decision == VoteDecisions.Reject ? 1 : 0;
+        }
 
         return new BoardVoteProgressResponse(
             boardMemberIds.Count,
             votedCount,
-            boardVotes.Count(v => v.Decision == VoteDecisions.Approve),
-            boardVotes.Count(v => v.Decision == VoteDecisions.Reject),
+            approveVotes,
+            rejectVotes,
             GetRequiredVoteQuorum(boardMemberIds.Count),
             IsQuorumMet(votedCount, boardMemberIds.Count),
             claimCount,
@@ -457,7 +397,7 @@ public class BoardService
             canManagePublishingSchedule,
             canVote,
             canClaimLead,
-            leadClaimExpiresAt,
+            expiresAt,
             series is null ? null : SeriesStatuses.ToDbValue(series.Status));
     }
 
@@ -466,25 +406,37 @@ public class BoardService
         Guid seriesId,
         CancellationToken cancellationToken = default)
     {
-        _ = await RequireBoardMemberAsync(callerId, allowAdmin: false, cancellationToken);
+        throw new WorkflowForbiddenException(
+            "Lead do Admin gán. Board không tự nhận phụ trách chính nữa.");
+    }
+
+    public async Task<BoardReviewClaimResponse> AssignLeadByAdminAsync(
+        Guid callerId,
+        Guid seriesId,
+        Guid boardMemberId,
+        CancellationToken cancellationToken = default)
+    {
+        var caller = await _unitOfWork.Repository<Profile>().GetByIdAsync(callerId, cancellationToken: cancellationToken)
+            ?? throw new WorkflowForbiddenException("Caller profile not found.");
+        if (!PageAccessService.IsAdmin(caller.Role))
+        {
+            throw new WorkflowForbiddenException("Chỉ Admin được gán Lead cho series.");
+        }
+
         var series = await SeriesRepository.GetByIdAsync(seriesId, asNoTracking: false, cancellationToken)
             ?? throw new ArgumentException("Series not found.");
 
-        if (series.Status is not (SeriesStatus.Approved or SeriesStatus.Publishing or SeriesStatus.Completed or SeriesStatus.Hiatus))
-        {
-            throw new WorkflowForbiddenException("Chỉ nhận phụ trách chính sau khi series đã được hội đồng duyệt.");
-        }
-
         var claim = await _unitOfWork.Context.SeriesBoardReviewClaims
             .Include(c => c.BoardMember)
-            .FirstOrDefaultAsync(c => c.SeriesId == seriesId && c.BoardMemberId == callerId, cancellationToken)
-            ?? throw new WorkflowForbiddenException("Chỉ reviewer đã nhận xét duyệt series mới được nhận làm phụ trách chính.");
+            .FirstOrDefaultAsync(c => c.SeriesId == seriesId && c.BoardMemberId == boardMemberId, cancellationToken)
+            ?? throw new ArgumentException("BoardMemberId phải là một trong các reviewer đã được gán cho series.");
 
-        var hasLead = await _unitOfWork.Context.SeriesBoardReviewClaims
-            .AnyAsync(c => c.SeriesId == seriesId && c.IsLead, cancellationToken);
-        if (hasLead)
+        var existingLeads = await _unitOfWork.Context.SeriesBoardReviewClaims
+            .Where(c => c.SeriesId == seriesId && c.IsLead)
+            .ToListAsync(cancellationToken);
+        foreach (var lead in existingLeads)
         {
-            throw new WorkflowForbiddenException("Series đã có board phụ trách chính.");
+            lead.IsLead = false;
         }
 
         claim.IsLead = true;
@@ -494,12 +446,49 @@ public class BoardService
         await _notificationService.CreateAsync(
             series.AuthorId,
             "Đã có phụ trách chính",
-            $"{claim.BoardMember?.FullName ?? "Board"} đã nhận phụ trách chính series \"{series.Title}\".",
+            $"Admin đã gán {claim.BoardMember?.FullName ?? "Board"} làm Lead series \"{series.Title}\".",
             WorkflowNotificationPaths.MangakaSeries(seriesId),
             WorkflowNotificationPaths.CategorySubmission,
             cancellationToken: cancellationToken);
 
-        return BuildClaimResponse(seriesId, callerId, claim, allClaims);
+        await _notificationService.CreateAsync(
+            boardMemberId,
+            "Bạn được gán làm Lead",
+            $"Bạn là phụ trách chính series \"{series.Title}\".",
+            WorkflowNotificationPaths.BoardApprovedSeries(seriesId),
+            WorkflowNotificationPaths.CategorySubmission,
+            cancellationToken: cancellationToken);
+
+        return BuildClaimResponse(seriesId, boardMemberId, claim, allClaims);
+    }
+
+    public async Task<IReadOnlyList<BoardReviewerSummaryItem>> ListSeriesReviewersAsync(
+        Guid callerId,
+        Guid seriesId,
+        CancellationToken cancellationToken = default)
+    {
+        var caller = await _unitOfWork.Repository<Profile>().GetByIdAsync(callerId, cancellationToken: cancellationToken)
+            ?? throw new WorkflowForbiddenException("Caller profile not found.");
+        if (!PageAccessService.IsAdmin(caller.Role) && !PageAccessService.IsBoard(caller.Role))
+        {
+            throw new WorkflowForbiddenException("Requires admin or board role.");
+        }
+
+        var claims = await _unitOfWork.Context.SeriesBoardReviewClaims
+            .AsNoTracking()
+            .Include(c => c.BoardMember)
+            .Where(c => c.SeriesId == seriesId)
+            .OrderByDescending(c => c.IsLead)
+            .ThenBy(c => c.ClaimedAt)
+            .ToListAsync(cancellationToken);
+
+        return claims
+            .Select(c => new BoardReviewerSummaryItem(
+                c.BoardMemberId,
+                c.BoardMember?.FullName ?? "Board",
+                c.Source,
+                c.IsLead))
+            .ToList();
     }
 
     public async Task<IReadOnlyList<LeaderboardItemResponse>> GetLeaderboardAsync(
@@ -716,7 +705,7 @@ public class BoardService
             }, cancellationToken);
 
             await NotifyAuthorReviewDecisionAsync(series, approved: true, cancellationToken);
-            await NotifyReviewersToClaimLeadAsync(seriesId, series, cancellationToken);
+            await NotifyAdminsAssignLeadAsync(seriesId, series, cancellationToken);
         }
         else
         {
@@ -889,15 +878,20 @@ public class BoardService
         var claimCount = seriesClaims.Count;
         var myClaim = seriesClaims.FirstOrDefault(c => c.BoardMemberId == callerId);
         var leadClaim = seriesClaims.FirstOrDefault(c => c.IsLead);
-        var expiresAt = series.SubmittedForReviewAt?.AddDays(ReviewExpiryDays);
+        var expiresAt = series.SubmittedForReviewAt?.AddHours(ReviewExpiryHours);
         var claimsFull = claimCount >= MaxReviewClaims;
         var hasLead = leadClaim is not null;
-        var canClaim = myClaim is null
-            && !claimsFull
-            && myInvitation?.Status != "pending"
-            && series.Status == SeriesStatus.PendingReview;
+        var canClaim = false;
         var canClaimAsLead = false;
         var canManagePublishingSchedule = myClaim?.IsLead == true;
+
+        var approveVotes = seriesVotes.Count(v => v.Decision == VoteDecisions.Approve);
+        var rejectVotes = seriesVotes.Count(v => v.Decision == VoteDecisions.Reject);
+        if (votedCount < MinimumBoardVotesForDecision && !(votedCount >= 2 && myVote is null))
+        {
+            approveVotes = myVote?.Decision == VoteDecisions.Approve ? 1 : 0;
+            rejectVotes = myVote?.Decision == VoteDecisions.Reject ? 1 : 0;
+        }
 
         return new PendingSeriesItemResponse(
             series.Id,
@@ -905,8 +899,8 @@ public class BoardService
             SeriesStatuses.ToDbValue(series.Status),
             series.AuthorId,
             series.Author.FullName,
-            seriesVotes.Count(v => v.Decision == VoteDecisions.Approve),
-            seriesVotes.Count(v => v.Decision == VoteDecisions.Reject),
+            approveVotes,
+            rejectVotes,
             boardMemberIds.Count,
             votedCount,
             claimCount,
@@ -1033,6 +1027,56 @@ public class BoardService
             cancellationToken: cancellationToken);
     }
 
+    private async Task EnsureFixedBoardClaimsIfMissingAsync(
+        DAL.Models.Series series,
+        CancellationToken cancellationToken)
+    {
+        if (series.Status != SeriesStatus.PendingReview)
+        {
+            return;
+        }
+
+        var existingIds = await _unitOfWork.Context.SeriesBoardReviewClaims
+            .Where(c => c.SeriesId == series.Id)
+            .Select(c => c.BoardMemberId)
+            .ToListAsync(cancellationToken);
+        if (existingIds.Count >= MaxReviewClaims)
+        {
+            return;
+        }
+
+        var boards = await _unitOfWork.Context.Profiles
+            .AsNoTracking()
+            .Where(p => p.Role == ProfileRole.Board && (p.IsActive == null || p.IsActive == true))
+            .OrderBy(p => p.FullName)
+            .Take(MaxReviewClaims)
+            .ToListAsync(cancellationToken);
+
+        var claimedAt = DateTime.UtcNow;
+        var assigned = existingIds.ToHashSet();
+        foreach (var board in boards)
+        {
+            if (assigned.Count >= MaxReviewClaims)
+            {
+                break;
+            }
+
+            if (!assigned.Add(board.Id))
+            {
+                continue;
+            }
+
+            _unitOfWork.Context.SeriesBoardReviewClaims.Add(new SeriesBoardReviewClaim
+            {
+                SeriesId = series.Id,
+                BoardMemberId = board.Id,
+                Source = "fixed_board",
+                ClaimedAt = claimedAt,
+                IsLead = false
+            });
+        }
+    }
+
     private async Task<DateTime?> GetBoardApprovedAtAsync(Guid seriesId, CancellationToken cancellationToken)
     {
         var log = await _unitOfWork.Context.ActivityLogs
@@ -1069,29 +1113,43 @@ public class BoardService
             cancellationToken: cancellationToken);
     }
 
-    private async Task NotifyReviewersToClaimLeadAsync(
+    private async Task NotifyAdminsAssignLeadAsync(
         Guid seriesId,
         DAL.Models.Series series,
         CancellationToken cancellationToken)
     {
-        var claimantIds = await _unitOfWork.Context.SeriesBoardReviewClaims
-            .AsNoTracking()
-            .Where(c => c.SeriesId == seriesId)
-            .Select(c => c.BoardMemberId)
-            .ToListAsync(cancellationToken);
+        var hasLead = await _unitOfWork.Context.SeriesBoardReviewClaims
+            .AnyAsync(c => c.SeriesId == seriesId && c.IsLead, cancellationToken);
+        if (hasLead)
+        {
+            return;
+        }
 
-        if (claimantIds.Count == 0)
+        var adminIds = await _unitOfWork.Context.Profiles
+            .AsNoTracking()
+            .Where(p => p.Role == ProfileRole.Admin && (p.IsActive == null || p.IsActive == true))
+            .Select(p => p.Id)
+            .ToListAsync(cancellationToken);
+        if (adminIds.Count == 0)
         {
             return;
         }
 
         await _notificationService.CreateForUsersAsync(
-            claimantIds,
-            "Nhận phụ trách chính",
-            $"Series \"{series.Title}\" đã được duyệt. Trong {LeadClaimExpiryDays} ngày, một reviewer có thể nhận làm phụ trách chính (lên lịch khi series hoàn thành). Nếu không ai nhận, hệ thống sẽ tự gán.",
-            WorkflowNotificationPaths.BoardApprovedSeries(seriesId),
+            adminIds,
+            "Cần gán Lead cho series",
+            $"Series \"{series.Title}\" đã được duyệt. Hãy gán Lead trong Admin → Series.",
+            "/admin/series",
             WorkflowNotificationPaths.CategorySubmission,
             cancellationToken);
+    }
+
+    private async Task NotifyReviewersToClaimLeadAsync(
+        Guid seriesId,
+        DAL.Models.Series series,
+        CancellationToken cancellationToken)
+    {
+        await NotifyAdminsAssignLeadAsync(seriesId, series, cancellationToken);
     }
 
     private async Task NotifyReviewersOnApproveAsync(
@@ -1099,7 +1157,7 @@ public class BoardService
         DAL.Models.Series series,
         CancellationToken cancellationToken)
     {
-        await NotifyReviewersToClaimLeadAsync(seriesId, series, cancellationToken);
+        await NotifyAdminsAssignLeadAsync(seriesId, series, cancellationToken);
     }
 
     private async Task NotifyAfterReviewClaimAsync(

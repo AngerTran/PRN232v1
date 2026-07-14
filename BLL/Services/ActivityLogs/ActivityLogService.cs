@@ -216,11 +216,36 @@ public class ActivityLogService
 
         var query = FilteredQuery(userId, action, entityType, entityId, from, to);
         var total = await query.CountAsync(cancellationToken);
-        var data = await Project(query)
+        var pageItems = await query
             .OrderByDescending(l => l.CreatedAt)
             .Skip((page - 1) * limit)
             .Take(limit)
             .ToListAsync(cancellationToken);
+
+        var userIds = pageItems
+            .Where(l => l.UserId is not null)
+            .Select(l => l.UserId!.Value)
+            .Distinct()
+            .ToList();
+        var names = userIds.Count == 0
+            ? new Dictionary<Guid, string>()
+            : await _unitOfWork.Context.Profiles
+                .AsNoTracking()
+                .Where(p => userIds.Contains(p.Id))
+                .ToDictionaryAsync(p => p.Id, p => p.FullName, cancellationToken);
+
+        var data = pageItems
+            .Select(l => new ActivityLogResponse(
+                l.Id,
+                l.UserId,
+                l.UserId is Guid uid && names.TryGetValue(uid, out var name) ? name : null,
+                l.Action,
+                l.EntityType,
+                l.EntityId,
+                l.OldData,
+                l.NewData,
+                l.CreatedAt))
+            .ToList();
 
         return new ActivityLogListResponse(data, total, page, limit);
     }

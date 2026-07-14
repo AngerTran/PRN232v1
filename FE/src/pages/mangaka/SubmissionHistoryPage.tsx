@@ -12,7 +12,7 @@ import {
   getSubmittedSeries,
   SERIES_SUBMISSION_STATUS_HINT,
   resubmitSeriesForReview,
-  REVIEW_EXPIRY_DAYS,
+  REVIEW_EXPIRY_HOURS,
 } from '../../services/seriesApi';
 import type { Series } from '../../types/domain';
 
@@ -72,7 +72,7 @@ export default function SubmissionHistoryPage() {
       <div>
         <h1 className="text-xl font-bold">Lịch sử nộp series</h1>
         <p className="text-sm text-muted-foreground mt-1">
-          Theo dõi trạng thái duyệt các series đã gửi lên hội đồng. Series chờ duyệt hết hạn sau {REVIEW_EXPIRY_DAYS} ngày.
+          Theo dõi trạng thái duyệt các series đã gửi lên hội đồng. Series chờ duyệt hết hạn sau {REVIEW_EXPIRY_HOURS} giờ. Ba board cố định sẽ nhận thông báo khi bạn nộp.
         </p>
       </div>
 
@@ -88,7 +88,7 @@ export default function SubmissionHistoryPage() {
         <EmptyState
           icon={<Send size={24} />}
           title="Chưa có series nào được nộp"
-          description="Tạo series và nhấn «Gửi xét duyệt» từ trang chi tiết series để gửi lên hội đồng."
+          description="Tạo series và nhấn «Gửi xét duyệt» từ trang chi tiết. Ba board cố định sẽ nhận thông báo (hạn 48 giờ)."
         />
       ) : (
         <div className="space-y-3">

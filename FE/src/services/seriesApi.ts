@@ -285,18 +285,20 @@ export const SERIES_PRODUCTION_LOCK_HINT: Partial<Record<SeriesStatus, string>> 
 };
 
 export const SERIES_SUBMISSION_STATUS_HINT: Record<SeriesStatus, string> = {
-  Draft: 'Series chưa được gửi lên hội đồng biên tập.',
-  Submitted: 'Đang chờ hội đồng xét duyệt.',
+  Draft: 'Series chưa được gửi xét duyệt.',
+  Submitted: 'Đang chờ 3 board cố định xét duyệt (hạn 48 giờ).',
   Approved: 'Hội đồng đã phê duyệt series.',
   'In Progress': 'Series đang trong quá trình xuất bản.',
   'Revision Required': 'Hội đồng yêu cầu chỉnh sửa trước khi duyệt.',
   'At Risk': 'Series đang có nguy cơ bị tạm dừng do xếp hạng thấp.',
   Completed: 'Editor đã đánh dấu series hoàn thành sản xuất.',
   Published: 'Series đã xuất bản.',
-  Cancelled: 'Hội đồng đã từ chối hoặc hết hạn xét duyệt — bạn có thể chỉnh sửa và gửi lại.',
+  Cancelled: 'Hội đồng đã từ chối hoặc hết hạn 48 giờ xét duyệt — bạn có thể chỉnh sửa và gửi lại.',
 };
 
-export const REVIEW_EXPIRY_DAYS = 30;
+export const REVIEW_EXPIRY_HOURS = 48;
+/** @deprecated dùng REVIEW_EXPIRY_HOURS */
+export const REVIEW_EXPIRY_DAYS = 2;
 
 /** Lịch sử nộp series của mangaka — mọi series đã gửi duyệt, mới nhất trước. */
 export async function getSubmittedSeries(): Promise<Series[]> {
@@ -312,6 +314,14 @@ export async function getVisibleSeries(): Promise<Series[]> {
     const chapters = await getSeriesChapters(item.id).catch(() => []);
     return mapSeries(item, chapters.length);
   }));
+}
+
+/** Danh sách series cho admin (không tải từng chapter — nhanh hơn khi lọc/xóa). */
+export async function getVisibleSeriesLight(): Promise<Series[]> {
+  const items = unwrap(await apiRequest<ApiEnvelope<ApiSeries[]>>('/api/series'));
+  return items
+    .map(item => mapSeries(item))
+    .sort((a, b) => new Date(b.updatedAt || 0).getTime() - new Date(a.updatedAt || 0).getTime());
 }
 
 const APPROVED_SERIES_STATUSES = new Set(['approved', 'publishing', 'completed', 'hiatus']);
@@ -565,16 +575,26 @@ export async function resubmitSeriesForReview(id: string): Promise<Series> {
   return updateSeriesStatus(id, 'pending_review');
 }
 
-export interface SeriesBoardReviewInvitation {
-  seriesId: string;
-  seriesTitle: string;
-  mangakaId: string;
-  mangakaName: string;
+export interface BoardReviewerSummary {
   boardMemberId: string;
   boardMemberName: string;
-  status: 'pending' | 'accepted' | 'rejected';
-  createdAt: string;
-  respondedAt?: string | null;
+  source: string;
+  isLead?: boolean;
+}
+
+export type SeriesTeamRole = 'mangaka' | 'editor' | 'board_lead' | 'board' | 'assistant';
+
+export interface SeriesTeamMember {
+  id: string;
+  name: string;
+  role: SeriesTeamRole;
+}
+
+export interface SeriesTeam {
+  mangaka: SeriesTeamMember;
+  editor: SeriesTeamMember | null;
+  boardReviewers: SeriesTeamMember[];
+  assistants: SeriesTeamMember[];
 }
 
 export interface SeriesBoardReviewStatus {
@@ -588,39 +608,36 @@ export interface SeriesBoardReviewStatus {
   submittedForReviewAt?: string | null;
   reviewExpiresAt?: string | null;
   quorumMet: boolean;
-}
-
-export async function inviteBoardMember(seriesId: string, boardMemberId: string): Promise<SeriesBoardReviewInvitation> {
-  return unwrap(await apiRequest<ApiEnvelope<SeriesBoardReviewInvitation>>(`/api/series/${seriesId}/board-review-invitations`, {
-    method: 'POST',
-    body: JSON.stringify({ boardMemberId }),
-  }));
-}
-
-export async function getSentBoardReviewInvitations(): Promise<SeriesBoardReviewInvitation[]> {
-  return unwrap(await apiRequest<ApiEnvelope<SeriesBoardReviewInvitation[]>>('/api/series/board-review-invitations/sent'));
-}
-
-export async function getBoardReviewInvitationsForSeries(seriesId: string): Promise<SeriesBoardReviewInvitation[]> {
-  return unwrap(await apiRequest<ApiEnvelope<SeriesBoardReviewInvitation[]>>(`/api/series/${seriesId}/board-review-invitations`));
-}
-
-export async function getMyBoardReviewInvitations(): Promise<SeriesBoardReviewInvitation[]> {
-  return unwrap(await apiRequest<ApiEnvelope<SeriesBoardReviewInvitation[]>>('/api/series/board-review-invitations/mine'));
-}
-
-export async function respondToBoardReviewInvitation(
-  seriesId: string,
-  action: 'accept' | 'reject'
-): Promise<SeriesBoardReviewInvitation> {
-  return unwrap(await apiRequest<ApiEnvelope<SeriesBoardReviewInvitation>>(
-    `/api/series/board-review-invitations/${seriesId}/${action}`,
-    { method: 'PATCH' }
-  ));
+  claimedBoardMembers?: number;
+  claimedReviewers?: BoardReviewerSummary[];
 }
 
 export async function getSeriesBoardReviewStatus(seriesId: string): Promise<SeriesBoardReviewStatus> {
   return unwrap(await apiRequest<ApiEnvelope<SeriesBoardReviewStatus>>(`/api/series/${seriesId}/board-review-status`));
+}
+
+export async function getSeriesTeam(seriesId: string): Promise<SeriesTeam> {
+  const raw = unwrap(await apiRequest<ApiEnvelope<{
+    mangaka: { id: string; name: string; role: string };
+    editor?: { id: string; name: string; role: string } | null;
+    boardReviewers: Array<{ id: string; name: string; role: string }>;
+    assistants: Array<{ id: string; name: string; role: string }>;
+  }>>(`/api/series/${seriesId}/team`));
+
+  const mapMember = (m: { id: string; name: string; role: string }): SeriesTeamMember => ({
+    id: m.id,
+    name: m.name,
+    role: (m.role === 'board_lead' || m.role === 'board' || m.role === 'mangaka' || m.role === 'editor' || m.role === 'assistant'
+      ? m.role
+      : 'board') as SeriesTeamRole,
+  });
+
+  return {
+    mangaka: mapMember(raw.mangaka),
+    editor: raw.editor ? mapMember(raw.editor) : null,
+    boardReviewers: (raw.boardReviewers ?? []).map(mapMember),
+    assistants: (raw.assistants ?? []).map(mapMember),
+  };
 }
 
 /** Mangaka chỉ được xóa series của mình khi còn ở trạng thái nháp. */

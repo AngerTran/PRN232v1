@@ -35,6 +35,23 @@ public record SeriesBoardReviewInvitationResponse(
     DateTime CreatedAt,
     DateTime? RespondedAt);
 
+public record BoardReviewerSummaryResponse(
+    Guid BoardMemberId,
+    string BoardMemberName,
+    string Source,
+    bool IsLead = false);
+
+public record SeriesTeamMemberResponse(
+    Guid Id,
+    string Name,
+    string Role);
+
+public record SeriesTeamResponse(
+    SeriesTeamMemberResponse Mangaka,
+    SeriesTeamMemberResponse? Editor,
+    IReadOnlyList<SeriesTeamMemberResponse> BoardReviewers,
+    IReadOnlyList<SeriesTeamMemberResponse> Assistants);
+
 public record SeriesBoardReviewStatusResponse(
     Guid SeriesId,
     int ApproveVotes,
@@ -45,7 +62,9 @@ public record SeriesBoardReviewStatusResponse(
     int AvailableInviteSlots,
     DateTime? SubmittedForReviewAt,
     DateTime? ReviewExpiresAt,
-    bool QuorumMet);
+    bool QuorumMet,
+    int ClaimedBoardMembers = 0,
+    IReadOnlyList<BoardReviewerSummaryResponse>? ClaimedReviewers = null);
 
 public record SeriesRankingItemResponse(
     Guid SeriesId,

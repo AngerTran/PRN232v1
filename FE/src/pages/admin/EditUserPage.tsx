@@ -177,7 +177,6 @@ export default function EditUserPage() {
                 >
                   <option value="Active">Hoạt động</option>
                   <option value="Inactive">Không hoạt động</option>
-                  <option value="Pending">Chờ xử lý</option>
                 </select>
               </div>
             </div>

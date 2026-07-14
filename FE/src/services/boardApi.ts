@@ -254,37 +254,35 @@ export async function getPendingSeries(): Promise<PendingSeriesItem[]> {
   return items.map(mapPendingSeriesItem);
 }
 
-export async function getInReviewSeries(): Promise<PendingSeriesItem[]> {
-  const items = unwrap(await apiRequest<ApiEnvelope<ApiPendingSeriesItem[]>>('/api/board/in-review-series'));
-  return items.map(mapPendingSeriesItem);
+export interface BoardReviewerSummary {
+  boardMemberId: string;
+  boardMemberName: string;
+  source: string;
+  isLead: boolean;
 }
 
-export async function claimSeriesReview(seriesId: string, wantLead = false): Promise<BoardReviewClaim> {
-  const item = unwrap(
-    await apiRequest<ApiEnvelope<ApiBoardReviewClaim>>(`/api/board/series/${seriesId}/claim-review`, {
-      method: 'POST',
-      body: JSON.stringify({ wantLead }),
-    })
+export async function listSeriesReviewers(seriesId: string): Promise<BoardReviewerSummary[]> {
+  const items = unwrap(
+    await apiRequest<ApiEnvelope<Array<{
+      boardMemberId: string;
+      boardMemberName: string;
+      source: string;
+      isLead: boolean;
+    }>>>(`/api/board/series/${seriesId}/reviewers`)
   );
-  return {
-    seriesId: item.seriesId,
-    boardMemberId: item.boardMemberId,
-    claimedBoardMembers: item.claimedBoardMembers,
-    requiredClaims: item.requiredClaims,
-    claimsFull: item.claimsFull,
-    isLead: item.isLead,
-    hasLead: item.hasLead,
-    leadBoardMemberId: item.leadBoardMemberId ?? undefined,
-    leadBoardMemberName: item.leadBoardMemberName ?? undefined,
-    claimedAt: item.claimedAt,
-  };
+  return items.map(i => ({
+    boardMemberId: i.boardMemberId,
+    boardMemberName: i.boardMemberName,
+    source: i.source,
+    isLead: !!i.isLead,
+  }));
 }
 
-export async function claimSeriesLead(seriesId: string): Promise<BoardReviewClaim> {
+export async function assignSeriesLead(seriesId: string, boardMemberId: string): Promise<BoardReviewClaim> {
   const item = unwrap(
-    await apiRequest<ApiEnvelope<ApiBoardReviewClaim>>(`/api/board/series/${seriesId}/claim-lead`, {
-      method: 'POST',
-      body: JSON.stringify({}),
+    await apiRequest<ApiEnvelope<ApiBoardReviewClaim>>(`/api/board/series/${seriesId}/lead`, {
+      method: 'PUT',
+      body: JSON.stringify({ boardMemberId }),
     })
   );
   return {

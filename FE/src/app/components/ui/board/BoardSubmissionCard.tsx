@@ -3,7 +3,7 @@ import { BookOpen, User, CheckCircle2, XCircle, Clock3 } from 'lucide-react';
 import { SubmissionStatusBadge } from './BoardStatusBadge';
 import type { Series } from '../../../../types/domain';
 import type { PendingSeriesItem } from '../../../../services/boardApi';
-import { BOARD_VOTES_REQUIRED, BOARD_CLAIMS_REQUIRED } from '../../../../services/boardApi';
+import { BOARD_VOTES_REQUIRED } from '../../../../services/boardApi';
 
 interface BoardSubmissionCardProps {
   item: PendingSeriesItem;
@@ -18,8 +18,6 @@ export function BoardSubmissionCard({ item, series, compact = false }: BoardSubm
   const synopsis = series?.synopsis?.trim();
   const authorName = item.authorName ?? series?.mangakaName ?? '—';
   const requiredVotes = BOARD_VOTES_REQUIRED;
-  const requiredClaims = item.requiredClaims ?? BOARD_CLAIMS_REQUIRED;
-  const claimProgress = Math.min(100, Math.round((item.claimedBoardMembers / requiredClaims) * 100));
   const voteProgress = Math.min(100, Math.round((item.votedBoardMembers / requiredVotes) * 100));
 
   const goToDetail = () => navigate(`/board/submissions/${item.id}`);
@@ -58,15 +56,6 @@ export function BoardSubmissionCard({ item, series, compact = false }: BoardSubm
             <p className="text-xs text-muted-foreground truncate">{authorName}</p>
             <p className="text-[10px] text-muted-foreground truncate mt-0.5">{genre}</p>
             <div className="mt-2 space-y-1">
-              <div className="flex items-center justify-between text-[10px] text-muted-foreground">
-                <span>Reviewer</span>
-                <span className="font-semibold text-foreground">
-                  {item.claimedBoardMembers}/{requiredClaims}
-                </span>
-              </div>
-              <div className="h-1 bg-muted rounded-full overflow-hidden">
-                <div className="h-full bg-secondary rounded-full" style={{ width: `${claimProgress}%` }} />
-              </div>
               <div className="flex items-center justify-between text-[10px]">
                 <span className="text-muted-foreground">Vote</span>
                 <span className="font-semibold text-foreground">
@@ -79,9 +68,12 @@ export function BoardSubmissionCard({ item, series, compact = false }: BoardSubm
                   <XCircle size={10} /> {item.rejectVotes}
                 </span>
               </div>
+              <div className="h-1 bg-muted rounded-full overflow-hidden">
+                <div className="h-full bg-primary rounded-full" style={{ width: `${voteProgress}%` }} />
+              </div>
             </div>
-            {item.canClaim && (
-              <p className="text-[10px] font-medium text-primary mt-1">Có thể nhận xét duyệt</p>
+            {!item.currentUserHasVoted && (
+              <p className="text-[10px] font-medium text-primary mt-1">Cần bỏ phiếu</p>
             )}
           </div>
         </div>
@@ -143,18 +135,6 @@ export function BoardSubmissionCard({ item, series, compact = false }: BoardSubm
 
         <div className="pt-3 border-t border-border space-y-2">
           <div className="flex items-center justify-between text-xs">
-            <span className="text-muted-foreground font-medium">Reviewer đã nhận</span>
-            <span className="font-semibold text-foreground">
-              {item.claimedBoardMembers}/{requiredClaims}
-            </span>
-          </div>
-          <div className="h-1.5 bg-muted rounded-full overflow-hidden">
-            <div
-              className="h-full bg-secondary rounded-full transition-all"
-              style={{ width: `${claimProgress}%` }}
-            />
-          </div>
-          <div className="flex items-center justify-between text-xs">
             <span className="text-muted-foreground font-medium">Tiến độ vote hội đồng</span>
             <span className="font-semibold text-foreground">
               {item.votedBoardMembers}/{requiredVotes}
@@ -177,20 +157,17 @@ export function BoardSubmissionCard({ item, series, compact = false }: BoardSubm
           {item.reviewExpiresAt && (
             <p className="text-xs text-muted-foreground inline-flex items-center gap-1">
               <Clock3 size={12} />
-              Hết hạn {new Date(item.reviewExpiresAt).toLocaleDateString('vi-VN')}
+              Hết hạn {new Date(item.reviewExpiresAt).toLocaleString('vi-VN')}
             </p>
           )}
           {item.hasLead && (
             <p className="text-xs text-muted-foreground">
-              Phụ trách: <span className="font-medium text-foreground">{item.leadBoardMemberName ?? '—'}</span>
+              Lead: <span className="font-medium text-foreground">{item.leadBoardMemberName ?? '—'}</span>
               {item.currentUserIsLead && <span className="text-primary"> · bạn</span>}
             </p>
           )}
-          {item.canClaim && (
-            <p className="text-xs font-medium text-primary">Có thể nhận xét duyệt</p>
-          )}
-          {item.currentUserHasClaimed && !item.currentUserHasVoted && (
-            <p className="text-xs font-medium text-amber-700">Bạn đã nhận — hãy bỏ phiếu</p>
+          {!item.currentUserHasVoted && (
+            <p className="text-xs font-medium text-amber-700">Cần bỏ phiếu trong 48 giờ</p>
           )}
           {item.currentUserHasVoted && (
             <p className="text-xs text-muted-foreground">Bạn đã bỏ phiếu</p>

@@ -82,6 +82,15 @@ public record BoardReviewClaimResponse(
     string? LeadBoardMemberName,
     DateTime ClaimedAt);
 
+public record BoardReviewerSummaryItem(
+    Guid BoardMemberId,
+    string BoardMemberName,
+    string Source,
+    bool IsLead);
+
+public record AssignSeriesLeadRequest(
+    [Required] Guid BoardMemberId);
+
 public record LeaderboardItemResponse(
     Guid SeriesId,
     string Title,

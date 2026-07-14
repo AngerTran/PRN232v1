@@ -13,8 +13,8 @@ import {
 import { PublishingTypeBadge } from '../../app/components/ui/board';
 import { BoardSeriesPanelCard } from '../../app/components/ui/board/BoardSeriesPanelCard';
 import type { Series, SeriesStatus } from '../../types/domain';
-import { getApprovedSeries, getSeries, getSeriesSchedules, canSchedulePublishing } from '../../services/seriesApi';
-import { getInReviewSeries, getBoardVoteProgress, type PendingSeriesItem } from '../../services/boardApi';
+import { getApprovedSeries, getSeriesSchedules, canSchedulePublishing } from '../../services/seriesApi';
+import { getBoardVoteProgress } from '../../services/boardApi';
 import { Search, CalendarDays, CalendarPlus, Inbox } from 'lucide-react';
 
 type ApprovedRow = Series & {
@@ -24,21 +24,12 @@ type ApprovedRow = Series & {
   canManagePublishingSchedule: boolean;
 };
 
-type InReviewRow = PendingSeriesItem & { series: Series | null };
-
 type StatusSection = {
   id: string;
   title: string;
   description: string;
   statuses: SeriesStatus[];
   emptyHint: string;
-};
-
-const IN_REVIEW_SECTION = {
-  id: 'in-review',
-  title: 'Đang phê duyệt',
-  description: 'Đủ 3 reviewer — hội đồng bỏ phiếu',
-  emptyHint: 'Không có series đang phê duyệt',
 };
 
 const POST_REVIEW_SECTIONS: StatusSection[] = [
@@ -66,7 +57,7 @@ const POST_REVIEW_SECTIONS: StatusSection[] = [
   {
     id: 'ready-schedule',
     title: 'Sẵn sàng lên lịch',
-    description: 'Editor hoàn thành — lead lên lịch xuất bản',
+    description: 'Editor hoàn thành — Lead lên lịch xuất bản',
     statuses: ['Completed'],
     emptyHint: 'Không có series sẵn sàng lên lịch',
   },
@@ -91,7 +82,6 @@ export default function BoardApprovedSeriesPage() {
   const navigate = useNavigate();
   const [search, setSearch] = useState('');
   const [rows, setRows] = useState<ApprovedRow[]>([]);
-  const [inReviewRows, setInReviewRows] = useState<InReviewRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [openSections, setOpenSections] = useState<string[]>([]);
@@ -103,7 +93,7 @@ export default function BoardApprovedSeriesPage() {
       setLoading(true);
       setError('');
       try {
-        const [list, inReview] = await Promise.all([getApprovedSeries(), getInReviewSeries()]);
+        const list = await getApprovedSeries();
         const enriched = await Promise.all(
           list.map(async series => {
             const [schedules, progress] = await Promise.all([
@@ -126,21 +116,13 @@ export default function BoardApprovedSeriesPage() {
             } as ApprovedRow;
           })
         );
-        const enrichedInReview = await Promise.all(
-          inReview.map(async item => {
-            const series = await getSeries(item.id).catch(() => null);
-            return { ...item, series };
-          })
-        );
         if (isActive) {
           setRows(enriched);
-          setInReviewRows(enrichedInReview);
         }
       } catch (err) {
         if (isActive) {
           setError(err instanceof Error ? err.message : 'Không thể tải danh sách.');
           setRows([]);
-          setInReviewRows([]);
         }
       } finally {
         if (isActive) setLoading(false);
@@ -162,10 +144,6 @@ export default function BoardApprovedSeriesPage() {
     );
   };
 
-  const filteredInReview = inReviewRows.filter(item =>
-    matchesSearch(item.title, item.authorName, item.series?.genre, item.series?.synopsis)
-  );
-
   const filtered = rows.filter(s =>
     matchesSearch(s.title, s.mangakaName, s.genre, s.synopsis)
   );
@@ -179,17 +157,11 @@ export default function BoardApprovedSeriesPage() {
     [filtered]
   );
 
-  const totalCount = rows.length + inReviewRows.length;
-
   useEffect(() => {
     if (loading || defaultsSet) return;
-    const defaults = [
-      ...(filteredInReview.length > 0 ? [IN_REVIEW_SECTION.id] : []),
-      ...sectionsWithItems.filter(s => s.items.length > 0).map(s => s.id),
-    ];
-    setOpenSections(defaults);
+    setOpenSections(sectionsWithItems.filter(s => s.items.length > 0).map(s => s.id));
     setDefaultsSet(true);
-  }, [loading, defaultsSet, filteredInReview.length, sectionsWithItems]);
+  }, [loading, defaultsSet, sectionsWithItems]);
 
   const renderSeriesFooter = (series: ApprovedRow): ReactNode => {
     if (series.status === 'Approved') {
@@ -236,7 +208,7 @@ export default function BoardApprovedSeriesPage() {
       );
     }
     if (canSchedulePublishing(series.status)) {
-      return <p className="text-xs text-muted-foreground">Chỉ phụ trách chính lên lịch</p>;
+      return <p className="text-xs text-muted-foreground">Chỉ Lead được lên lịch (Admin gán)</p>;
     }
     if (series.status === 'In Progress') {
       return (
@@ -273,107 +245,67 @@ export default function BoardApprovedSeriesPage() {
     );
   };
 
-  const renderInReviewPanel = (item: InReviewRow) => (
-    <BoardSeriesPanelCard
-      key={item.id}
-      seriesId={item.id}
-      title={item.title}
-      coverUrl={item.series?.coverUrl}
-      mangakaName={item.authorName ?? item.series?.mangakaName}
-      to={`/board/submissions/${item.id}`}
-      meta={
-        <>
-          <span className="text-[11px] font-medium text-primary bg-primary/10 px-2 py-0.5 rounded-full">
-            {item.claimedBoardMembers}/{item.requiredClaims} reviewer
-          </span>
-          <span className="text-[11px] text-muted-foreground">
-            {item.votedBoardMembers}/3 phiếu
-          </span>
-        </>
-      }
-      footer={
-        <p className="text-xs text-muted-foreground">
-          {item.currentUserHasClaimed ? 'Bạn đã nhận — bỏ phiếu' : 'Nhấn để xem hồ sơ'}
-        </p>
-      }
-    />
-  );
-
-  const accordionSections = [
-    { ...IN_REVIEW_SECTION, items: filteredInReview },
-    ...sectionsWithItems,
-  ];
-
   return (
     <div className="p-6 space-y-6 w-full min-w-0">
       <div>
         <h1 className="text-2xl font-bold">Series Đã Nhận</h1>
         <p className="text-muted-foreground mt-1 text-sm">
-          {loading ? 'Đang tải...' : `${totalCount} series · mở từng mục để xem chi tiết`}
+          {loading
+            ? 'Đang tải...'
+            : `${rows.length} series đã duyệt · series chờ phiếu nằm ở Duyệt Series`}
         </p>
       </div>
 
       <div className="relative max-w-md">
         <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
         <Input
-          placeholder="Tìm theo tên series hoặc mangaka..."
+          placeholder="Tìm theo tên, mangaka, thể loại..."
           className="pl-9"
           value={search}
           onChange={e => setSearch(e.target.value)}
         />
       </div>
 
-      {error && <p className="text-sm text-destructive">{error}</p>}
+      {error && (
+        <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{error}</div>
+      )}
 
       {loading ? (
-        <div className="space-y-2">
-          {Array.from({ length: 5 }).map((_, i) => (
-            <div key={i} className="h-14 rounded-xl bg-muted/40 animate-pulse" />
+        <div className="space-y-3">
+          {Array.from({ length: 3 }).map((_, i) => (
+            <div key={i} className="h-14 rounded-xl border border-border bg-muted/30 animate-pulse" />
           ))}
         </div>
-      ) : totalCount === 0 && !search ? (
-        <div className="rounded-2xl border border-dashed py-12 text-center">
-          <Inbox className="h-9 w-9 text-muted-foreground mx-auto mb-2" />
-          <p className="font-medium text-sm">Chưa có series trong danh sách</p>
+      ) : rows.length === 0 ? (
+        <div className="rounded-2xl border border-dashed border-border bg-muted/20 py-16 text-center">
+          <Inbox className="h-10 w-10 text-muted-foreground mx-auto mb-3" />
+          <p className="font-medium text-foreground">Chưa có series đã duyệt</p>
+          <p className="text-sm text-muted-foreground mt-1">
+            Series chờ xét duyệt xem tại mục Duyệt Series.
+          </p>
         </div>
       ) : (
-        <Accordion
-          type="multiple"
-          value={openSections}
-          onValueChange={setOpenSections}
-          className="w-full rounded-2xl border border-border bg-card px-4"
-        >
-          {accordionSections.map(section => {
-            const count = section.items.length;
-            return (
-              <AccordionItem key={section.id} value={section.id} className="border-border">
-                <AccordionTrigger className="hover:no-underline py-3.5">
-                  <div className="flex flex-1 items-center justify-between gap-3 pr-2 min-w-0">
-                    <div className="min-w-0 text-left">
-                      <div className="flex items-center gap-2">
-                        <span className="font-semibold text-sm">{section.title}</span>
-                        <CountBadge count={count} />
-                      </div>
-                      <p className="text-xs text-muted-foreground truncate mt-0.5 hidden sm:block">
-                        {section.description}
-                      </p>
-                    </div>
-                  </div>
-                </AccordionTrigger>
-                <AccordionContent className="pb-4">
-                  {count === 0 ? (
-                    <p className="text-xs text-muted-foreground px-1 py-2">{section.emptyHint}</p>
-                  ) : (
-                    <div className={SERIES_GRID_CLASS}>
-                      {section.id === 'in-review'
-                        ? (section.items as InReviewRow[]).map(renderInReviewPanel)
-                        : (section.items as ApprovedRow[]).map(renderSeriesPanel)}
-                    </div>
-                  )}
-                </AccordionContent>
-              </AccordionItem>
-            );
-          })}
+        <Accordion type="multiple" value={openSections} onValueChange={setOpenSections} className="space-y-2">
+          {sectionsWithItems.map(section => (
+            <AccordionItem key={section.id} value={section.id} className="border border-border rounded-xl px-4">
+              <AccordionTrigger className="hover:no-underline py-3.5">
+                <div className="flex items-center gap-3 text-left">
+                  <span className="font-semibold">{section.title}</span>
+                  <CountBadge count={section.items.length} />
+                  <span className="text-xs text-muted-foreground font-normal hidden sm:inline">
+                    {section.description}
+                  </span>
+                </div>
+              </AccordionTrigger>
+              <AccordionContent>
+                {section.items.length === 0 ? (
+                  <p className="text-sm text-muted-foreground pb-2">{section.emptyHint}</p>
+                ) : (
+                  <div className={SERIES_GRID_CLASS}>{section.items.map(renderSeriesPanel)}</div>
+                )}
+              </AccordionContent>
+            </AccordionItem>
+          ))}
         </Accordion>
       )}
     </div>

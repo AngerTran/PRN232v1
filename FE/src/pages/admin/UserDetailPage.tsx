@@ -17,15 +17,11 @@ import {
 const STATUS_COLORS: Record<UserStatus, string> = {
   Active: 'bg-green-100 text-green-700',
   Inactive: 'bg-gray-100 text-gray-500',
-  Locked: 'bg-red-100 text-red-700',
-  Pending: 'bg-orange-100 text-orange-700',
 };
 
 const STATUS_LABELS: Record<UserStatus, string> = {
   Active: 'Hoạt động',
   Inactive: 'Không hoạt động',
-  Locked: 'Đã khóa',
-  Pending: 'Chờ xử lý',
 };
 
 const ROLE_COLORS: Record<RoleName, string> = {

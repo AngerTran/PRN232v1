@@ -7,15 +7,13 @@ import Card, { CardHeader, CardTitle } from '../../components/ui/Card';
 import { usePageMeta } from '../../hooks/usePageMeta';
 import { SubmissionStatusBadge } from '../../app/components/ui/board';
 import type { BoardSubmissionStatus, Series } from '../../types/domain';
-import { getSeries, getSeriesChapters } from '../../services/seriesApi';
+import { getSeries, getSeriesChapters, getSeriesTeam, type SeriesTeam } from '../../services/seriesApi';
+import SeriesTeamCard from '../../components/series/SeriesTeamCard';
 import {
   listBoardVotes,
   castBoardVote,
-  claimSeriesReview,
-  claimSeriesLead,
   getBoardVoteProgress,
   BOARD_VOTES_REQUIRED,
-  BOARD_CLAIMS_REQUIRED,
   type BoardDecision,
   type BoardVote,
   type BoardVoteProgress,
@@ -47,6 +45,26 @@ function manuscriptFileName(url: string): string {
   }
 }
 
+function formatReviewCountdown(expiresAt: string): string {
+  const ms = new Date(expiresAt).getTime() - Date.now();
+  if (Number.isNaN(ms) || ms <= 0) return 'Đã hết hạn';
+  const totalMinutes = Math.floor(ms / 60000);
+  const hours = Math.floor(totalMinutes / 60);
+  const minutes = totalMinutes % 60;
+  if (hours <= 0) return `${minutes} phút`;
+  return `${hours} giờ ${minutes} phút`;
+}
+
+function voteDecisionLabel(decision: string): { text: string; className: string } {
+  if (decision === 'hidden') {
+    return { text: 'Đã bỏ phiếu (ẩn)', className: 'bg-muted text-muted-foreground' };
+  }
+  if (decision === 'approve') {
+    return { text: '✓ Phê duyệt', className: 'bg-green-100 text-green-700' };
+  }
+  return { text: '✗ Từ chối', className: 'bg-red-100 text-red-700' };
+}
+
 const inputClass =
   'w-full px-4 py-2.5 text-sm bg-muted/40 border border-border rounded-xl text-foreground cursor-default';
 
@@ -63,10 +81,9 @@ export default function SubmissionDetailPage() {
   const [decision, setDecision] = useState<BoardDecision | null>(null);
   const [reason, setReason] = useState('');
   const [submitting, setSubmitting] = useState(false);
-  const [claiming, setClaiming] = useState(false);
-  const [claimingLead, setClaimingLead] = useState(false);
   const [submitted, setSubmitted] = useState(false);
   const [error, setError] = useState('');
+  const [team, setTeam] = useState<SeriesTeam | null>(null);
 
   const seriesId = submissionId ?? '';
 
@@ -78,23 +95,27 @@ export default function SubmissionDetailPage() {
       getBoardVoteProgress(seriesId).catch(() => null),
       listBoardVotes(seriesId).catch(() => []),
       getSeriesChapters(seriesId).catch(() => []),
+      getSeriesTeam(seriesId).catch(() => null),
     ])
-      .then(async ([progress, v, chapters]) => {
+      .then(async ([progress, v, chapters, teamData]) => {
         // Load series sau vote-progress để nhận status đã heal (đủ phiếu → approved).
         const s = await getSeries(seriesId);
         if (!isActive) return;
         setSeries(s);
         setVotes(v);
         setVoteProgress(progress);
+        setTeam(teamData);
         const proposal = chapters.find(c => c.number === 0) ?? chapters.find(c => c.description);
         setManuscriptUrl(proposal?.description?.trim() || null);
 
         const currentUserId = getStoredUser()?.id;
         const myVote = currentUserId ? v.find(vote => vote.boardMemberId === currentUserId) : undefined;
-        if (myVote) {
+        if (myVote && myVote.decision !== 'hidden') {
           setSubmitted(true);
           setDecision(myVote.decision === 'reject' ? 'reject' : 'approve');
           setReason(myVote.comment ?? '');
+        } else if (myVote) {
+          setSubmitted(true);
         } else {
           setSubmitted(false);
           setDecision(null);
@@ -130,52 +151,13 @@ export default function SubmissionDetailPage() {
   const requiredVotes = voteProgress?.requiredVotes ?? BOARD_VOTES_REQUIRED;
   const quorumMet = voteProgress?.quorumMet ?? false;
   const isPendingReview = series?.status === 'Submitted';
-  const claimedBoardMembers = voteProgress?.claimedBoardMembers ?? 0;
-  const requiredClaims = voteProgress?.requiredClaims ?? BOARD_CLAIMS_REQUIRED;
-  const currentUserHasClaimed = voteProgress?.currentUserHasClaimed ?? false;
-  const canClaim = voteProgress?.canClaim ?? false;
-  const claimsFull = voteProgress?.claimsFull ?? false;
   const hasLead = voteProgress?.hasLead ?? false;
   const leadBoardMemberName = voteProgress?.leadBoardMemberName;
   const currentUserIsLead = voteProgress?.currentUserIsLead ?? false;
-  const canVote = voteProgress?.canVote ?? (currentUserHasClaimed && claimsFull);
-  const canClaimLead = voteProgress?.canClaimLead ?? false;
-  const leadClaimExpiresAt = voteProgress?.leadClaimExpiresAt;
+  const canVote = voteProgress?.canVote ?? isPendingReview;
+  const reviewExpiresAt = voteProgress?.leadClaimExpiresAt ?? series?.reviewExpiresAt;
+  const hasHiddenVotes = votes.some(v => v.decision === 'hidden');
   const myDecision = submitted ? decision : null;
-
-  const handleClaimReview = async () => {
-    if (!seriesId) return;
-    setClaiming(true);
-    setError('');
-    try {
-      await claimSeriesReview(seriesId, false);
-      const progress = await getBoardVoteProgress(seriesId).catch(() => null);
-      if (progress) setVoteProgress(progress);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Không thể nhận xét duyệt series.');
-    } finally {
-      setClaiming(false);
-    }
-  };
-
-  const handleClaimLead = async () => {
-    if (!seriesId) return;
-    setClaimingLead(true);
-    setError('');
-    try {
-      await claimSeriesLead(seriesId);
-      const [progress, refreshed] = await Promise.all([
-        getBoardVoteProgress(seriesId).catch(() => null),
-        getSeries(seriesId).catch(() => series),
-      ]);
-      if (progress) setVoteProgress(progress);
-      if (refreshed) setSeries(refreshed);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Không thể nhận phụ trách chính.');
-    } finally {
-      setClaimingLead(false);
-    }
-  };
 
   const genres = series?.genres?.length ? series.genres : (series?.genre ? series.genre.split(',').map(g => g.trim()) : []);
 
@@ -223,10 +205,6 @@ export default function SubmissionDetailPage() {
       <div className="space-y-4">
         <div className="rounded-xl bg-muted/50 px-4 py-3 text-xs space-y-1">
           <div className="flex justify-between">
-            <span className="text-muted-foreground">Reviewer đã nhận</span>
-            <span className="font-semibold">{claimedBoardMembers}/{requiredClaims}</span>
-          </div>
-          <div className="flex justify-between">
             <span className="text-muted-foreground">Tiến độ hội đồng</span>
             <span className="font-semibold">{votedBoardMembers}/{requiredVotes}</span>
           </div>
@@ -234,101 +212,61 @@ export default function SubmissionDetailPage() {
             <span className="text-green-700">✓ {approveVotes}</span>
             <span className="text-red-600">✗ {rejectVotes}</span>
           </div>
+          {isPendingReview && reviewExpiresAt && (
+            <div className="flex justify-between pt-1 border-t border-border/60 mt-1">
+              <span className="text-muted-foreground">Hạn xét duyệt</span>
+              <span className="font-semibold">
+                Còn {formatReviewCountdown(reviewExpiresAt)} · {new Date(reviewExpiresAt).toLocaleString('vi-VN')}
+              </span>
+            </div>
+          )}
           {isPendingReview && (
             <p className="text-muted-foreground pt-1">
-              {!claimsFull
-                ? `Cần đủ ${requiredClaims} reviewer nhận series trước khi bỏ phiếu.`
-                : quorumMet
+              {quorumMet
                 ? `Đủ ${requiredVotes} phiếu — đang cập nhật trạng thái theo đa số.`
-                : currentUserHasClaimed
-                  ? `Cần ${requiredVotes} phiếu board để quyết định.`
-                  : `Đọc hồ sơ và bản thảo, sau đó nhận xét duyệt để được bỏ phiếu.`}
+                : `Cố định ${requiredVotes} board bỏ phiếu trong 48 giờ. Phiếu đang ẩn để đảm bảo công bằng — người vote cuối mới xem đủ.`}
+            </p>
+          )}
+          {hasLead && (
+            <p className="pt-1">
+              Lead:{' '}
+              <span className="font-semibold text-foreground">{leadBoardMemberName}</span>
+              {currentUserIsLead && <span className="text-primary"> (bạn)</span>}
             </p>
           )}
         </div>
 
         {!isPendingReview ? (
-          <div className="space-y-4">
-            <div className="text-center py-2">
-              <CheckCircle className="h-10 w-10 text-green-500 mx-auto mb-2" />
-              <p className="font-medium text-sm">Series đã có quyết định</p>
-              <p className="text-xs text-muted-foreground mt-1">
-                {series.status === 'Cancelled' ? 'Từ chối' : 'Đã duyệt'}
-              </p>
-            </div>
+          <div className="space-y-2 text-center py-2">
+            <CheckCircle className="h-10 w-10 text-green-500 mx-auto mb-2" />
+            <p className="font-medium text-sm">Series đã có quyết định</p>
+            <p className="text-xs text-muted-foreground mt-1">
+              {series.status === 'Cancelled' ? 'Từ chối' : 'Đã duyệt'}
+            </p>
             {hasLead ? (
-              <p className="text-sm text-center text-muted-foreground">
-                Phụ trách chính: <span className="font-semibold text-foreground">{leadBoardMemberName}</span>
+              <p className="text-sm text-muted-foreground">
+                Lead: <span className="font-semibold text-foreground">{leadBoardMemberName}</span>
                 {currentUserIsLead && <span className="text-primary"> (bạn)</span>}
               </p>
-            ) : canClaimLead ? (
-              <div className="rounded-xl border border-border px-4 py-3 space-y-3">
-                <div>
-                  <p className="text-sm font-semibold">Nhận làm phụ trách chính</p>
-                  <p className="text-xs text-muted-foreground mt-1">
-                    Chịu trách nhiệm lên lịch xuất bản sau khi series hoàn thành (mỗi series chỉ 1 người).
-                    {leadClaimExpiresAt && (
-                      <> Hạn nhận: {new Date(leadClaimExpiresAt).toLocaleString('vi-VN')}. Sau hạn hệ thống tự gán người nhận xét duyệt sớm nhất.</>
-                    )}
-                  </p>
-                </div>
-                <Button
-                  type="button"
-                  variant="primary"
-                  className="w-full"
-                  loading={claimingLead}
-                  disabled={claimingLead}
-                  onClick={handleClaimLead}
-                >
-                  Nhận phụ trách chính
-                </Button>
-              </div>
-            ) : currentUserHasClaimed ? (
-              <p className="text-xs text-center text-muted-foreground">
-                Đang chờ một reviewer nhận phụ trách chính
-                {leadClaimExpiresAt ? ` (hạn ${new Date(leadClaimExpiresAt).toLocaleString('vi-VN')})` : ''}.
-              </p>
-            ) : null}
-          </div>
-        ) : !currentUserHasClaimed ? (
-          <div className="space-y-3">
-            {claimsFull ? (
-              <p className="text-sm text-center text-muted-foreground py-2">
-                Đã đủ {requiredClaims} reviewer. Series không còn trên tab chung — xem tại Series Đã Nhận.
-              </p>
-            ) : canClaim ? (
-              <>
-                <p className="text-sm text-muted-foreground">
-                  Bạn có thể xem thông tin và tải bản thảo trước. Khi sẵn sàng, nhận series để giữ chỗ reviewer ({claimedBoardMembers}/{requiredClaims}). Bỏ phiếu chỉ mở khi đủ {requiredClaims} người nhận.
-                </p>
-                <Button
-                  type="button"
-                  variant="primary"
-                  className="w-full"
-                  loading={claiming}
-                  disabled={claiming}
-                  onClick={handleClaimReview}
-                >
-                  Nhận xét duyệt series
-                </Button>
-              </>
             ) : (
-              <p className="text-sm text-center text-muted-foreground py-2">
-                Bạn có lời mời đang chờ — hãy xử lý trong mục Lời mời xét duyệt.
+              <p className="text-xs text-muted-foreground">
+                Admin sẽ gán Lead trong 3 board reviewer để lên lịch xuất bản.
               </p>
             )}
           </div>
         ) : !canVote ? (
           <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
-            Bạn đã nhận xét duyệt. Cần đủ {requiredClaims} reviewer ({claimedBoardMembers}/{requiredClaims}) trước khi bỏ phiếu.
+            Hiện không thể bỏ phiếu (hết hạn hoặc bạn đã không còn trong hội đồng cố định).
           </div>
         ) : submitted ? (
           <div className="text-center py-4 space-y-3">
             <CheckCircle className="h-10 w-10 text-green-500 mx-auto" />
             <p className="font-medium text-sm">Đã ghi nhận phiếu bầu</p>
-            <p className="text-xs text-muted-foreground">
-              Quyết định: <span className="font-semibold">{myDecision === 'approve' ? 'Phê duyệt' : 'Từ chối'}</span>
-            </p>
+            {myDecision && (
+              <p className="text-xs text-muted-foreground">
+                Quyết định: <span className="font-semibold">{myDecision === 'approve' ? 'Phê duyệt' : 'Từ chối'}</span>
+              </p>
+            )}
             <Button type="button" variant="outline" className="w-full" onClick={() => setSubmitted(false)}>
               Thay đổi phiếu
             </Button>
@@ -441,6 +379,7 @@ export default function SubmissionDetailPage() {
           </div>
         </div>
       </Card>
+      <SeriesTeamCard team={team} />
       {votePanel}
     </>
   );
@@ -544,11 +483,18 @@ export default function SubmissionDetailPage() {
             <CardHeader>
               <CardTitle>Ý kiến hội đồng</CardTitle>
             </CardHeader>
+            {hasHiddenVotes && (
+              <p className="text-xs text-muted-foreground mb-3">
+                Phiếu đang ẩn để đảm bảo công bằng — người vote cuối mới xem đủ kết quả.
+              </p>
+            )}
             {votes.length === 0 ? (
               <p className="text-sm text-muted-foreground">Chưa có thành viên nào bỏ phiếu.</p>
             ) : (
               <div className="space-y-4">
-                {votes.map(v => (
+                {votes.map(v => {
+                  const badge = voteDecisionLabel(v.decision);
+                  return (
                   <div key={v.id} className="flex gap-3">
                     <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center text-primary font-bold text-sm shrink-0">
                       {(v.boardMemberName ?? '?').slice(0, 1).toUpperCase()}
@@ -556,13 +502,8 @@ export default function SubmissionDetailPage() {
                     <div className="flex-1 min-w-0">
                       <div className="flex flex-wrap items-center gap-2 mb-1">
                         <span className="font-medium text-sm">{v.boardMemberName ?? 'Thành viên'}</span>
-                        <span
-                          className={clsx(
-                            'text-xs font-semibold px-2 py-0.5 rounded-full',
-                            v.decision === 'approve' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'
-                          )}
-                        >
-                          {v.decision === 'approve' ? '✓ Phê duyệt' : '✗ Từ chối'}
+                        <span className={clsx('text-xs font-semibold px-2 py-0.5 rounded-full', badge.className)}>
+                          {badge.text}
                         </span>
                       </div>
                       {v.comment && <p className="text-xs text-muted-foreground">{v.comment}</p>}
@@ -573,7 +514,8 @@ export default function SubmissionDetailPage() {
                       )}
                     </div>
                   </div>
-                ))}
+                  );
+                })}
               </div>
             )}
           </Card>

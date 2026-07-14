@@ -16,8 +16,6 @@ import {
 const STATUS_COLORS: Record<UserStatus, string> = {
   Active: 'bg-green-100 text-green-700',
   Inactive: 'bg-gray-100 text-gray-500',
-  Locked: 'bg-red-100 text-red-700',
-  Pending: 'bg-orange-100 text-orange-700',
 };
 
 const ROLE_COLORS: Record<RoleName, string> = {
@@ -45,8 +43,6 @@ const ACTIVITY_STATUS_COLORS = {
 const STATUS_LABELS: Record<UserStatus, string> = {
   Active: 'Hoạt động',
   Inactive: 'Không hoạt động',
-  Locked: 'Đã khóa',
-  Pending: 'Chờ xử lý',
 };
 
 function StatusBadge({ status }: { status: UserStatus }) {
@@ -83,17 +79,34 @@ export default function AdminDashboardPage() {
   const [recentActivities, setRecentActivities] = useState<SystemActivity[]>([]);
 
   useEffect(() => {
-    void Promise.all([getAdminUsers(), getSystemActivities(undefined, 5)]).then(async ([users, activities]) => {
-      setRecentUsers([...users].sort((a, b) => b.createdAt.localeCompare(a.createdAt)).slice(0, 5));
-      setRecentActivities(activities);
-      setStats(await getAdminStats(users));
-    });
+    let active = true;
+    void (async () => {
+      try {
+        const users = await getAdminUsers();
+        if (!active) return;
+        setRecentUsers([...users].sort((a, b) => b.createdAt.localeCompare(a.createdAt)).slice(0, 5));
+        setStats(await getAdminStats(users));
+      } catch (err) {
+        console.error('Admin dashboard users/stats failed', err);
+      }
+
+      try {
+        const activities = await getSystemActivities(undefined, 5);
+        if (active) setRecentActivities(activities);
+      } catch (err) {
+        console.error('Admin dashboard activities failed', err);
+        if (active) setRecentActivities([]);
+      }
+    })();
+    return () => {
+      active = false;
+    };
   }, []);
 
   const statCards = [
     { label: 'Tổng người dùng', value: stats.totalUsers, icon: <Users size={20} />, color: 'text-blue-600', bg: 'bg-blue-50' },
     { label: 'Đang hoạt động', value: stats.activeUsers, icon: <UserCheck size={20} />, color: 'text-green-600', bg: 'bg-green-50' },
-    { label: 'Bị khóa', value: stats.lockedUsers, icon: <Lock size={20} />, color: 'text-red-600', bg: 'bg-red-50' },
+    { label: 'Không hoạt động', value: stats.inactiveUsers, icon: <Lock size={20} />, color: 'text-red-600', bg: 'bg-red-50' },
     { label: 'Series đang xuất bản', value: stats.publishingSeries, icon: <BookOpen size={20} />, color: 'text-purple-600', bg: 'bg-purple-50' },
     { label: 'Người dùng mới tháng này', value: stats.newUsersThisMonth, icon: <UserPlus size={20} />, color: 'text-orange-600', bg: 'bg-orange-50' },
   ];

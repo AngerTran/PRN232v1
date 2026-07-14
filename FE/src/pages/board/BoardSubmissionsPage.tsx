@@ -64,7 +64,7 @@ export default function BoardSubmissionsPage() {
         <p className="text-muted-foreground mt-1">
           {loading
             ? 'Đang tải hồ sơ đề xuất...'
-            : `${items.length} series chờ nhận xét duyệt · tối đa ${BOARD_VOTES_REQUIRED} reviewer mỗi series`}
+            : `${items.length} series chờ xét duyệt · ${BOARD_VOTES_REQUIRED} board cố định · hạn 48 giờ`}
         </p>
       </div>
 
@@ -91,7 +91,7 @@ export default function BoardSubmissionsPage() {
       ) : filtered.length === 0 ? (
         <div className="rounded-2xl border border-dashed border-border bg-muted/20 py-16 text-center">
           <Inbox className="h-10 w-10 text-muted-foreground mx-auto mb-3" />
-          <p className="font-medium text-foreground">Không có series chờ nhận xét duyệt</p>
+          <p className="font-medium text-foreground">Không có series chờ xét duyệt</p>
           <p className="text-sm text-muted-foreground mt-1">
             {search ? 'Thử từ khóa khác hoặc xóa bộ lọc.' : 'Mangaka chưa gửi đề xuất series mới.'}
           </p>
@@ -106,7 +106,7 @@ export default function BoardSubmissionsPage() {
 
       {!loading && (
         <p className="text-xs text-muted-foreground">
-          Hiển thị {filtered.length} / {items.length} series · Nhấn thẻ để xem hồ sơ, nhận xét duyệt và bỏ phiếu
+          Hiển thị {filtered.length} / {items.length} series · Nhấn thẻ để mở hồ sơ và bỏ phiếu (hạn 48 giờ)
         </p>
       )}
     </div>

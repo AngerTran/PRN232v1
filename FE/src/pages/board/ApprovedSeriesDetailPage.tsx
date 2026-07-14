@@ -10,10 +10,13 @@ import type { Series, SeriesStatus } from '../../types/domain';
 import {
   getSeries,
   getSeriesSchedules,
+  getSeriesTeam,
   canSchedulePublishing,
   type PublishingScheduleItem,
+  type SeriesTeam,
 } from '../../services/seriesApi';
-import { getBoardVoteProgress, claimSeriesLead, type BoardVoteProgress } from '../../services/boardApi';
+import { getBoardVoteProgress, type BoardVoteProgress } from '../../services/boardApi';
+import SeriesTeamCard from '../../components/series/SeriesTeamCard';
 
 function statusLabel(status: SeriesStatus): { text: string; className: string } {
   switch (status) {
@@ -36,9 +39,9 @@ export default function ApprovedSeriesDetailPage() {
   const [series, setSeries] = useState<Series | null>(null);
   const [schedules, setSchedules] = useState<PublishingScheduleItem[]>([]);
   const [boardProgress, setBoardProgress] = useState<BoardVoteProgress | null>(null);
+  const [team, setTeam] = useState<SeriesTeam | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
-  const [claimingLead, setClaimingLead] = useState(false);
 
   useEffect(() => {
     if (!seriesId) return;
@@ -48,12 +51,14 @@ export default function ApprovedSeriesDetailPage() {
       getSeries(seriesId),
       getSeriesSchedules(seriesId).catch(() => []),
       getBoardVoteProgress(seriesId).catch(() => null),
+      getSeriesTeam(seriesId).catch(() => null),
     ])
-      .then(([s, sc, progress]) => {
+      .then(([s, sc, progress, teamData]) => {
         if (!isActive) return;
         setSeries(s);
         setSchedules(sc);
         setBoardProgress(progress);
+        setTeam(teamData);
         setPageMeta({
           title: s.title,
           breadcrumb: [
@@ -91,22 +96,6 @@ export default function ApprovedSeriesDetailPage() {
   )[0];
   const canScheduleStatus = canSchedulePublishing(series.status);
   const canManageSchedule = canScheduleStatus && (boardProgress?.canManagePublishingSchedule ?? false);
-  const canClaimLead = boardProgress?.canClaimLead ?? false;
-
-  const handleClaimLead = async () => {
-    if (!seriesId) return;
-    setClaimingLead(true);
-    setError('');
-    try {
-      await claimSeriesLead(seriesId);
-      const progress = await getBoardVoteProgress(seriesId).catch(() => null);
-      if (progress) setBoardProgress(progress);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Không thể nhận phụ trách chính.');
-    } finally {
-      setClaimingLead(false);
-    }
-  };
 
   return (
     <div className="flex flex-1 min-h-0 flex-col overflow-y-auto lg:flex-row lg:overflow-hidden">
@@ -173,6 +162,8 @@ export default function ApprovedSeriesDetailPage() {
           </div>
         </Card>
 
+        <SeriesTeamCard team={team} />
+
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
@@ -211,23 +202,14 @@ export default function ApprovedSeriesDetailPage() {
             {error && <p className="text-sm text-destructive">{error}</p>}
             {boardProgress?.hasLead && (
               <p className="text-xs text-muted-foreground">
-                Phụ trách chính: <span className="font-semibold text-foreground">{boardProgress.leadBoardMemberName}</span>
+                Lead: <span className="font-semibold text-foreground">{boardProgress.leadBoardMemberName}</span>
                 {boardProgress.currentUserIsLead && <span className="text-primary"> (bạn)</span>}
               </p>
             )}
-            {canClaimLead && (
-              <div className="rounded-xl border border-border px-3 py-3 space-y-2">
-                <p className="text-sm font-semibold">Nhận làm phụ trách chính</p>
-                <p className="text-xs text-muted-foreground">
-                  Lên lịch xuất bản sau khi series hoàn thành.
-                  {boardProgress?.leadClaimExpiresAt && (
-                    <> Hạn: {new Date(boardProgress.leadClaimExpiresAt).toLocaleString('vi-VN')}.</>
-                  )}
-                </p>
-                <Button className="w-full" disabled={claimingLead} onClick={handleClaimLead}>
-                  {claimingLead ? 'Đang nhận...' : 'Nhận phụ trách chính'}
-                </Button>
-              </div>
+            {!boardProgress?.hasLead && (
+              <p className="text-xs text-muted-foreground">
+                Chưa có Lead — Admin gán Lead trong 3 board reviewer.
+              </p>
             )}
             <Button
               variant="outline"
