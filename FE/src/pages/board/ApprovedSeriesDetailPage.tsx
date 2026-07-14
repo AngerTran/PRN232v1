@@ -214,7 +214,7 @@ export default function ApprovedSeriesDetailPage() {
             <Button
               variant="outline"
               className="w-full"
-              onClick={() => navigate(`/board/approved-series/${series.id}/read`)}
+              onClick={() => navigate(`/board/approved-series/${series.id}/chapters`)}
             >
               <Eye className="h-4 w-4 mr-2" />
               Xem trang truyện

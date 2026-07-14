@@ -14,20 +14,30 @@ interface MangaPageCardProps {
     thumbnailUrl?: string;
   };
   onDelete?: (id: string) => void;
+  /** Board chỉ xem — không mở mangaka workspace. */
+  readOnly?: boolean;
 }
 
-export default function MangaPageCard({ page, onDelete }: MangaPageCardProps) {
+export default function MangaPageCard({ page, onDelete, readOnly = false }: MangaPageCardProps) {
   const navigate = useNavigate();
+
+  const openPage = () => {
+    if (readOnly) {
+      if (page.thumbnailUrl) window.open(page.thumbnailUrl, '_blank', 'noopener,noreferrer');
+      return;
+    }
+    navigate(`/mangaka/pages/${page.id}/workspace`);
+  };
 
   return (
     <div
-      onClick={() => navigate(`/mangaka/pages/${page.id}/workspace`)}
+      onClick={openPage}
       role="button"
       tabIndex={0}
       onKeyDown={(e) => {
         if (e.key === 'Enter' || e.key === ' ') {
           e.preventDefault();
-          navigate(`/mangaka/pages/${page.id}/workspace`);
+          openPage();
         }
       }}
       className="bg-card border border-border rounded-xl overflow-hidden hover:shadow-md hover:border-primary/40 transition-all group cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"

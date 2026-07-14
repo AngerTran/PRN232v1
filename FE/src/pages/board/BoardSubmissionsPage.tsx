@@ -1,11 +1,11 @@
 import { useEffect, useState } from 'react';
 import { usePageMeta } from '../../hooks/usePageMeta';
 import { Input } from '../../app/components/ui/input';
-import { BoardSubmissionCard } from '../../app/components/ui/board/BoardSubmissionCard';
+import { BoardMangaCard } from '../../app/components/ui/board/BoardMangaCard';
 import { getPendingSeries, BOARD_VOTES_REQUIRED, type PendingSeriesItem } from '../../services/boardApi';
 import { getSeries } from '../../services/seriesApi';
 import type { Series } from '../../types/domain';
-import { Search, Inbox } from 'lucide-react';
+import { Search, Inbox, Clock3 } from 'lucide-react';
 
 type EnrichedPending = PendingSeriesItem & { series: Series | null };
 
@@ -63,15 +63,15 @@ export default function BoardSubmissionsPage() {
         <h1 className="text-2xl font-bold">Duyệt Series</h1>
         <p className="text-muted-foreground mt-1">
           {loading
-            ? 'Đang tải hồ sơ đề xuất...'
-            : `${items.length} series chờ xét duyệt · ${BOARD_VOTES_REQUIRED} board cố định · hạn 48 giờ`}
+            ? 'Đang tải...'
+            : `${items.length} series chờ xét duyệt · ${BOARD_VOTES_REQUIRED} board cố định · hạn 48 giờ · nhấn thẻ để bỏ phiếu`}
         </p>
       </div>
 
       <div className="relative max-w-md">
         <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
         <Input
-          placeholder="Tìm theo tên, mangaka, thể loại..."
+          placeholder="Tìm series hoặc mangaka..."
           className="pl-9"
           value={search}
           onChange={e => setSearch(e.target.value)}
@@ -83,31 +83,52 @@ export default function BoardSubmissionsPage() {
       )}
 
       {loading ? (
-        <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3">
+        <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
           {Array.from({ length: 4 }).map((_, i) => (
-            <div key={i} className="rounded-xl border border-border bg-muted/30 h-[5.5rem] animate-pulse" />
+            <div key={i} className="rounded-2xl border bg-muted/30 aspect-[3/5] animate-pulse" />
           ))}
         </div>
       ) : filtered.length === 0 ? (
-        <div className="rounded-2xl border border-dashed border-border bg-muted/20 py-16 text-center">
+        <div className="rounded-2xl border border-dashed py-16 text-center">
           <Inbox className="h-10 w-10 text-muted-foreground mx-auto mb-3" />
-          <p className="font-medium text-foreground">Không có series chờ xét duyệt</p>
+          <p className="font-medium">Không có series chờ xét duyệt</p>
           <p className="text-sm text-muted-foreground mt-1">
             {search ? 'Thử từ khóa khác hoặc xóa bộ lọc.' : 'Mangaka chưa gửi đề xuất series mới.'}
           </p>
         </div>
       ) : (
-        <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3">
+        <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
           {filtered.map(item => (
-            <BoardSubmissionCard key={item.id} item={item} series={item.series} compact />
+            <BoardMangaCard
+              key={item.id}
+              seriesId={item.id}
+              title={item.title}
+              coverUrl={item.series?.coverUrl}
+              mangakaName={item.authorName ?? item.series?.mangakaName}
+              genre={item.series?.genre}
+              synopsis={item.series?.synopsis}
+              badge={
+                <span className="text-xs font-semibold px-2 py-1 rounded-full bg-blue-600/90 text-white">
+                  Chờ duyệt
+                </span>
+              }
+              to={`/board/submissions/${item.id}`}
+              meta={
+                <div className="space-y-2 text-xs">
+                  {item.reviewExpiresAt && (
+                    <p className="text-muted-foreground inline-flex items-center gap-1">
+                      <Clock3 size={12} />
+                      Hạn: {new Date(item.reviewExpiresAt).toLocaleString('vi-VN')}
+                    </p>
+                  )}
+                  {item.currentUserHasVoted && (
+                    <p className="text-muted-foreground">Bạn đã bỏ phiếu</p>
+                  )}
+                </div>
+              }
+            />
           ))}
         </div>
-      )}
-
-      {!loading && (
-        <p className="text-xs text-muted-foreground">
-          Hiển thị {filtered.length} / {items.length} series · Nhấn thẻ để mở hồ sơ và bỏ phiếu (hạn 48 giờ)
-        </p>
       )}
     </div>
   );

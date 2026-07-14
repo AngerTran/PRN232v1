@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using System.Data;
+using System.Text.Json;
 using DAL.Common;
 using BLL.Dtos.Tasks;
 using DAL.Models;
@@ -263,16 +264,27 @@ public class BoardService
 
         foreach (var series in pendingTracked)
         {
-            await TryAutoUpdateSeriesStatusAsync(series, series.Id, cancellationToken);
-            if (series.Status == SeriesStatus.PendingReview)
+            try
             {
-                await EnsureFixedBoardClaimsIfMissingAsync(series, cancellationToken);
-            }
-        }
+                await TryAutoUpdateSeriesStatusAsync(series, series.Id, cancellationToken);
+                if (series.Status == SeriesStatus.PendingReview)
+                {
+                    await EnsureFixedBoardClaimsIfMissingAsync(series, cancellationToken);
+                }
 
-        if (pendingTracked.Count > 0)
-        {
-            await _unitOfWork.SaveChangesAsync(cancellationToken);
+                await _unitOfWork.SaveChangesAsync(cancellationToken);
+            }
+            catch
+            {
+                // Không để 1 series lỗi (log/notify) làm sập cả danh sách Duyệt Series.
+                foreach (var entry in _unitOfWork.Context.ChangeTracker.Entries()
+                             .Where(e => e.Entity == series ||
+                                         (e.Entity is ActivityLog log && log.EntityId == series.Id))
+                             .ToList())
+                {
+                    entry.State = EntityState.Detached;
+                }
+            }
         }
     }
 
@@ -407,12 +419,31 @@ public class BoardService
         CancellationToken cancellationToken = default)
     {
         throw new WorkflowForbiddenException(
-            "Lead do Admin gán. Board không tự nhận phụ trách chính nữa.");
+            "Lead do Admin gán toàn cục trong Cài đặt Admin. Board không tự nhận phụ trách chính.");
     }
 
-    public async Task<BoardReviewClaimResponse> AssignLeadByAdminAsync(
+    public async Task<GlobalBoardLeadResponse?> GetGlobalBoardLeadAsync(
         Guid callerId,
-        Guid seriesId,
+        CancellationToken cancellationToken = default)
+    {
+        var caller = await _unitOfWork.Repository<Profile>().GetByIdAsync(callerId, cancellationToken: cancellationToken)
+            ?? throw new WorkflowForbiddenException("Caller profile not found.");
+        if (!PageAccessService.IsAdmin(caller.Role) && !PageAccessService.IsBoard(caller.Role))
+        {
+            throw new WorkflowForbiddenException("Requires admin or board role.");
+        }
+
+        var lead = await _unitOfWork.Context.Profiles
+            .AsNoTracking()
+            .FirstOrDefaultAsync(p => p.IsBoardLead, cancellationToken);
+
+        return lead is null
+            ? null
+            : new GlobalBoardLeadResponse(lead.Id, lead.FullName);
+    }
+
+    public async Task<GlobalBoardLeadResponse> AssignGlobalBoardLeadAsync(
+        Guid callerId,
         Guid boardMemberId,
         CancellationToken cancellationToken = default)
     {
@@ -420,45 +451,88 @@ public class BoardService
             ?? throw new WorkflowForbiddenException("Caller profile not found.");
         if (!PageAccessService.IsAdmin(caller.Role))
         {
-            throw new WorkflowForbiddenException("Chỉ Admin được gán Lead cho series.");
+            throw new WorkflowForbiddenException("Chỉ Admin được gán Board Lead toàn cục.");
         }
 
-        var series = await SeriesRepository.GetByIdAsync(seriesId, asNoTracking: false, cancellationToken)
-            ?? throw new ArgumentException("Series not found.");
-
-        var claim = await _unitOfWork.Context.SeriesBoardReviewClaims
-            .Include(c => c.BoardMember)
-            .FirstOrDefaultAsync(c => c.SeriesId == seriesId && c.BoardMemberId == boardMemberId, cancellationToken)
-            ?? throw new ArgumentException("BoardMemberId phải là một trong các reviewer đã được gán cho series.");
-
-        var existingLeads = await _unitOfWork.Context.SeriesBoardReviewClaims
-            .Where(c => c.SeriesId == seriesId && c.IsLead)
-            .ToListAsync(cancellationToken);
-        foreach (var lead in existingLeads)
+        var target = await _unitOfWork.Repository<Profile>().GetByIdAsync(boardMemberId, asNoTracking: false, cancellationToken)
+            ?? throw new ArgumentException("Board member not found.");
+        if (target.Role != ProfileRole.Board)
         {
-            lead.IsLead = false;
+            throw new ArgumentException("Chỉ được gán Lead cho tài khoản role board.");
         }
 
-        claim.IsLead = true;
-        await _unitOfWork.SaveChangesAsync(cancellationToken);
+        if (target.IsActive == false)
+        {
+            throw new ArgumentException("Board member đang không hoạt động.");
+        }
 
-        var allClaims = await LoadSeriesClaimsAsync(seriesId, cancellationToken);
-        await _notificationService.CreateAsync(
-            series.AuthorId,
-            "Đã có phụ trách chính",
-            $"Admin đã gán {claim.BoardMember?.FullName ?? "Board"} làm Lead series \"{series.Title}\".",
-            WorkflowNotificationPaths.MangakaSeries(seriesId),
-            WorkflowNotificationPaths.CategorySubmission,
-            cancellationToken: cancellationToken);
+        var previousLeads = await _unitOfWork.Context.Profiles
+            .Where(p => p.IsBoardLead && p.Id != boardMemberId)
+            .ToListAsync(cancellationToken);
+        foreach (var prev in previousLeads)
+        {
+            prev.IsBoardLead = false;
+        }
+
+        target.IsBoardLead = true;
+        await SyncAllClaimsToGlobalLeadAsync(boardMemberId, cancellationToken);
+        await _unitOfWork.SaveChangesAsync(cancellationToken);
 
         await _notificationService.CreateAsync(
             boardMemberId,
-            "Bạn được gán làm Lead",
-            $"Bạn là phụ trách chính series \"{series.Title}\".",
-            WorkflowNotificationPaths.BoardApprovedSeries(seriesId),
+            "Bạn là Board Lead",
+            "Admin đã gán bạn làm Lead hội đồng toàn cục. Bạn phụ trách lên lịch xuất bản các series đã duyệt.",
+            "/board/approved-series",
             WorkflowNotificationPaths.CategorySubmission,
             cancellationToken: cancellationToken);
 
+        return new GlobalBoardLeadResponse(target.Id, target.FullName);
+    }
+
+    public async Task ClearGlobalBoardLeadAsync(
+        Guid callerId,
+        CancellationToken cancellationToken = default)
+    {
+        var caller = await _unitOfWork.Repository<Profile>().GetByIdAsync(callerId, cancellationToken: cancellationToken)
+            ?? throw new WorkflowForbiddenException("Caller profile not found.");
+        if (!PageAccessService.IsAdmin(caller.Role))
+        {
+            throw new WorkflowForbiddenException("Chỉ Admin được hủy Board Lead toàn cục.");
+        }
+
+        var leads = await _unitOfWork.Context.Profiles
+            .Where(p => p.IsBoardLead)
+            .ToListAsync(cancellationToken);
+        foreach (var lead in leads)
+        {
+            lead.IsBoardLead = false;
+        }
+
+        var claimLeads = await _unitOfWork.Context.SeriesBoardReviewClaims
+            .Where(c => c.IsLead)
+            .ToListAsync(cancellationToken);
+        foreach (var claim in claimLeads)
+        {
+            claim.IsLead = false;
+        }
+
+        await _unitOfWork.SaveChangesAsync(cancellationToken);
+    }
+
+    /// <summary>Deprecated: Lead hiện là toàn cục — chuyển sang AssignGlobalBoardLeadAsync.</summary>
+    public async Task<BoardReviewClaimResponse> AssignLeadByAdminAsync(
+        Guid callerId,
+        Guid seriesId,
+        Guid boardMemberId,
+        CancellationToken cancellationToken = default)
+    {
+        await AssignGlobalBoardLeadAsync(callerId, boardMemberId, cancellationToken);
+        var claim = await _unitOfWork.Context.SeriesBoardReviewClaims
+            .AsNoTracking()
+            .Include(c => c.BoardMember)
+            .FirstOrDefaultAsync(c => c.SeriesId == seriesId && c.BoardMemberId == boardMemberId, cancellationToken)
+            ?? throw new ArgumentException("Board Lead đã được gán toàn cục nhưng không có claim trên series này.");
+        var allClaims = await LoadSeriesClaimsAsync(seriesId, cancellationToken);
         return BuildClaimResponse(seriesId, boardMemberId, claim, allClaims);
     }
 
@@ -615,9 +689,11 @@ public class BoardService
             Action = ActivityActions.DangerDecision,
             EntityType = ActivityEntityTypes.Series,
             EntityId = series.Id,
-            NewData = string.IsNullOrWhiteSpace(request.Reason)
-                ? decision
-                : $"{decision}: {request.Reason.Trim()}",
+            NewData = JsonSerializer.Serialize(new
+            {
+                decision,
+                reason = string.IsNullOrWhiteSpace(request.Reason) ? null : request.Reason.Trim()
+            }),
             CreatedAt = DateTime.UtcNow
         }, cancellationToken);
         await _unitOfWork.SaveChangesAsync(cancellationToken);
@@ -700,7 +776,7 @@ public class BoardService
                 Action = ActivityActions.BoardApproved,
                 EntityType = ActivityEntityTypes.Series,
                 EntityId = series.Id,
-                NewData = $"approved_at:{DateTime.UtcNow:O}",
+                NewData = JsonSerializer.Serialize(new { approved_at = DateTime.UtcNow }),
                 CreatedAt = DateTime.UtcNow
             }, cancellationToken);
 
@@ -998,7 +1074,7 @@ public class BoardService
                 Action = ActivityActions.BoardApproved,
                 EntityType = ActivityEntityTypes.Series,
                 EntityId = series.Id,
-                NewData = $"approved_at:{approvedAt:O};backfill:true",
+                NewData = JsonSerializer.Serialize(new { approved_at = approvedAt, backfill = true }),
                 CreatedAt = approvedAt.Value
             }, cancellationToken);
         }
@@ -1040,41 +1116,106 @@ public class BoardService
             .Where(c => c.SeriesId == series.Id)
             .Select(c => c.BoardMemberId)
             .ToListAsync(cancellationToken);
-        if (existingIds.Count >= MaxReviewClaims)
+
+        if (existingIds.Count < MaxReviewClaims)
         {
-            return;
+            var allBoards = await _unitOfWork.Context.Profiles
+                .AsNoTracking()
+                .Where(p => p.Role == ProfileRole.Board && (p.IsActive == null || p.IsActive == true))
+                .OrderBy(p => p.FullName)
+                .ToListAsync(cancellationToken);
+            var boards = SelectFixedBoardMembers(allBoards, MaxReviewClaims);
+
+            var claimedAt = DateTime.UtcNow;
+            var assigned = existingIds.ToHashSet();
+            foreach (var board in boards)
+            {
+                if (assigned.Count >= MaxReviewClaims)
+                {
+                    break;
+                }
+
+                if (!assigned.Add(board.Id))
+                {
+                    continue;
+                }
+
+                _unitOfWork.Context.SeriesBoardReviewClaims.Add(new SeriesBoardReviewClaim
+                {
+                    SeriesId = series.Id,
+                    BoardMemberId = board.Id,
+                    Source = "fixed_board",
+                    ClaimedAt = claimedAt,
+                    IsLead = board.IsBoardLead
+                });
+            }
         }
 
-        var boards = await _unitOfWork.Context.Profiles
-            .AsNoTracking()
-            .Where(p => p.Role == ProfileRole.Board && (p.IsActive == null || p.IsActive == true))
-            .OrderBy(p => p.FullName)
-            .Take(MaxReviewClaims)
-            .ToListAsync(cancellationToken);
+        await ApplyGlobalLeadToSeriesClaimsAsync(series.Id, cancellationToken);
+    }
 
-        var claimedAt = DateTime.UtcNow;
-        var assigned = existingIds.ToHashSet();
-        foreach (var board in boards)
+    private async Task SyncAllClaimsToGlobalLeadAsync(Guid leadBoardMemberId, CancellationToken cancellationToken)
+    {
+        var claimLeads = await _unitOfWork.Context.SeriesBoardReviewClaims
+            .Where(c => c.IsLead)
+            .ToListAsync(cancellationToken);
+        foreach (var claim in claimLeads)
         {
-            if (assigned.Count >= MaxReviewClaims)
+            claim.IsLead = false;
+        }
+
+        var leadClaims = await _unitOfWork.Context.SeriesBoardReviewClaims
+            .Where(c => c.BoardMemberId == leadBoardMemberId)
+            .ToListAsync(cancellationToken);
+        foreach (var claim in leadClaims)
+        {
+            claim.IsLead = true;
+        }
+    }
+
+    private async Task ApplyGlobalLeadToSeriesClaimsAsync(Guid seriesId, CancellationToken cancellationToken)
+    {
+        var globalLeadId = await _unitOfWork.Context.Profiles
+            .AsNoTracking()
+            .Where(p => p.IsBoardLead)
+            .Select(p => (Guid?)p.Id)
+            .FirstOrDefaultAsync(cancellationToken);
+
+        var claims = await _unitOfWork.Context.SeriesBoardReviewClaims
+            .Where(c => c.SeriesId == seriesId)
+            .ToListAsync(cancellationToken);
+        foreach (var claim in claims)
+        {
+            claim.IsLead = globalLeadId.HasValue && claim.BoardMemberId == globalLeadId.Value;
+        }
+    }
+
+    /// <summary>Ưu tiên Board Lead toàn cục trong nhóm tối đa <paramref name="max"/> board.</summary>
+    internal static List<Profile> SelectFixedBoardMembers(IReadOnlyList<Profile> boards, int max)
+    {
+        if (max <= 0 || boards.Count == 0)
+        {
+            return new List<Profile>();
+        }
+
+        var result = new List<Profile>(max);
+        var lead = boards.FirstOrDefault(b => b.IsBoardLead);
+        if (lead is not null)
+        {
+            result.Add(lead);
+        }
+
+        foreach (var board in boards.Where(b => !b.IsBoardLead).OrderBy(b => b.FullName))
+        {
+            if (result.Count >= max)
             {
                 break;
             }
 
-            if (!assigned.Add(board.Id))
-            {
-                continue;
-            }
-
-            _unitOfWork.Context.SeriesBoardReviewClaims.Add(new SeriesBoardReviewClaim
-            {
-                SeriesId = series.Id,
-                BoardMemberId = board.Id,
-                Source = "fixed_board",
-                ClaimedAt = claimedAt,
-                IsLead = false
-            });
+            result.Add(board);
         }
+
+        return result;
     }
 
     private async Task<DateTime?> GetBoardApprovedAtAsync(Guid seriesId, CancellationToken cancellationToken)
@@ -1118,10 +1259,14 @@ public class BoardService
         DAL.Models.Series series,
         CancellationToken cancellationToken)
     {
-        var hasLead = await _unitOfWork.Context.SeriesBoardReviewClaims
-            .AnyAsync(c => c.SeriesId == seriesId && c.IsLead, cancellationToken);
-        if (hasLead)
+        var hasGlobalLead = await _unitOfWork.Context.Profiles
+            .AsNoTracking()
+            .AnyAsync(p => p.IsBoardLead, cancellationToken);
+        if (hasGlobalLead)
         {
+            await ApplyGlobalLeadToSeriesClaimsAsync(seriesId, cancellationToken);
+            await _unitOfWork.SaveChangesAsync(cancellationToken);
+            await NotifyLeadBoardMemberAsync(seriesId, series, cancellationToken);
             return;
         }
 
@@ -1137,9 +1282,9 @@ public class BoardService
 
         await _notificationService.CreateForUsersAsync(
             adminIds,
-            "Cần gán Lead cho series",
-            $"Series \"{series.Title}\" đã được duyệt. Hãy gán Lead trong Admin → Series.",
-            "/admin/series",
+            "Chưa có Board Lead toàn cục",
+            $"Series \"{series.Title}\" đã được duyệt. Hãy gán Board Lead trong Admin → Cài đặt Admin.",
+            "/admin/settings",
             WorkflowNotificationPaths.CategorySubmission,
             cancellationToken);
     }

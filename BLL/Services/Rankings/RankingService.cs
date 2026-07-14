@@ -324,7 +324,11 @@ public class RankingService
             Action = ActivityActions.DangerAlert,
             EntityType = ActivityEntityTypes.Series,
             EntityId = series.Id,
-            NewData = $"issue:{ranking.IssueNumber};rank:{ranking.RankPosition}",
+            NewData = System.Text.Json.JsonSerializer.Serialize(new
+            {
+                issue = ranking.IssueNumber,
+                rank = ranking.RankPosition
+            }),
             CreatedAt = DateTime.UtcNow
         }, cancellationToken);
         await _unitOfWork.SaveChangesAsync(cancellationToken);

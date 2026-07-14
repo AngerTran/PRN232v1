@@ -645,6 +645,12 @@ namespace DAL.Migrations
                         .HasDefaultValue(true)
                         .HasColumnName("is_active");
 
+                    b.Property<bool>("IsBoardLead")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false)
+                        .HasColumnName("is_board_lead");
+
                     b.Property<ProfileRole>("Role")
                         .HasColumnType("user_role")
                         .HasColumnName("role");
@@ -660,6 +666,10 @@ namespace DAL.Migrations
 
                     b.HasIndex(new[] { "Email" }, "profiles_email_key")
                         .IsUnique();
+
+                    b.HasIndex("IsBoardLead", "idx_profiles_one_board_lead")
+                        .IsUnique()
+                        .HasFilter("is_board_lead = true");
 
                     b.ToTable("profiles", (string)null);
                 });

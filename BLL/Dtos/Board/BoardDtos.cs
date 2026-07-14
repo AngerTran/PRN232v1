@@ -91,6 +91,13 @@ public record BoardReviewerSummaryItem(
 public record AssignSeriesLeadRequest(
     [Required] Guid BoardMemberId);
 
+public record GlobalBoardLeadResponse(
+    Guid BoardMemberId,
+    string BoardMemberName);
+
+public record AssignGlobalBoardLeadRequest(
+    [Required] Guid BoardMemberId);
+
 public record LeaderboardItemResponse(
     Guid SeriesId,
     string Title,

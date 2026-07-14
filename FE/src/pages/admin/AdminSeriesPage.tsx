@@ -4,11 +4,7 @@ import { Card, CardContent } from '../../app/components/ui/card';
 import { usePageMeta } from '../../hooks/usePageMeta';
 import { useConfirm } from '../../components/ui/ConfirmDialog';
 import { deleteSeries, getVisibleSeriesLight } from '../../services/seriesApi';
-import {
-  assignSeriesLead,
-  listSeriesReviewers,
-  type BoardReviewerSummary,
-} from '../../services/boardApi';
+import { getGlobalBoardLead, type GlobalBoardLead } from '../../services/boardApi';
 import { getBoardMembers } from '../../services/profilesApi';
 import type { Series, SeriesStatus } from '../../types/domain';
 import { SERIES_STATUS_FILTER_OPTIONS, SERIES_STATUS_LABELS } from '../../utils/statusLabels';
@@ -25,16 +21,6 @@ const STATUS_PILL: Partial<Record<SeriesStatus, string>> = {
   'At Risk': 'bg-rose-100 text-rose-700',
 };
 
-const LEAD_ELIGIBLE: SeriesStatus[] = [
-  'Submitted',
-  'Approved',
-  'In Progress',
-  'Completed',
-  'Published',
-  'At Risk',
-  'Revision Required',
-];
-
 export default function AdminSeriesPage() {
   const { setPageMeta } = usePageMeta();
   const confirm = useConfirm();
@@ -48,38 +34,21 @@ export default function AdminSeriesPage() {
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<'all' | SeriesStatus>('all');
   const [deletingId, setDeletingId] = useState<string | null>(null);
-  const [reviewersBySeries, setReviewersBySeries] = useState<Record<string, BoardReviewerSummary[]>>({});
-  const [leadDraft, setLeadDraft] = useState<Record<string, string>>({});
-  const [savingLeadId, setSavingLeadId] = useState<string | null>(null);
   const [activeBoardCount, setActiveBoardCount] = useState<number | null>(null);
+  const [globalLead, setGlobalLead] = useState<GlobalBoardLead | null>(null);
 
   const load = async () => {
     setLoading(true);
     setError('');
     try {
-      const [list, boards] = await Promise.all([
+      const [list, boards, lead] = await Promise.all([
         getVisibleSeriesLight(),
         getBoardMembers().catch(() => []),
+        getGlobalBoardLead().catch(() => null),
       ]);
       setSeries(list);
       setActiveBoardCount(boards.length);
-
-      const eligible = list.filter(s => LEAD_ELIGIBLE.includes(s.status));
-      const entries = await Promise.all(
-        eligible.map(async s => {
-          try {
-            const reviewers = await listSeriesReviewers(s.id);
-            return [s.id, reviewers] as const;
-          } catch {
-            return [s.id, []] as const;
-          }
-        })
-      );
-      const map = Object.fromEntries(entries);
-      setReviewersBySeries(map);
-      setLeadDraft(Object.fromEntries(
-        entries.map(([id, reviewers]) => [id, reviewers.find(r => r.isLead)?.boardMemberId ?? ''])
-      ));
+      setGlobalLead(lead);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Không thể tải danh sách series.');
       setSeries([]);
@@ -105,54 +74,22 @@ export default function AdminSeriesPage() {
   });
 
   const handleDelete = async (item: Series) => {
-    const confirmed = await confirm({
-      title: 'Xóa series',
+    const ok = await confirm({
+      title: 'Xóa series?',
+      message: `Xóa vĩnh viễn "${item.title}" và toàn bộ dữ liệu liên quan?`,
+      confirmText: 'Xóa',
       variant: 'danger',
-      message: (
-        <>
-          Xóa cứng series <span className="font-semibold text-foreground">{item.title}</span>?
-          <br />
-          Toàn bộ chapter, trang, vote, lịch… liên quan sẽ bị xóa. Không hoàn tác được.
-        </>
-      ),
-      confirmText: 'Xóa series',
     });
-    if (!confirmed) return;
-
+    if (!ok) return;
     setDeletingId(item.id);
     setError('');
-    const previous = series;
-    setSeries(list => list.filter(s => s.id !== item.id));
     try {
       await deleteSeries(item.id);
+      setSeries(prev => prev.filter(s => s.id !== item.id));
     } catch (err) {
-      setSeries(previous);
       setError(err instanceof Error ? err.message : 'Không thể xóa series.');
     } finally {
       setDeletingId(null);
-    }
-  };
-
-  const handleSaveLead = async (seriesId: string) => {
-    const boardMemberId = leadDraft[seriesId];
-    if (!boardMemberId) {
-      setError('Chọn một board để gán Lead.');
-      return;
-    }
-    setSavingLeadId(seriesId);
-    setError('');
-    try {
-      await assignSeriesLead(seriesId, boardMemberId);
-      const reviewers = await listSeriesReviewers(seriesId);
-      setReviewersBySeries(m => ({ ...m, [seriesId]: reviewers }));
-      setLeadDraft(d => ({
-        ...d,
-        [seriesId]: reviewers.find(r => r.isLead)?.boardMemberId ?? boardMemberId,
-      }));
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Không thể gán Lead.');
-    } finally {
-      setSavingLeadId(null);
     }
   };
 
@@ -161,9 +98,20 @@ export default function AdminSeriesPage() {
       <div>
         <h1 className="text-xl font-bold text-gray-900">Quản lý Series</h1>
         <p className="text-sm text-gray-500 mt-0.5">
-          Xóa data test và gán Lead (1 trong 3 board cố định) cho từng series.
+          Quản lý / xóa series. Board Lead toàn cục gán tại Cài đặt Admin.
         </p>
       </div>
+
+      {globalLead ? (
+        <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900 inline-flex items-center gap-2">
+          <Crown size={16} />
+          Board Lead: <strong>{globalLead.boardMemberName}</strong>
+        </div>
+      ) : (
+        <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+          Chưa có Board Lead — vào <strong>Cài đặt Admin</strong> để gán 1 board làm Lead.
+        </div>
+      )}
 
       {activeBoardCount != null && activeBoardCount !== 3 && (
         <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
@@ -220,91 +168,41 @@ export default function AdminSeriesPage() {
                     <th className="pb-3 pr-3 font-semibold">Series</th>
                     <th className="pb-3 pr-3 font-semibold">Mangaka</th>
                     <th className="pb-3 pr-3 font-semibold">Trạng thái</th>
-                    <th className="pb-3 pr-3 font-semibold">Lead</th>
                     <th className="pb-3 font-semibold text-right">Thao tác</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {filtered.map(item => {
-                    const reviewers = reviewersBySeries[item.id] ?? [];
-                    const canAssignLead = LEAD_ELIGIBLE.includes(item.status);
-                    const leadName = reviewers.find(r => r.isLead)?.boardMemberName;
-
-                    return (
-                      <tr key={item.id} className="border-b border-gray-50 hover:bg-gray-50/80 align-top">
-                        <td className="py-3 pr-3">
-                          <div className="font-medium text-gray-900">{item.title}</div>
-                          <div className="text-[11px] text-gray-400 font-mono mt-0.5 truncate max-w-[200px]">
-                            {item.id}
-                          </div>
-                        </td>
-                        <td className="py-3 pr-3 text-gray-700">{item.mangakaName || '—'}</td>
-                        <td className="py-3 pr-3">
-                          <span
-                            className={`inline-flex px-2 py-0.5 rounded-full text-xs font-medium ${
-                              STATUS_PILL[item.status] ?? 'bg-gray-100 text-gray-600'
-                            }`}
-                          >
-                            {SERIES_STATUS_LABELS[item.status] ?? item.status}
-                          </span>
-                        </td>
-                        <td className="py-3 pr-3 min-w-[220px]">
-                          {canAssignLead ? (
-                            reviewers.length === 0 ? (
-                              <p className="text-xs text-muted-foreground">
-                                Chưa có reviewer (series chưa nộp duyệt hoặc chưa gán board).
-                              </p>
-                            ) : (
-                              <div className="flex flex-col gap-1.5">
-                                {leadName && (
-                                  <span className="inline-flex items-center gap-1 text-xs text-amber-800">
-                                    <Crown size={12} /> {leadName}
-                                  </span>
-                                )}
-                                <div className="flex gap-1.5">
-                                  <select
-                                    className="flex-1 px-2 py-1.5 text-xs border border-gray-200 rounded-lg bg-white"
-                                    value={leadDraft[item.id] ?? ''}
-                                    onChange={e =>
-                                      setLeadDraft(d => ({ ...d, [item.id]: e.target.value }))
-                                    }
-                                  >
-                                    <option value="">Chọn Lead…</option>
-                                    {reviewers.map(r => (
-                                      <option key={r.boardMemberId} value={r.boardMemberId}>
-                                        {r.boardMemberName}
-                                      </option>
-                                    ))}
-                                  </select>
-                                  <button
-                                    type="button"
-                                    disabled={savingLeadId === item.id || !leadDraft[item.id]}
-                                    onClick={() => void handleSaveLead(item.id)}
-                                    className="px-2 py-1.5 text-xs font-medium text-white bg-red-600 hover:bg-red-700 rounded-lg disabled:opacity-50"
-                                  >
-                                    {savingLeadId === item.id ? '…' : 'Gán'}
-                                  </button>
-                                </div>
-                              </div>
-                            )
-                          ) : (
-                            <span className="text-xs text-muted-foreground">—</span>
-                          )}
-                        </td>
-                        <td className="py-3 text-right">
-                          <button
-                            type="button"
-                            disabled={deletingId === item.id}
-                            onClick={() => void handleDelete(item)}
-                            className="inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium text-red-700 bg-red-50 hover:bg-red-100 rounded-lg disabled:opacity-50"
-                          >
-                            <Trash2 size={14} />
-                            {deletingId === item.id ? 'Đang xóa…' : 'Xóa'}
-                          </button>
-                        </td>
-                      </tr>
-                    );
-                  })}
+                  {filtered.map(item => (
+                    <tr key={item.id} className="border-b border-gray-50 hover:bg-gray-50/80 align-top">
+                      <td className="py-3 pr-3">
+                        <div className="font-medium text-gray-900">{item.title}</div>
+                        <div className="text-[11px] text-gray-400 font-mono mt-0.5 truncate max-w-[200px]">
+                          {item.id}
+                        </div>
+                      </td>
+                      <td className="py-3 pr-3 text-gray-700">{item.mangakaName || '—'}</td>
+                      <td className="py-3 pr-3">
+                        <span
+                          className={`inline-flex px-2 py-0.5 rounded-full text-xs font-medium ${
+                            STATUS_PILL[item.status] ?? 'bg-gray-100 text-gray-600'
+                          }`}
+                        >
+                          {SERIES_STATUS_LABELS[item.status] ?? item.status}
+                        </span>
+                      </td>
+                      <td className="py-3 text-right">
+                        <button
+                          type="button"
+                          disabled={deletingId === item.id}
+                          onClick={() => void handleDelete(item)}
+                          className="inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium text-red-700 bg-red-50 hover:bg-red-100 rounded-lg disabled:opacity-50"
+                        >
+                          <Trash2 size={14} />
+                          {deletingId === item.id ? 'Đang xóa…' : 'Xóa'}
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
                 </tbody>
               </table>
             </div>

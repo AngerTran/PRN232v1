@@ -3,97 +3,42 @@ import { useNavigate } from 'react-router';
 import { usePageMeta } from '../../hooks/usePageMeta';
 import { Card, CardContent } from '../../app/components/ui/card';
 import { Button } from '../../app/components/ui/button';
-import { Badge } from '../../app/components/ui/badge';
 import type { Series } from '../../types/domain';
 import { getVisibleSeries, getSeries } from '../../services/seriesApi';
 import { getPendingSeries, getLeaderboard, type PendingSeriesItem, type LeaderboardItem } from '../../services/boardApi';
 import { getStoredUser } from '../../services/authApi';
-import { BoardSubmissionCard } from '../../app/components/ui/board/BoardSubmissionCard';
+import { BoardMangaCard } from '../../app/components/ui/board/BoardMangaCard';
 import {
-  FileText, Star, CalendarDays, AlertTriangle, XCircle, ArrowRight, Gavel, Trophy,
+  FileText, Star, CalendarDays, AlertTriangle, ArrowRight, Gavel, Trophy, Clock3,
 } from 'lucide-react';
 import { clsx } from 'clsx';
 
-const PREVIEW_LIMIT = 3;
+const PREVIEW_LIMIT = 4;
 
 type EnrichedPending = PendingSeriesItem & { series: Series | null };
 
-function DashboardSection({
+function SeriesSection({
   title,
-  viewAllLabel,
-  onViewAll,
-  emptyText,
+  href,
   children,
 }: {
   title: string;
-  viewAllLabel: string;
-  onViewAll: () => void;
-  emptyText: string;
+  href: string;
   children: ReactNode;
 }) {
-  const isEmpty = !children;
-
+  const navigate = useNavigate();
   return (
-    <div>
-      <div className="flex items-center justify-between mb-4">
+    <section className="space-y-3">
+      <div className="flex items-center justify-between">
         <h2 className="text-lg font-semibold">{title}</h2>
-        <Button variant="ghost" size="sm" onClick={onViewAll} className="text-primary">
-          {viewAllLabel} <ArrowRight className="ml-1 h-3.5 w-3.5" />
+        <Button variant="ghost" size="sm" onClick={() => navigate(href)} className="text-primary">
+          Xem tất cả <ArrowRight className="ml-1 h-3.5 w-3.5" />
         </Button>
       </div>
-      {isEmpty ? (
-        <Card>
-          <CardContent className="py-8 text-center text-muted-foreground text-sm">{emptyText}</CardContent>
-        </Card>
-      ) : (
-        children
-      )}
-    </div>
-  );
-}
-
-function SeriesPreviewCard({
-  series,
-  onClick,
-  extra,
-}: {
-  series: Series;
-  onClick: () => void;
-  extra?: ReactNode;
-}) {
-  return (
-    <Card className="shadow-sm hover:shadow-md transition-shadow cursor-pointer" onClick={onClick}>
-      <CardContent className="p-4">
-        <div className="flex gap-3">
-          <img
-            src={series.coverUrl}
-            alt={series.title}
-            className="w-10 h-14 object-cover rounded shrink-0"
-          />
-          <div className="min-w-0 flex-1">
-            <h3 className="font-semibold text-sm mb-1 truncate">{series.title}</h3>
-            <p className="text-xs text-muted-foreground mb-2">{series.mangakaName ?? '—'}</p>
-            <div className="flex flex-wrap items-center gap-2">
-              <Badge variant="outline" className="text-[10px] px-1.5 py-0">{series.genre}</Badge>
-              {series.isAtRisk && (
-                <span className="text-[10px] font-medium text-red-600">At Risk</span>
-              )}
-              {extra}
-            </div>
-          </div>
-        </div>
-      </CardContent>
-    </Card>
-  );
-}
-
-function SeriesPreviewGrid({ items, onItemClick }: { items: Series[]; onItemClick: (s: Series) => void }) {
-  return (
-    <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-      {items.map(s => (
-        <SeriesPreviewCard key={s.id} series={s} onClick={() => onItemClick(s)} />
-      ))}
-    </div>
+      <div className="grid gap-3 grid-cols-[repeat(auto-fill,minmax(140px,168px))]">
+        {children}
+      </div>
+    </section>
   );
 }
 
@@ -105,9 +50,11 @@ export default function BoardDashboardPage() {
   const [series, setSeries] = useState<Series[]>([]);
   const [pending, setPending] = useState<EnrichedPending[]>([]);
   const [leaderboard, setLeaderboard] = useState<LeaderboardItem[]>([]);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     let isActive = true;
+    setLoading(true);
     Promise.all([
       getVisibleSeries().catch(() => [] as Series[]),
       getPendingSeries().catch(() => [] as PendingSeriesItem[]),
@@ -118,12 +65,14 @@ export default function BoardDashboardPage() {
         p.map(async item => {
           const detail = await getSeries(item.id).catch(() => null);
           return { ...item, series: detail };
-        })
+        }),
       );
       if (!isActive) return;
       setSeries(s);
       setPending(enriched);
       setLeaderboard(l);
+    }).finally(() => {
+      if (isActive) setLoading(false);
     });
     return () => {
       isActive = false;
@@ -133,170 +82,225 @@ export default function BoardDashboardPage() {
   const approvedSeries = series.filter(s => s.status === 'Approved');
   const publishingSeries = series.filter(s => s.status === 'In Progress' || s.status === 'Published');
   const atRiskSeries = series.filter(s => s.isAtRisk);
-  const cancelledSeries = series.filter(s => s.status === 'Cancelled');
-
-  const stats = {
-    pending: pending.length,
-    approved: approvedSeries.length,
-    publishing: publishingSeries.length,
-    atRisk: atRiskSeries.length,
-    cancelled: cancelledSeries.length,
-  };
-
-  const summaryCards = [
-    { label: 'Chờ Duyệt', value: stats.pending, icon: <FileText className="h-4 w-4" />, color: 'text-blue-600', bg: 'bg-blue-50' },
-    { label: 'Series Đã Nhận', value: stats.approved, icon: <Star className="h-4 w-4" />, color: 'text-green-600', bg: 'bg-green-50' },
-    { label: 'Đang Xuất Bản', value: stats.publishing, icon: <CalendarDays className="h-4 w-4" />, color: 'text-violet-600', bg: 'bg-violet-50' },
-    { label: 'At Risk', value: stats.atRisk, icon: <AlertTriangle className="h-4 w-4" />, color: 'text-red-600', bg: 'bg-red-50' },
-    { label: 'Đã Từ Chối', value: stats.cancelled, icon: <XCircle className="h-4 w-4" />, color: 'text-gray-600', bg: 'bg-gray-50' },
-  ];
-
   const pendingTop = pending.slice(0, PREVIEW_LIMIT);
-  const topRanked = leaderboard.slice(0, 4);
+  const approvedTop = approvedSeries.slice(0, PREVIEW_LIMIT);
+  const publishingTop = publishingSeries.slice(0, PREVIEW_LIMIT);
+  const atRiskTop = atRiskSeries.slice(0, PREVIEW_LIMIT);
+  const topRanked = leaderboard.slice(0, 5);
+
+  const hasAnySeriesContent =
+    pendingTop.length > 0
+    || approvedTop.length > 0
+    || publishingTop.length > 0
+    || atRiskTop.length > 0
+    || topRanked.length > 0;
+
+  const summaryParts: string[] = [];
+  if (pending.length > 0) summaryParts.push(`${pending.length} chờ duyệt`);
+  if (approvedSeries.length > 0) summaryParts.push(`${approvedSeries.length} đã nhận`);
+  if (publishingSeries.length > 0) summaryParts.push(`${publishingSeries.length} xuất bản`);
+  if (atRiskSeries.length > 0) summaryParts.push(`${atRiskSeries.length} At Risk`);
+
+  const shortcuts = [
+    {
+      label: 'Chờ duyệt',
+      value: pending.length,
+      icon: <FileText className="h-4 w-4" />,
+      color: 'text-blue-600',
+      bg: 'bg-blue-50',
+      href: '/board/submissions',
+    },
+    {
+      label: 'Đã nhận',
+      value: approvedSeries.length,
+      icon: <Star className="h-4 w-4" />,
+      color: 'text-green-600',
+      bg: 'bg-green-50',
+      href: '/board/approved-series',
+    },
+    {
+      label: 'Xuất bản',
+      value: publishingSeries.length,
+      icon: <CalendarDays className="h-4 w-4" />,
+      color: 'text-violet-600',
+      bg: 'bg-violet-50',
+      href: '/board/publishing-schedule',
+    },
+    {
+      label: 'At Risk',
+      value: atRiskSeries.length,
+      icon: <AlertTriangle className="h-4 w-4" />,
+      color: 'text-red-600',
+      bg: 'bg-red-50',
+      href: '/board/series-decisions',
+    },
+  ];
 
   return (
     <div className="p-6 space-y-6">
-      <Card className="border-0 shadow-md" style={{ background: 'linear-gradient(135deg, #1F1F1F 0%, #3a1f1f 100%)' }}>
-        <CardContent className="p-6">
-          <div className="flex items-start justify-between">
-            <div>
-              <p className="text-white/60 text-sm font-medium mb-1">Hội Đồng Biên Tập</p>
-              <h1 className="text-2xl font-bold text-white mb-2">Chào mừng trở lại, {boardName}</h1>
-              <p className="text-white/70 text-sm">
-                Có <span className="text-white font-semibold">{stats.pending} series</span> chờ 3 board bỏ phiếu (48 giờ).
-                {stats.approved > 0 && (
-                  <span className="text-green-300"> {stats.approved} series đã duyệt.</span>
-                )}
-                {stats.atRisk > 0 && (
-                  <span className="text-red-300"> Cảnh báo: {stats.atRisk} series đang At Risk.</span>
-                )}
-              </p>
-            </div>
-            <div className="flex items-center gap-2 shrink-0">
-              <div className="w-12 h-12 rounded-xl bg-primary/20 border border-primary/30 flex items-center justify-center">
-                <Gavel className="h-6 w-6 text-primary" />
-              </div>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
+      <div className="flex flex-wrap items-end justify-between gap-3">
+        <div>
+          <p className="text-sm text-muted-foreground">Hội đồng biên tập</p>
+          <h1 className="text-2xl font-bold">Xin chào, {boardName}</h1>
+          <p className="text-sm text-muted-foreground mt-1">
+            {loading
+              ? 'Đang tải...'
+              : summaryParts.length > 0
+                ? summaryParts.join(' · ')
+                : 'Chưa có series trong các mục theo dõi.'}
+          </p>
+        </div>
+        <Button variant="primary" size="sm" onClick={() => navigate('/board/submissions')}>
+          <Gavel className="h-4 w-4 mr-1.5" />
+          Duyệt Series
+        </Button>
+      </div>
 
-      <div className="grid gap-4 grid-cols-2 lg:grid-cols-5">
-        {summaryCards.map(card => (
-          <Card key={card.label} className="shadow-sm">
-            <CardContent className="p-4">
-              <div className="flex items-center justify-between mb-3">
-                <p className="text-xs font-medium text-muted-foreground">{card.label}</p>
-                <div className={clsx('p-1.5 rounded-lg', card.bg)}>
-                  <span className={card.color}>{card.icon}</span>
-                </div>
+      <div className="grid gap-3 grid-cols-2 lg:grid-cols-4">
+        {shortcuts.map(card => (
+          <button
+            key={card.label}
+            type="button"
+            onClick={() => navigate(card.href)}
+            className="text-left rounded-2xl border border-border bg-card p-4 shadow-sm hover:shadow-md hover:border-primary/30 transition-all focus:outline-none focus:ring-2 focus:ring-primary/40"
+          >
+            <div className="flex items-center justify-between mb-2">
+              <p className="text-xs font-medium text-muted-foreground">{card.label}</p>
+              <div className={clsx('p-1.5 rounded-lg', card.bg)}>
+                <span className={card.color}>{card.icon}</span>
               </div>
-              <p className="text-2xl font-bold">{card.value}</p>
-            </CardContent>
-          </Card>
+            </div>
+            <p className="text-2xl font-bold">{loading ? '—' : card.value}</p>
+          </button>
         ))}
       </div>
 
-      <DashboardSection
-        title="Series Chờ Phê Duyệt"
-        viewAllLabel="Xem tất cả"
-        onViewAll={() => navigate('/board/submissions')}
-        emptyText="Không có series chờ xét duyệt"
-      >
-        {pendingTop.length > 0 ? (
-          <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3">
-            {pendingTop.map(sub => (
-              <BoardSubmissionCard key={sub.id} item={sub} series={sub.series} compact />
-            ))}
+      {pendingTop.length > 0 && (
+        <SeriesSection title="Cần bỏ phiếu" href="/board/submissions">
+          {pendingTop.map(sub => (
+            <BoardMangaCard
+              key={sub.id}
+              seriesId={sub.id}
+              title={sub.title}
+              coverUrl={sub.series?.coverUrl}
+              mangakaName={sub.authorName ?? sub.series?.mangakaName}
+              genre={sub.series?.genre}
+              badge={
+                <span className="text-xs font-semibold px-2 py-1 rounded-full bg-blue-600/90 text-white">
+                  Chờ duyệt
+                </span>
+              }
+              to={`/board/submissions/${sub.id}`}
+              meta={
+                sub.reviewExpiresAt ? (
+                  <p className="text-xs text-muted-foreground inline-flex items-center gap-1">
+                    <Clock3 size={12} />
+                    Hạn: {new Date(sub.reviewExpiresAt).toLocaleString('vi-VN')}
+                  </p>
+                ) : undefined
+              }
+            />
+          ))}
+        </SeriesSection>
+      )}
+
+      {approvedTop.length > 0 && (
+        <SeriesSection title="Đã nhận" href="/board/approved-series">
+          {approvedTop.map(s => (
+            <BoardMangaCard
+              key={s.id}
+              seriesId={s.id}
+              title={s.title}
+              coverUrl={s.coverUrl}
+              mangakaName={s.mangakaName}
+              genre={s.genre}
+              badge={
+                <span className="text-xs font-semibold px-2 py-1 rounded-full bg-green-600/90 text-white">
+                  Đã nhận
+                </span>
+              }
+              to={`/board/approved-series/${s.id}`}
+            />
+          ))}
+        </SeriesSection>
+      )}
+
+      {publishingTop.length > 0 && (
+        <SeriesSection title="Xuất bản" href="/board/publishing-schedule">
+          {publishingTop.map(s => (
+            <BoardMangaCard
+              key={s.id}
+              seriesId={s.id}
+              title={s.title}
+              coverUrl={s.coverUrl}
+              mangakaName={s.mangakaName}
+              genre={s.genre}
+              badge={
+                <span className="text-xs font-semibold px-2 py-1 rounded-full bg-violet-600/90 text-white">
+                  {s.status === 'Published' ? 'Đã XB' : 'Sản xuất'}
+                </span>
+              }
+              to={`/board/approved-series/${s.id}`}
+            />
+          ))}
+        </SeriesSection>
+      )}
+
+      {atRiskTop.length > 0 && (
+        <SeriesSection title="At Risk" href="/board/series-decisions">
+          {atRiskTop.map(s => (
+            <BoardMangaCard
+              key={s.id}
+              seriesId={s.id}
+              title={s.title}
+              coverUrl={s.coverUrl}
+              mangakaName={s.mangakaName}
+              genre={s.genre}
+              badge={
+                <span className="text-xs font-semibold px-2 py-1 rounded-full bg-red-600/90 text-white">
+                  At Risk
+                </span>
+              }
+              to="/board/series-decisions"
+            />
+          ))}
+        </SeriesSection>
+      )}
+
+      {topRanked.length > 0 && (
+        <section className="space-y-3">
+          <div className="flex items-center justify-between">
+            <h2 className="text-lg font-semibold">Top xếp hạng</h2>
+            <Button variant="ghost" size="sm" onClick={() => navigate('/board/rankings')} className="text-primary">
+              Bảng xếp hạng <ArrowRight className="ml-1 h-3.5 w-3.5" />
+            </Button>
           </div>
-        ) : null}
-      </DashboardSection>
-
-      <DashboardSection
-        title="Series Đã Nhận"
-        viewAllLabel="Xem tất cả"
-        onViewAll={() => navigate('/board/approved-series')}
-        emptyText="Chưa có series nào trong danh sách đã nhận"
-      >
-        {approvedSeries.length > 0 ? (
-          <SeriesPreviewGrid
-            items={approvedSeries.slice(0, PREVIEW_LIMIT)}
-            onItemClick={s => navigate(`/board/publishing-schedule/${s.id}`)}
-          />
-        ) : null}
-      </DashboardSection>
-
-      <DashboardSection
-        title="Series Đang Xuất Bản"
-        viewAllLabel="Xem lịch xuất bản"
-        onViewAll={() => navigate('/board/publishing-schedule')}
-        emptyText="Chưa có series nào đang xuất bản"
-      >
-        {publishingSeries.length > 0 ? (
-          <SeriesPreviewGrid
-            items={publishingSeries.slice(0, PREVIEW_LIMIT)}
-            onItemClick={s => navigate(`/board/publishing-schedule/${s.id}`)}
-          />
-        ) : null}
-      </DashboardSection>
-
-      <DashboardSection
-        title="Series At Risk"
-        viewAllLabel="Xem chi tiết"
-        onViewAll={() => navigate('/board/approved-series')}
-        emptyText="Không có series nào đang At Risk"
-      >
-        {atRiskSeries.length > 0 ? (
-          <SeriesPreviewGrid
-            items={atRiskSeries.slice(0, PREVIEW_LIMIT)}
-            onItemClick={s => navigate(`/board/publishing-schedule/${s.id}`)}
-          />
-        ) : null}
-      </DashboardSection>
-
-      <DashboardSection
-        title="Series Đã Từ Chối"
-        viewAllLabel="Xem tất cả"
-        onViewAll={() => navigate('/board/submissions')}
-        emptyText="Không có series nào bị từ chối"
-      >
-        {cancelledSeries.length > 0 ? (
-          <SeriesPreviewGrid
-            items={cancelledSeries.slice(0, PREVIEW_LIMIT)}
-            onItemClick={s => navigate(`/board/submissions/${s.id}`)}
-          />
-        ) : null}
-      </DashboardSection>
-
-      <DashboardSection
-        title="Top Xếp Hạng"
-        viewAllLabel="Xem bảng xếp hạng"
-        onViewAll={() => navigate('/board/rankings')}
-        emptyText="Chưa có dữ liệu xếp hạng"
-      >
-        {topRanked.length > 0 ? (
-          <div className="grid gap-3 md:grid-cols-2">
-            {topRanked.map((r, idx) => (
-              <Card key={r.seriesId} className="shadow-sm">
-                <CardContent className="p-4">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-3">
-                      <div className="w-8 h-8 rounded-lg bg-amber-50 flex items-center justify-center text-amber-600 font-bold text-sm">
-                        #{r.latestRank ?? idx + 1}
-                      </div>
-                      <div>
-                        <p className="font-medium text-sm">{r.title}</p>
-                        <p className="text-xs text-muted-foreground">{r.totalVotes.toLocaleString()} votes</p>
-                      </div>
+          <Card>
+            <CardContent className="p-0 divide-y divide-border">
+              {topRanked.map((r, idx) => (
+                <div key={r.seriesId} className="flex items-center justify-between px-4 py-3">
+                  <div className="flex items-center gap-3 min-w-0">
+                    <span className="w-7 h-7 rounded-lg bg-amber-50 text-amber-700 text-xs font-bold flex items-center justify-center shrink-0">
+                      #{r.latestRank ?? idx + 1}
+                    </span>
+                    <div className="min-w-0">
+                      <p className="font-medium text-sm truncate">{r.title}</p>
+                      <p className="text-xs text-muted-foreground">{r.totalVotes.toLocaleString()} votes</p>
                     </div>
-                    <Trophy className="h-4 w-4 text-amber-400" />
                   </div>
-                </CardContent>
-              </Card>
-            ))}
-          </div>
-        ) : null}
-      </DashboardSection>
+                  <Trophy className="h-4 w-4 text-amber-400 shrink-0" />
+                </div>
+              ))}
+            </CardContent>
+          </Card>
+        </section>
+      )}
+
+      {!loading && !hasAnySeriesContent && (
+        <p className="text-sm text-muted-foreground text-center py-8">
+          Chưa có series nào để hiển thị. Dùng các ô thống kê phía trên để mở từng mục.
+        </p>
+      )}
     </div>
   );
 }

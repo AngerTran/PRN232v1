@@ -493,6 +493,12 @@ public partial class AppDbContext : DbContext
             entity.Property(e => e.IsActive)
                 .HasDefaultValue(true)
                 .HasColumnName("is_active");
+            entity.Property(e => e.IsBoardLead)
+                .HasDefaultValue(false)
+                .HasColumnName("is_board_lead");
+            entity.HasIndex(e => e.IsBoardLead, "idx_profiles_one_board_lead")
+                .IsUnique()
+                .HasFilter("is_board_lead = true");
             entity.Property(e => e.UpdatedAt)
                 .HasDefaultValueSql("now()")
                 .HasColumnName("updated_at");

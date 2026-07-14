@@ -1,11 +1,12 @@
 import { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router';
-import { ChevronLeft, Plus } from 'lucide-react';
+import { BookOpen, ChevronLeft, Plus } from 'lucide-react';
 import Button from '../../components/ui/Button';
 import ChapterCard from '../../components/ui/ChapterCard';
 import EmptyState from '../../components/ui/EmptyState';
 import { usePageMeta } from '../../hooks/usePageMeta';
 import { useConfirm } from '../../components/ui/ConfirmDialog';
+import { useSeriesContentPaths } from '../../hooks/useSeriesContentPaths';
 import type { Chapter, Series } from '../../types/domain';
 import { getSeries, getSeriesChapters, deleteChapter, canMangakaProduceOnSeries, canMangakaDeleteChapter, SERIES_PRODUCTION_LOCK_HINT } from '../../services/seriesApi';
 import { FileText } from 'lucide-react';
@@ -15,6 +16,8 @@ export default function ChapterListPage() {
   const navigate = useNavigate();
   const { setPageMeta } = usePageMeta();
   const confirm = useConfirm();
+  const paths = useSeriesContentPaths(seriesId);
+  const readOnly = paths.isBoard;
 
   const [series, setSeries] = useState<Series | null>(null);
   const [chapters, setChapters] = useState<Chapter[]>([]);
@@ -38,7 +41,11 @@ export default function ChapterListPage() {
 
         if (!active) return;
         setSeries(seriesItem);
-        setChapters(chapterItems.sort((a, b) => a.number - b.number));
+        // Board bỏ chapter 0 (bản thảo đề xuất).
+        const filtered = readOnly
+          ? chapterItems.filter(c => c.number > 0)
+          : chapterItems;
+        setChapters(filtered.sort((a, b) => a.number - b.number));
       } catch (err) {
         if (active) {
           setSeries(null);
@@ -55,20 +62,21 @@ export default function ChapterListPage() {
     return () => {
       active = false;
     };
-  }, [seriesId]);
+  }, [seriesId, readOnly]);
 
   useEffect(() => {
     setPageMeta({
       title: 'Chương',
       breadcrumb: [
-        { label: 'Series của tôi', href: '/mangaka/series' },
-        { label: series?.title ?? 'Series', href: `/mangaka/series/${seriesId}` },
+        paths.breadcrumbRoot,
+        { label: series?.title ?? 'Series', href: paths.seriesBase },
         { label: 'Chương' },
       ],
     });
-  }, [series?.id, seriesId]);
+  }, [series?.id, seriesId, paths.breadcrumbRoot.href, paths.seriesBase]);
 
   const handleDeleteChapter = async (chapterId: string) => {
+    if (readOnly) return;
     const target = chapters.find(c => c.id === chapterId);
     if (!target || !canMangakaDeleteChapter(target.status)) {
       setError('Chỉ có thể xóa chương ở trạng thái bản nháp.');
@@ -98,8 +106,8 @@ export default function ChapterListPage() {
     }
   };
 
-  const canProduce = series ? canMangakaProduceOnSeries(series.status) : false;
-  const productionLockHint = series ? SERIES_PRODUCTION_LOCK_HINT[series.status] : undefined;
+  const canProduce = !readOnly && series ? canMangakaProduceOnSeries(series.status) : false;
+  const productionLockHint = !readOnly && series ? SERIES_PRODUCTION_LOCK_HINT[series.status] : undefined;
 
   if (loading) {
     return <div className="p-6 text-sm text-muted-foreground">Đang tải chương...</div>;
@@ -109,7 +117,7 @@ export default function ChapterListPage() {
     <div className="p-6 space-y-5">
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div className="flex items-center gap-3">
-          <button onClick={() => navigate(`/mangaka/series/${seriesId}`)}
+          <button onClick={() => navigate(paths.seriesBase)}
             className="p-1.5 rounded-lg hover:bg-muted transition-colors text-muted-foreground hover:text-foreground">
             <ChevronLeft size={20} />
           </button>
@@ -118,13 +126,22 @@ export default function ChapterListPage() {
             <p className="text-sm text-muted-foreground">{chapters.length} chương</p>
           </div>
         </div>
-        <Button
-          variant="primary"
-          disabled={!canProduce}
-          onClick={() => navigate(`/mangaka/series/${seriesId}/chapters/create`)}
-        >
-          <Plus size={16} /> Chương mới
-        </Button>
+        <div className="flex items-center gap-2">
+          {readOnly && paths.reader && chapters.length > 0 && (
+            <Button variant="outline" onClick={() => navigate(paths.reader!)}>
+              <BookOpen size={16} /> Đọc liên tục
+            </Button>
+          )}
+          {!readOnly && (
+            <Button
+              variant="primary"
+              disabled={!canProduce}
+              onClick={() => navigate(`/mangaka/series/${seriesId}/chapters/create`)}
+            >
+              <Plus size={16} /> Chương mới
+            </Button>
+          )}
+        </div>
       </div>
 
       {!canProduce && productionLockHint && (
@@ -143,7 +160,7 @@ export default function ChapterListPage() {
         <EmptyState
           icon={<FileText size={24} />}
           title="Chưa có chương nào"
-          description="Tạo chương đầu tiên cho series này."
+          description={readOnly ? 'Mangaka chưa tạo chương cho series này.' : 'Tạo chương đầu tiên cho series này.'}
           action={
             canProduce ? (
               <Button variant="primary" onClick={() => navigate(`/mangaka/series/${seriesId}/chapters/create`)}>
@@ -159,7 +176,8 @@ export default function ChapterListPage() {
               key={ch.id}
               chapter={ch}
               seriesId={seriesId ?? ''}
-              onDelete={canMangakaDeleteChapter(ch.status) ? handleDeleteChapter : undefined}
+              chapterDetailPath={paths.chapterDetail}
+              onDelete={!readOnly && canMangakaDeleteChapter(ch.status) ? handleDeleteChapter : undefined}
             />
           ))}
         </div>

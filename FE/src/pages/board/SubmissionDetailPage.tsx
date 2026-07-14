@@ -156,7 +156,6 @@ export default function SubmissionDetailPage() {
   const currentUserIsLead = voteProgress?.currentUserIsLead ?? false;
   const canVote = voteProgress?.canVote ?? isPendingReview;
   const reviewExpiresAt = voteProgress?.leadClaimExpiresAt ?? series?.reviewExpiresAt;
-  const hasHiddenVotes = votes.some(v => v.decision === 'hidden');
   const myDecision = submitted ? decision : null;
 
   const genres = series?.genres?.length ? series.genres : (series?.genre ? series.genre.split(',').map(g => g.trim()) : []);
@@ -203,36 +202,36 @@ export default function SubmissionDetailPage() {
         <CardTitle>Xét duyệt series</CardTitle>
       </CardHeader>
       <div className="space-y-4">
-        <div className="rounded-xl bg-muted/50 px-4 py-3 text-xs space-y-1">
-          <div className="flex justify-between">
+        <div className="rounded-xl bg-muted/50 px-4 py-3 text-xs space-y-2">
+          <div className="flex justify-between items-center">
             <span className="text-muted-foreground">Tiến độ hội đồng</span>
             <span className="font-semibold">{votedBoardMembers}/{requiredVotes}</span>
           </div>
-          <div className="flex gap-4 font-semibold">
-            <span className="text-green-700">✓ {approveVotes}</span>
-            <span className="text-red-600">✗ {rejectVotes}</span>
-          </div>
+          {!isPendingReview && (
+            <div className="flex gap-4 font-semibold">
+              <span className="text-green-700">✓ {approveVotes}</span>
+              <span className="text-red-600">✗ {rejectVotes}</span>
+            </div>
+          )}
           {isPendingReview && reviewExpiresAt && (
-            <div className="flex justify-between pt-1 border-t border-border/60 mt-1">
-              <span className="text-muted-foreground">Hạn xét duyệt</span>
-              <span className="font-semibold">
+            <div className="flex justify-between items-center gap-3">
+              <span className="text-muted-foreground shrink-0">Hạn xét duyệt</span>
+              <span className="font-semibold text-right">
                 Còn {formatReviewCountdown(reviewExpiresAt)} · {new Date(reviewExpiresAt).toLocaleString('vi-VN')}
               </span>
             </div>
           )}
-          {isPendingReview && (
-            <p className="text-muted-foreground pt-1">
-              {quorumMet
-                ? `Đủ ${requiredVotes} phiếu — đang cập nhật trạng thái theo đa số.`
-                : `Cố định ${requiredVotes} board bỏ phiếu trong 48 giờ. Phiếu đang ẩn để đảm bảo công bằng — người vote cuối mới xem đủ.`}
-            </p>
+          {isPendingReview && quorumMet && (
+            <p className="text-muted-foreground">Đủ phiếu — đang cập nhật trạng thái.</p>
           )}
           {hasLead && (
-            <p className="pt-1">
-              Lead:{' '}
-              <span className="font-semibold text-foreground">{leadBoardMemberName}</span>
-              {currentUserIsLead && <span className="text-primary"> (bạn)</span>}
-            </p>
+            <div className="flex justify-between items-center pt-1 border-t border-border/60">
+              <span className="text-muted-foreground">Lead</span>
+              <span className="font-semibold">
+                {leadBoardMemberName}
+                {currentUserIsLead && <span className="text-primary"> (bạn)</span>}
+              </span>
+            </div>
           )}
         </div>
 
@@ -352,24 +351,14 @@ export default function SubmissionDetailPage() {
                     <p className="text-xs text-muted-foreground mt-0.5">Tài liệu do mangaka tải lên khi gửi đề xuất</p>
                   </div>
                 </div>
-                <div className="flex flex-col gap-2">
-                  <a
-                    href={manuscriptUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="inline-flex items-center justify-center gap-2 rounded-xl border border-primary/30 bg-primary/5 px-4 py-2.5 text-sm font-semibold text-primary hover:bg-primary/10 transition-colors"
-                  >
-                    Mở xem bản thảo
-                  </a>
-                  <a
-                    href={manuscriptUrl}
-                    download={manuscriptFileName(manuscriptUrl)}
-                    className="inline-flex items-center justify-center gap-2 rounded-xl border border-border px-4 py-2.5 text-sm font-medium hover:bg-muted transition-colors"
-                  >
-                    <Download size={16} />
-                    Tải về máy
-                  </a>
-                </div>
+                <a
+                  href={manuscriptUrl}
+                  download={manuscriptFileName(manuscriptUrl)}
+                  className="inline-flex items-center justify-center gap-2 rounded-xl border border-primary/30 bg-primary/5 px-4 py-2.5 text-sm font-semibold text-primary hover:bg-primary/10 transition-colors w-full"
+                >
+                  <Download size={16} />
+                  Tải bản thảo
+                </a>
               </div>
             ) : (
               <div className="rounded-xl border border-dashed border-border bg-muted/20 p-6 text-center text-sm text-muted-foreground">
@@ -483,11 +472,6 @@ export default function SubmissionDetailPage() {
             <CardHeader>
               <CardTitle>Ý kiến hội đồng</CardTitle>
             </CardHeader>
-            {hasHiddenVotes && (
-              <p className="text-xs text-muted-foreground mb-3">
-                Phiếu đang ẩn để đảm bảo công bằng — người vote cuối mới xem đủ kết quả.
-              </p>
-            )}
             {votes.length === 0 ? (
               <p className="text-sm text-muted-foreground">Chưa có thành viên nào bỏ phiếu.</p>
             ) : (

@@ -82,14 +82,30 @@ public class BoardController : ControllerBase
         return Ok(await _boardService.ListInReviewSeriesAsync(userId, cancellationToken));
     }
 
-    [HttpPut("series/{seriesId:guid}/lead")]
+    [HttpGet("global-lead")]
     [SwaggerOperation(
-        Summary = "Assign series lead (admin)",
-        Description = "Admin assigns one of the three fixed board reviewers as Lead for the series.")]
-    [ProducesResponseType(typeof(BoardReviewClaimResponse), StatusCodes.Status200OK)]
-    public async Task<ActionResult<BoardReviewClaimResponse>> AssignLead(
-        Guid seriesId,
-        [FromBody] AssignSeriesLeadRequest request,
+        Summary = "Get global board lead",
+        Description = "Returns the single company-wide Board Lead, or null if unset.")]
+    [ProducesResponseType(typeof(GlobalBoardLeadResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    public async Task<ActionResult<GlobalBoardLeadResponse>> GetGlobalLead(CancellationToken cancellationToken)
+    {
+        if (!this.TryGetUserId(out var userId))
+        {
+            return Unauthorized();
+        }
+
+        var lead = await _boardService.GetGlobalBoardLeadAsync(userId, cancellationToken);
+        return lead is null ? NoContent() : Ok(lead);
+    }
+
+    [HttpPut("global-lead")]
+    [SwaggerOperation(
+        Summary = "Assign global board lead (admin)",
+        Description = "Sets exactly one board member as company-wide Lead and syncs IsLead on series claims.")]
+    [ProducesResponseType(typeof(GlobalBoardLeadResponse), StatusCodes.Status200OK)]
+    public async Task<ActionResult<GlobalBoardLeadResponse>> AssignGlobalLead(
+        [FromBody] AssignGlobalBoardLeadRequest request,
         CancellationToken cancellationToken)
     {
         if (!this.TryGetUserId(out var userId))
@@ -97,7 +113,23 @@ public class BoardController : ControllerBase
             return Unauthorized();
         }
 
-        return Ok(await _boardService.AssignLeadByAdminAsync(userId, seriesId, request.BoardMemberId, cancellationToken));
+        return Ok(await _boardService.AssignGlobalBoardLeadAsync(userId, request.BoardMemberId, cancellationToken));
+    }
+
+    [HttpDelete("global-lead")]
+    [SwaggerOperation(
+        Summary = "Clear global board lead (admin)",
+        Description = "Removes the company-wide Board Lead and clears IsLead on all series claims.")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    public async Task<IActionResult> ClearGlobalLead(CancellationToken cancellationToken)
+    {
+        if (!this.TryGetUserId(out var userId))
+        {
+            return Unauthorized();
+        }
+
+        await _boardService.ClearGlobalBoardLeadAsync(userId, cancellationToken);
+        return NoContent();
     }
 
     [HttpGet("series/{seriesId:guid}/reviewers")]

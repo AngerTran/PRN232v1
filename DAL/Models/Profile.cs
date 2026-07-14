@@ -22,6 +22,9 @@ public partial class Profile
 
     public bool? IsActive { get; set; }
 
+    /// <summary>Lead hội đồng toàn cục — tối đa một profile true.</summary>
+    public bool IsBoardLead { get; set; }
+
     public DateTime? CreatedAt { get; set; }
 
     public DateTime? UpdatedAt { get; set; }

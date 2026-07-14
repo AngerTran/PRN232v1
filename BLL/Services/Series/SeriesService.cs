@@ -289,17 +289,15 @@ public class SeriesService
       throw new SeriesForbiddenException("Series đã có editor phụ trách.");
     }
 
-    if (!await ProfileRepository.AnyAsync(
-        p => p.Id == request.EditorId && p.Role == ProfileRole.Editor && p.IsActive != false,
-        cancellationToken))
+    var editor = await ProfileRepository.GetByIdAsync(request.EditorId, cancellationToken: cancellationToken)
+      ?? throw new ArgumentException("Editor profile not found.");
+    if (editor.Role != ProfileRole.Editor || editor.IsActive == false)
     {
       throw new ArgumentException("EditorId must reference an active profile with role 'editor'.");
     }
 
+    // Không Include Series/Author/Editor — INNER JOIN có thể che bản ghi; đủ SeriesId+EditorId.
     var invitation = await _unitOfWork.Context.SeriesEditorInvitations
-      .Include(i => i.Series)
-      .ThenInclude(s => s.Author)
-      .Include(i => i.Editor)
       .FirstOrDefaultAsync(
         i => i.SeriesId == seriesId && i.EditorId == request.EditorId,
         cancellationToken);
@@ -315,9 +313,6 @@ public class SeriesService
         CreatedAt = DateTime.UtcNow
       };
       await _unitOfWork.Context.SeriesEditorInvitations.AddAsync(invitation, cancellationToken);
-      invitation.Series = series;
-      invitation.Editor = await ProfileRepository.GetByIdAsync(request.EditorId, cancellationToken: cancellationToken)
-        ?? throw new ArgumentException("Editor profile not found.");
       shouldNotify = true;
     }
     else if (invitation.Status == "rejected")
@@ -349,7 +344,16 @@ public class SeriesService
         cancellationToken: cancellationToken);
     }
 
-    return MapEditorInvitation(invitation);
+    return new SeriesEditorInvitationResponse(
+      invitation.SeriesId,
+      series.Title,
+      series.AuthorId,
+      caller.FullName,
+      invitation.EditorId,
+      editor.FullName,
+      invitation.Status,
+      invitation.CreatedAt,
+      invitation.RespondedAt);
   }
 
   public async Task<IReadOnlyList<SeriesEditorInvitationResponse>> ListSentEditorInvitationsAsync(
@@ -827,12 +831,12 @@ public class SeriesService
     SeriesEntity series,
     CancellationToken cancellationToken)
   {
-    var boards = await _unitOfWork.Context.Profiles
+    var allBoards = await _unitOfWork.Context.Profiles
       .AsNoTracking()
       .Where(p => p.Role == ProfileRole.Board && (p.IsActive == null || p.IsActive == true))
       .OrderBy(p => p.FullName)
-      .Take(SeriesReviewRules.MaxActiveReviewSlots)
       .ToListAsync(cancellationToken);
+    var boards = Board.BoardService.SelectFixedBoardMembers(allBoards, SeriesReviewRules.MaxActiveReviewSlots);
 
     var claimedAt = DateTime.UtcNow;
     foreach (var board in boards)
@@ -843,7 +847,7 @@ public class SeriesService
         BoardMemberId = board.Id,
         Source = "fixed_board",
         ClaimedAt = claimedAt,
-        IsLead = false
+        IsLead = board.IsBoardLead
       });
     }
 
@@ -1660,11 +1664,11 @@ public class SeriesService
   private static SeriesEditorInvitationResponse MapEditorInvitation(SeriesEditorInvitation invitation) =>
     new(
       invitation.SeriesId,
-      invitation.Series.Title,
-      invitation.Series.AuthorId,
-      invitation.Series.Author.FullName,
+      invitation.Series?.Title ?? string.Empty,
+      invitation.Series?.AuthorId ?? Guid.Empty,
+      invitation.Series?.Author?.FullName ?? string.Empty,
       invitation.EditorId,
-      invitation.Editor.FullName,
+      invitation.Editor?.FullName ?? string.Empty,
       invitation.Status,
       invitation.CreatedAt,
       invitation.RespondedAt);

@@ -1,7 +1,14 @@
 import { useState, useEffect } from 'react';
-import { CheckCircle } from 'lucide-react';
+import { CheckCircle, Crown } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '../../app/components/ui/card';
 import { usePageMeta } from '../../hooks/usePageMeta';
+import { getBoardMembers, type ProfileSummary } from '../../services/profilesApi';
+import {
+  assignGlobalBoardLead,
+  clearGlobalBoardLead,
+  getGlobalBoardLead,
+  type GlobalBoardLead,
+} from '../../services/boardApi';
 
 interface ToggleRowProps {
   label: string;
@@ -35,7 +42,7 @@ function ToggleRow({ label, description, value, onChange }: ToggleRowProps) {
 
 export default function AdminSettingsPage() {
   const { setPageMeta } = usePageMeta();
-  useEffect(() => { setPageMeta({ title: 'Cài đặt Admin' }); }, []);
+  useEffect(() => { setPageMeta({ title: 'Cài đặt Admin' }); }, [setPageMeta]);
 
   // Account policy
   const [allowSelfRegister, setAllowSelfRegister] = useState(false);
@@ -57,6 +64,68 @@ export default function AdminSettingsPage() {
   const [saved, setSaved] = useState(false);
   const [saving, setSaving] = useState(false);
 
+  const [boards, setBoards] = useState<ProfileSummary[]>([]);
+  const [globalLead, setGlobalLead] = useState<GlobalBoardLead | null>(null);
+  const [leadDraft, setLeadDraft] = useState('');
+  const [leadLoading, setLeadLoading] = useState(true);
+  const [leadSaving, setLeadSaving] = useState(false);
+  const [leadError, setLeadError] = useState('');
+  const [leadOk, setLeadOk] = useState('');
+
+  useEffect(() => {
+    let active = true;
+    setLeadLoading(true);
+    Promise.all([getBoardMembers().catch(() => []), getGlobalBoardLead().catch(() => null)])
+      .then(([boardList, lead]) => {
+        if (!active) return;
+        setBoards(boardList);
+        setGlobalLead(lead);
+        setLeadDraft(lead?.boardMemberId ?? '');
+      })
+      .finally(() => {
+        if (active) setLeadLoading(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  const handleSaveLead = async () => {
+    if (!leadDraft) {
+      setLeadError('Chọn một board để gán Lead.');
+      return;
+    }
+    setLeadSaving(true);
+    setLeadError('');
+    setLeadOk('');
+    try {
+      const lead = await assignGlobalBoardLead(leadDraft);
+      setGlobalLead(lead);
+      setLeadDraft(lead.boardMemberId);
+      setLeadOk(`Đã gán ${lead.boardMemberName} làm Board Lead toàn cục.`);
+    } catch (err) {
+      setLeadError(err instanceof Error ? err.message : 'Không thể gán Board Lead.');
+    } finally {
+      setLeadSaving(false);
+    }
+  };
+
+  const handleClearLead = async () => {
+    setLeadSaving(true);
+    setLeadError('');
+    setLeadOk('');
+    try {
+      await clearGlobalBoardLead();
+      setGlobalLead(null);
+      setLeadDraft('');
+      setLeadOk('Đã hủy Board Lead. Không ai lên lịch cho đến khi gán lại.');
+    } catch (err) {
+      setLeadError(err instanceof Error ? err.message : 'Không thể hủy Board Lead.');
+    } finally {
+      setLeadSaving(false);
+    }
+  };
+
   function handleSave() {
     setSaving(true);
     setTimeout(() => {
@@ -72,6 +141,72 @@ export default function AdminSettingsPage() {
         <h1 className="text-xl font-bold text-gray-900">Cài đặt Admin</h1>
         <p className="text-sm text-gray-500 mt-0.5">Cấu hình chính sách và cài đặt hệ thống MangaFlow</p>
       </div>
+
+      <Card className="border-amber-200">
+        <CardHeader>
+          <CardTitle className="text-sm flex items-center gap-2">
+            <Crown size={16} className="text-amber-600" />
+            Lead hội đồng (toàn cục — chỉ 1 người)
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <p className="text-xs text-gray-500">
+            Người này luôn là Lead trên mọi series (ưu tiên trong 3 board xét duyệt, lên lịch xuất bản).
+            Đổi Lead = thay thế người hiện tại; không thể có 2 Lead cùng lúc.
+          </p>
+          {leadLoading ? (
+            <p className="text-sm text-muted-foreground">Đang tải…</p>
+          ) : (
+            <>
+              {globalLead ? (
+                <p className="text-sm">
+                  Hiện tại: <strong className="text-amber-800">{globalLead.boardMemberName}</strong>
+                </p>
+              ) : (
+                <p className="text-sm text-amber-800">Chưa gán Board Lead.</p>
+              )}
+              <div className="flex flex-wrap gap-2 items-center">
+                <select
+                  className="flex-1 min-w-[200px] px-3 py-2 text-sm border border-gray-200 rounded-lg bg-white"
+                  value={leadDraft}
+                  onChange={e => setLeadDraft(e.target.value)}
+                  disabled={leadSaving || boards.length === 0}
+                >
+                  <option value="">Chọn board…</option>
+                  {boards.map(b => (
+                    <option key={b.id} value={b.id}>
+                      {b.name} ({b.email})
+                    </option>
+                  ))}
+                </select>
+                <button
+                  type="button"
+                  disabled={leadSaving || !leadDraft}
+                  onClick={() => void handleSaveLead()}
+                  className="px-3 py-2 text-sm font-medium text-white bg-red-600 hover:bg-red-700 rounded-lg disabled:opacity-50"
+                >
+                  {leadSaving ? 'Đang lưu…' : globalLead ? 'Đổi Lead' : 'Gán Lead'}
+                </button>
+                {globalLead && (
+                  <button
+                    type="button"
+                    disabled={leadSaving}
+                    onClick={() => void handleClearLead()}
+                    className="px-3 py-2 text-sm font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-lg disabled:opacity-50"
+                  >
+                    Hủy Lead
+                  </button>
+                )}
+              </div>
+              {boards.length === 0 && (
+                <p className="text-xs text-red-600">Không có board active để chọn.</p>
+              )}
+            </>
+          )}
+          {leadError && <p className="text-sm text-red-600">{leadError}</p>}
+          {leadOk && <p className="text-sm text-green-700">{leadOk}</p>}
+        </CardContent>
+      </Card>
 
       <div className="grid grid-cols-1 xl:grid-cols-2 gap-5">
         {/* Account policy */}

@@ -8,6 +8,7 @@ import MangaPageCard from '../../components/ui/MangaPageCard';
 import EmptyState from '../../components/ui/EmptyState';
 import { usePageMeta } from '../../hooks/usePageMeta';
 import { useConfirm } from '../../components/ui/ConfirmDialog';
+import { useSeriesContentPaths } from '../../hooks/useSeriesContentPaths';
 import type { Chapter, Series } from '../../types/domain';
 import { getChapter, getSeries, canMangakaProduceOnSeries, SERIES_PRODUCTION_LOCK_HINT } from '../../services/seriesApi';
 import { getChapterPages, uploadChapterPage, deleteChapterPage, type WorkspacePageItem } from '../../services/workspaceApi';
@@ -25,6 +26,9 @@ export default function ChapterDetailPage() {
   const [series, setSeries] = useState<Series | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  const paths = useSeriesContentPaths(chapter?.seriesId);
+  const readOnly = paths.isBoard;
 
   useEffect(() => {
     let isActive = true;
@@ -73,19 +77,22 @@ export default function ChapterDetailPage() {
       setPageMeta({
         title: chapter.title,
         breadcrumb: [
-          { label: 'Series của tôi', href: '/mangaka/series' },
-          { label: series?.title ?? 'Series', href: `/mangaka/series/${chapter.seriesId}` },
+          paths.breadcrumbRoot,
+          { label: series?.title ?? 'Series', href: paths.seriesBase },
+          { label: 'Chương', href: paths.chaptersList },
           { label: `Ch.${chapter.number}` },
         ],
       });
     }
-  }, [chapter?.id]);
+  }, [chapter?.id, series?.title, paths.breadcrumbRoot.href, paths.seriesBase, paths.chaptersList]);
 
   const handleAddPageClick = () => {
+    if (readOnly) return;
     fileInputRef.current?.click();
   };
 
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (readOnly) return;
     const file = e.target.files?.[0];
     if (!file || !chapterId) return;
 
@@ -108,6 +115,7 @@ export default function ChapterDetailPage() {
   };
 
   const handleDeletePage = async (pageId: string) => {
+    if (readOnly) return;
     const target = pages.find(p => p.id === pageId);
     const confirmed = await confirm({
       title: 'Xóa trang',
@@ -143,7 +151,6 @@ export default function ChapterDetailPage() {
     return <div className="p-6"><EmptyState title="Không tìm thấy chương" /></div>;
   }
 
-  // Tiến độ tính theo task đã duyệt (approved). Một trang coi là hoàn thành khi có task và tất cả đã duyệt.
   const totalTasks = pages.reduce((sum, p) => sum + (p.tasksCount ?? 0), 0);
   const completedTasks = pages.reduce((sum, p) => sum + (p.completedTasksCount ?? 0), 0);
   const completedPages = pages.filter(p => (p.tasksCount ?? 0) > 0 && (p.completedTasksCount ?? 0) === p.tasksCount).length;
@@ -158,7 +165,6 @@ export default function ChapterDetailPage() {
       ? 'In Progress'
       : chapter.status;
 
-  // Suy ra trạng thái hiển thị của trang theo task: đủ task đã duyệt → Hoàn thành.
   const displayPages = pages.map(p => {
     const total = p.tasksCount ?? 0;
     const done = p.completedTasksCount ?? 0;
@@ -167,8 +173,8 @@ export default function ChapterDetailPage() {
     return p;
   });
 
-  const canProduce = series ? canMangakaProduceOnSeries(series.status) : false;
-  const productionLockHint = series ? SERIES_PRODUCTION_LOCK_HINT[series.status] : undefined;
+  const canProduce = !readOnly && series ? canMangakaProduceOnSeries(series.status) : false;
+  const productionLockHint = !readOnly && series ? SERIES_PRODUCTION_LOCK_HINT[series.status] : undefined;
   const canOpenWorkspace = canProduce && pages.length > 0;
 
   const openWorkspace = () => {
@@ -179,9 +185,8 @@ export default function ChapterDetailPage() {
 
   return (
     <div className="p-6 space-y-5">
-      {/* Header */}
       <div className="flex items-start gap-3">
-        <button onClick={() => navigate(`/mangaka/series/${chapter.seriesId}/chapters`)}
+        <button onClick={() => navigate(paths.chaptersList)}
           className="p-1.5 rounded-lg hover:bg-muted transition-colors text-muted-foreground hover:text-foreground mt-0.5">
           <ChevronLeft size={20} />
         </button>
@@ -212,21 +217,23 @@ export default function ChapterDetailPage() {
             <ProgressBar value={progress} showLabel size="md" />
           </div>
         </div>
-        <Button
-          variant="primary"
-          size="sm"
-          disabled={!canOpenWorkspace}
-          title={
-            !canProduce
-              ? (productionLockHint ?? 'Series không còn trong giai đoạn sản xuất.')
-              : pages.length === 0
-                ? 'Thêm ít nhất một trang manga trước khi mở workspace.'
-                : 'Mở studio sản xuất — giao task cho trợ lý trên trang truyện.'
-          }
-          onClick={openWorkspace}
-        >
-          Mở Workspace
-        </Button>
+        {!readOnly && (
+          <Button
+            variant="primary"
+            size="sm"
+            disabled={!canOpenWorkspace}
+            title={
+              !canProduce
+                ? (productionLockHint ?? 'Series không còn trong giai đoạn sản xuất.')
+                : pages.length === 0
+                  ? 'Thêm ít nhất một trang manga trước khi mở workspace.'
+                  : 'Mở studio sản xuất — giao task cho trợ lý trên trang truyện.'
+            }
+            onClick={openWorkspace}
+          >
+            Mở Workspace
+          </Button>
+        )}
       </div>
 
       {!canProduce && productionLockHint && (
@@ -242,32 +249,40 @@ export default function ChapterDetailPage() {
         </div>
       )}
 
-      {/* Page grid */}
       <div>
         <div className="flex items-center justify-between mb-4">
           <h2 className="font-semibold">Trang Manga</h2>
-          <Button variant="outline" size="sm" onClick={handleAddPageClick} disabled={!canProduce}>
-            <Plus size={14} /> Thêm trang
-          </Button>
-          <input
-            type="file"
-            ref={fileInputRef}
-            onChange={handleFileChange}
-            accept="image/*"
-            className="hidden"
-          />
+          {!readOnly && (
+            <>
+              <Button variant="outline" size="sm" onClick={handleAddPageClick} disabled={!canProduce}>
+                <Plus size={14} /> Thêm trang
+              </Button>
+              <input
+                type="file"
+                ref={fileInputRef}
+                onChange={handleFileChange}
+                accept="image/*"
+                className="hidden"
+              />
+            </>
+          )}
         </div>
 
         {pages.length === 0 ? (
           <EmptyState
             icon={<Layers size={24} />}
             title="Chưa có trang nào"
-            description="Tải lên trang nháp để bắt đầu làm việc."
+            description={readOnly ? 'Mangaka chưa tải trang lên chương này.' : 'Tải lên trang nháp để bắt đầu làm việc.'}
           />
         ) : (
           <div className="grid grid-cols-[repeat(auto-fill,minmax(180px,1fr))] gap-3">
             {displayPages.map(page => (
-              <MangaPageCard key={page.id} page={page} onDelete={handleDeletePage} />
+              <MangaPageCard
+                key={page.id}
+                page={page}
+                onDelete={readOnly ? undefined : handleDeletePage}
+                readOnly={readOnly}
+              />
             ))}
           </div>
         )}

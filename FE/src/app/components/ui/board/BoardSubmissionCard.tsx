@@ -1,5 +1,5 @@
 import { useNavigate } from 'react-router';
-import { BookOpen, User, CheckCircle2, XCircle, Clock3 } from 'lucide-react';
+import { BookOpen, User, Clock3 } from 'lucide-react';
 import { SubmissionStatusBadge } from './BoardStatusBadge';
 import type { Series } from '../../../../types/domain';
 import type { PendingSeriesItem } from '../../../../services/boardApi';
@@ -57,23 +57,20 @@ export function BoardSubmissionCard({ item, series, compact = false }: BoardSubm
             <p className="text-[10px] text-muted-foreground truncate mt-0.5">{genre}</p>
             <div className="mt-2 space-y-1">
               <div className="flex items-center justify-between text-[10px]">
-                <span className="text-muted-foreground">Vote</span>
+                <span className="text-muted-foreground">Đã bỏ phiếu</span>
                 <span className="font-semibold text-foreground">
                   {item.votedBoardMembers}/{requiredVotes}
-                </span>
-                <span className="inline-flex items-center gap-0.5 text-green-700">
-                  <CheckCircle2 size={10} /> {item.approveVotes}
-                </span>
-                <span className="inline-flex items-center gap-0.5 text-red-600">
-                  <XCircle size={10} /> {item.rejectVotes}
                 </span>
               </div>
               <div className="h-1 bg-muted rounded-full overflow-hidden">
                 <div className="h-full bg-primary rounded-full" style={{ width: `${voteProgress}%` }} />
               </div>
             </div>
-            {!item.currentUserHasVoted && (
-              <p className="text-[10px] font-medium text-primary mt-1">Cần bỏ phiếu</p>
+            {item.reviewExpiresAt && (
+              <p className="text-[10px] text-muted-foreground mt-1 inline-flex items-center gap-1">
+                <Clock3 size={10} />
+                Hạn {new Date(item.reviewExpiresAt).toLocaleString('vi-VN')}
+              </p>
             )}
           </div>
         </div>
@@ -135,7 +132,7 @@ export function BoardSubmissionCard({ item, series, compact = false }: BoardSubm
 
         <div className="pt-3 border-t border-border space-y-2">
           <div className="flex items-center justify-between text-xs">
-            <span className="text-muted-foreground font-medium">Tiến độ vote hội đồng</span>
+            <span className="text-muted-foreground font-medium">Đã bỏ phiếu (ẩn quyết định)</span>
             <span className="font-semibold text-foreground">
               {item.votedBoardMembers}/{requiredVotes}
             </span>
@@ -146,14 +143,9 @@ export function BoardSubmissionCard({ item, series, compact = false }: BoardSubm
               style={{ width: `${voteProgress}%` }}
             />
           </div>
-          <div className="flex items-center gap-3 text-xs font-semibold">
-            <span className="inline-flex items-center gap-1 text-green-700">
-              <CheckCircle2 size={13} /> {item.approveVotes}
-            </span>
-            <span className="inline-flex items-center gap-1 text-red-600">
-              <XCircle size={13} /> {item.rejectVotes}
-            </span>
-          </div>
+          <p className="text-[11px] text-muted-foreground">
+            Phiếu đang ẩn để đảm bảo công bằng — không hiện ✓ / ✗ trên danh sách.
+          </p>
           {item.reviewExpiresAt && (
             <p className="text-xs text-muted-foreground inline-flex items-center gap-1">
               <Clock3 size={12} />
@@ -166,10 +158,9 @@ export function BoardSubmissionCard({ item, series, compact = false }: BoardSubm
               {item.currentUserIsLead && <span className="text-primary"> · bạn</span>}
             </p>
           )}
-          {!item.currentUserHasVoted && (
+          {!item.currentUserHasVoted ? (
             <p className="text-xs font-medium text-amber-700">Cần bỏ phiếu trong 48 giờ</p>
-          )}
-          {item.currentUserHasVoted && (
+          ) : (
             <p className="text-xs text-muted-foreground">Bạn đã bỏ phiếu</p>
           )}
         </div>

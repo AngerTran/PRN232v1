@@ -278,24 +278,63 @@ export async function listSeriesReviewers(seriesId: string): Promise<BoardReview
   }));
 }
 
-export async function assignSeriesLead(seriesId: string, boardMemberId: string): Promise<BoardReviewClaim> {
+export interface GlobalBoardLead {
+  boardMemberId: string;
+  boardMemberName: string;
+}
+
+export async function getGlobalBoardLead(): Promise<GlobalBoardLead | null> {
+  try {
+    const raw = await apiRequest<
+      ApiEnvelope<{ boardMemberId: string; boardMemberName: string }> | { boardMemberId: string; boardMemberName: string } | null | undefined
+    >('/api/board/global-lead');
+    if (raw == null) return null;
+    const item = unwrap(raw as ApiEnvelope<{ boardMemberId: string; boardMemberName: string }>);
+    if (!item?.boardMemberId) return null;
+    return {
+      boardMemberId: item.boardMemberId,
+      boardMemberName: item.boardMemberName,
+    };
+  } catch {
+    return null;
+  }
+}
+
+export async function assignGlobalBoardLead(boardMemberId: string): Promise<GlobalBoardLead> {
   const item = unwrap(
-    await apiRequest<ApiEnvelope<ApiBoardReviewClaim>>(`/api/board/series/${seriesId}/lead`, {
-      method: 'PUT',
-      body: JSON.stringify({ boardMemberId }),
-    })
+    await apiRequest<ApiEnvelope<{ boardMemberId: string; boardMemberName: string }>>(
+      '/api/board/global-lead',
+      {
+        method: 'PUT',
+        body: JSON.stringify({ boardMemberId }),
+      }
+    )
   );
   return {
-    seriesId: item.seriesId,
     boardMemberId: item.boardMemberId,
-    claimedBoardMembers: item.claimedBoardMembers,
-    requiredClaims: item.requiredClaims,
-    claimsFull: item.claimsFull,
-    isLead: item.isLead,
-    hasLead: item.hasLead,
-    leadBoardMemberId: item.leadBoardMemberId ?? undefined,
-    leadBoardMemberName: item.leadBoardMemberName ?? undefined,
-    claimedAt: item.claimedAt,
+    boardMemberName: item.boardMemberName,
+  };
+}
+
+export async function clearGlobalBoardLead(): Promise<void> {
+  await apiRequest('/api/board/global-lead', { method: 'DELETE' });
+}
+
+export async function assignSeriesLead(seriesId: string, boardMemberId: string): Promise<BoardReviewClaim> {
+  // Deprecated: maps to global lead assignment; seriesId ignored by server contract changes.
+  void seriesId;
+  const lead = await assignGlobalBoardLead(boardMemberId);
+  return {
+    seriesId: seriesId,
+    boardMemberId: lead.boardMemberId,
+    claimedBoardMembers: 0,
+    requiredClaims: BOARD_CLAIMS_REQUIRED,
+    claimsFull: false,
+    isLead: true,
+    hasLead: true,
+    leadBoardMemberId: lead.boardMemberId,
+    leadBoardMemberName: lead.boardMemberName,
+    claimedAt: new Date().toISOString(),
   };
 }
 
