@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { useNavigate, useParams } from 'react-router';
+import { useLocation, useNavigate, useParams } from 'react-router';
 import { ArrowLeft, BookOpen, ChevronLeft, ChevronRight, ImageOff, Rows3, ZoomIn, ZoomOut } from 'lucide-react';
 import Button from '../../components/ui/Button';
 import EmptyState from '../../components/ui/EmptyState';
@@ -16,7 +16,12 @@ interface BookPage {
 export default function SeriesReaderPage() {
   const { seriesId } = useParams<{ seriesId: string }>();
   const navigate = useNavigate();
+  const location = useLocation();
   const { setPageMeta } = usePageMeta();
+  const isBoardReader = location.pathname.startsWith('/board/');
+  const backHref = isBoardReader
+    ? `/board/approved-series/${seriesId}`
+    : `/mangaka/series/${seriesId}`;
   const [series, setSeries] = useState<Series | null>(null);
   const [chapters, setChapters] = useState<Chapter[]>([]);
   const [bookPages, setBookPages] = useState<BookPage[]>([]);
@@ -35,10 +40,14 @@ export default function SeriesReaderPage() {
       setError('');
       try {
         const [seriesItem, chapterItems] = await Promise.all([
-          getSeries(seriesId),
-          getSeriesChapters(seriesId),
+          getSeries(seriesId!),
+          getSeriesChapters(seriesId!),
         ]);
-        const orderedChapters = [...chapterItems].sort((a, b) => a.number - b.number);
+        // Board xem nội dung sản xuất (bỏ chapter 0 bản thảo đề xuất).
+        const filtered = isBoardReader
+          ? chapterItems.filter(c => c.number > 0)
+          : chapterItems;
+        const orderedChapters = [...filtered].sort((a, b) => a.number - b.number);
         const pageLists = await Promise.all(
           orderedChapters.map(chapter => getChapterPages(chapter.id).catch(() => []))
         );
@@ -63,19 +72,25 @@ export default function SeriesReaderPage() {
     return () => {
       active = false;
     };
-  }, [seriesId]);
+  }, [seriesId, isBoardReader]);
 
   useEffect(() => {
     if (!series) return;
     setPageMeta({
       title: `Đọc ${series.title}`,
-      breadcrumb: [
-        { label: 'Series của tôi', href: '/mangaka/series' },
-        { label: series.title, href: `/mangaka/series/${series.id}` },
-        { label: 'Đọc manga' },
-      ],
+      breadcrumb: isBoardReader
+        ? [
+            { label: 'Series Đã Nhận', href: '/board/approved-series' },
+            { label: series.title, href: `/board/approved-series/${series.id}` },
+            { label: 'Xem trang truyện' },
+          ]
+        : [
+            { label: 'Series của tôi', href: '/mangaka/series' },
+            { label: series.title, href: `/mangaka/series/${series.id}` },
+            { label: 'Đọc manga' },
+          ],
     });
-  }, [series?.id]);
+  }, [series, isBoardReader, setPageMeta]);
 
   const currentPage = bookPages[spreadIndex];
   const nextPage = bookPages[spreadIndex + 1];
@@ -113,7 +128,11 @@ export default function SeriesReaderPage() {
           icon={<BookOpen size={24} />}
           title="Không thể mở manga"
           description={error || 'Series này không tồn tại.'}
-          action={<Button variant="outline" onClick={() => navigate('/mangaka/series')}>Quay lại series</Button>}
+          action={
+            <Button variant="outline" onClick={() => navigate(isBoardReader ? '/board/approved-series' : '/mangaka/series')}>
+              Quay lại series
+            </Button>
+          }
         />
       </div>
     );
@@ -124,7 +143,7 @@ export default function SeriesReaderPage() {
       <header className="border-b border-white/10 bg-[#202020]">
         <div className="mx-auto flex max-w-7xl flex-wrap items-center gap-3 px-4 py-3">
           <Button variant="ghost" size="sm" className="text-white hover:bg-white/10 hover:text-white"
-            onClick={() => navigate(`/mangaka/series/${series.id}`)}>
+            onClick={() => navigate(backHref)}>
             <ArrowLeft size={16} /> Quay lại
           </Button>
           <div className="min-w-0 flex-1">

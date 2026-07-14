@@ -12,6 +12,7 @@ import {
   listBoardVotes,
   castBoardVote,
   claimSeriesReview,
+  claimSeriesLead,
   getBoardVoteProgress,
   BOARD_VOTES_REQUIRED,
   BOARD_CLAIMS_REQUIRED,
@@ -60,11 +61,10 @@ export default function SubmissionDetailPage() {
   const [manuscriptUrl, setManuscriptUrl] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [decision, setDecision] = useState<BoardDecision | null>(null);
-  const [publishFrequency, setPublishFrequency] = useState<'weekly' | 'monthly'>('weekly');
   const [reason, setReason] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [claiming, setClaiming] = useState(false);
-  const [wantLead, setWantLead] = useState(false);
+  const [claimingLead, setClaimingLead] = useState(false);
   const [submitted, setSubmitted] = useState(false);
   const [error, setError] = useState('');
 
@@ -75,17 +75,17 @@ export default function SubmissionDetailPage() {
     let isActive = true;
     setLoading(true);
     Promise.all([
-      getSeries(seriesId),
-      listBoardVotes(seriesId).catch(() => []),
       getBoardVoteProgress(seriesId).catch(() => null),
+      listBoardVotes(seriesId).catch(() => []),
       getSeriesChapters(seriesId).catch(() => []),
     ])
-      .then(([s, v, progress, chapters]) => {
+      .then(async ([progress, v, chapters]) => {
+        // Load series sau vote-progress để nhận status đã heal (đủ phiếu → approved).
+        const s = await getSeries(seriesId);
         if (!isActive) return;
         setSeries(s);
         setVotes(v);
         setVoteProgress(progress);
-        setPublishFrequency(s.publishingType === 'Monthly' ? 'monthly' : 'weekly');
         const proposal = chapters.find(c => c.number === 0) ?? chapters.find(c => c.description);
         setManuscriptUrl(proposal?.description?.trim() || null);
 
@@ -134,11 +134,13 @@ export default function SubmissionDetailPage() {
   const requiredClaims = voteProgress?.requiredClaims ?? BOARD_CLAIMS_REQUIRED;
   const currentUserHasClaimed = voteProgress?.currentUserHasClaimed ?? false;
   const canClaim = voteProgress?.canClaim ?? false;
-  const canClaimAsLead = voteProgress?.canClaimAsLead ?? false;
   const claimsFull = voteProgress?.claimsFull ?? false;
   const hasLead = voteProgress?.hasLead ?? false;
   const leadBoardMemberName = voteProgress?.leadBoardMemberName;
   const currentUserIsLead = voteProgress?.currentUserIsLead ?? false;
+  const canVote = voteProgress?.canVote ?? (currentUserHasClaimed && claimsFull);
+  const canClaimLead = voteProgress?.canClaimLead ?? false;
+  const leadClaimExpiresAt = voteProgress?.leadClaimExpiresAt;
   const myDecision = submitted ? decision : null;
 
   const handleClaimReview = async () => {
@@ -146,16 +148,35 @@ export default function SubmissionDetailPage() {
     setClaiming(true);
     setError('');
     try {
-      await claimSeriesReview(seriesId, wantLead);
+      await claimSeriesReview(seriesId, false);
       const progress = await getBoardVoteProgress(seriesId).catch(() => null);
       if (progress) setVoteProgress(progress);
-      setWantLead(false);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Không thể nhận xét duyệt series.');
     } finally {
       setClaiming(false);
     }
   };
+
+  const handleClaimLead = async () => {
+    if (!seriesId) return;
+    setClaimingLead(true);
+    setError('');
+    try {
+      await claimSeriesLead(seriesId);
+      const [progress, refreshed] = await Promise.all([
+        getBoardVoteProgress(seriesId).catch(() => null),
+        getSeries(seriesId).catch(() => series),
+      ]);
+      if (progress) setVoteProgress(progress);
+      if (refreshed) setSeries(refreshed);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Không thể nhận phụ trách chính.');
+    } finally {
+      setClaimingLead(false);
+    }
+  };
+
   const genres = series?.genres?.length ? series.genres : (series?.genre ? series.genre.split(',').map(g => g.trim()) : []);
 
   const handleSubmitVote = async () => {
@@ -163,12 +184,7 @@ export default function SubmissionDetailPage() {
     setSubmitting(true);
     setError('');
     try {
-      await castBoardVote(
-        seriesId,
-        decision,
-        reason.trim() || undefined,
-        decision === 'approve' ? publishFrequency : undefined
-      );
+      await castBoardVote(seriesId, decision, reason.trim() || undefined);
       const [refreshedVotes, refreshedSeries, refreshedProgress] = await Promise.all([
         listBoardVotes(seriesId).catch(() => votes),
         getSeries(seriesId).catch(() => series),
@@ -220,14 +236,10 @@ export default function SubmissionDetailPage() {
           </div>
           {isPendingReview && (
             <p className="text-muted-foreground pt-1">
-              {hasLead && (
-                <span className="block mb-1">
-                  Phụ trách chính: <span className="font-semibold text-foreground">{leadBoardMemberName}</span>
-                  {currentUserIsLead && <span className="text-primary"> (bạn)</span>}
-                </span>
-              )}
-              {quorumMet
-                ? `Đủ ${requiredVotes} phiếu — hệ thống đã quyết định theo đa số.`
+              {!claimsFull
+                ? `Cần đủ ${requiredClaims} reviewer nhận series trước khi bỏ phiếu.`
+                : quorumMet
+                ? `Đủ ${requiredVotes} phiếu — đang cập nhật trạng thái theo đa số.`
                 : currentUserHasClaimed
                   ? `Cần ${requiredVotes} phiếu board để quyết định.`
                   : `Đọc hồ sơ và bản thảo, sau đó nhận xét duyệt để được bỏ phiếu.`}
@@ -236,12 +248,47 @@ export default function SubmissionDetailPage() {
         </div>
 
         {!isPendingReview ? (
-          <div className="text-center py-4">
-            <CheckCircle className="h-10 w-10 text-green-500 mx-auto mb-2" />
-            <p className="font-medium text-sm">Series đã có quyết định</p>
-            <p className="text-xs text-muted-foreground mt-1">
-              {series.status === 'Cancelled' ? 'Từ chối' : 'Đã duyệt'}
-            </p>
+          <div className="space-y-4">
+            <div className="text-center py-2">
+              <CheckCircle className="h-10 w-10 text-green-500 mx-auto mb-2" />
+              <p className="font-medium text-sm">Series đã có quyết định</p>
+              <p className="text-xs text-muted-foreground mt-1">
+                {series.status === 'Cancelled' ? 'Từ chối' : 'Đã duyệt'}
+              </p>
+            </div>
+            {hasLead ? (
+              <p className="text-sm text-center text-muted-foreground">
+                Phụ trách chính: <span className="font-semibold text-foreground">{leadBoardMemberName}</span>
+                {currentUserIsLead && <span className="text-primary"> (bạn)</span>}
+              </p>
+            ) : canClaimLead ? (
+              <div className="rounded-xl border border-border px-4 py-3 space-y-3">
+                <div>
+                  <p className="text-sm font-semibold">Nhận làm phụ trách chính</p>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Chịu trách nhiệm lên lịch xuất bản sau khi series hoàn thành (mỗi series chỉ 1 người).
+                    {leadClaimExpiresAt && (
+                      <> Hạn nhận: {new Date(leadClaimExpiresAt).toLocaleString('vi-VN')}. Sau hạn hệ thống tự gán người nhận xét duyệt sớm nhất.</>
+                    )}
+                  </p>
+                </div>
+                <Button
+                  type="button"
+                  variant="primary"
+                  className="w-full"
+                  loading={claimingLead}
+                  disabled={claimingLead}
+                  onClick={handleClaimLead}
+                >
+                  Nhận phụ trách chính
+                </Button>
+              </div>
+            ) : currentUserHasClaimed ? (
+              <p className="text-xs text-center text-muted-foreground">
+                Đang chờ một reviewer nhận phụ trách chính
+                {leadClaimExpiresAt ? ` (hạn ${new Date(leadClaimExpiresAt).toLocaleString('vi-VN')})` : ''}.
+              </p>
+            ) : null}
           </div>
         ) : !currentUserHasClaimed ? (
           <div className="space-y-3">
@@ -252,29 +299,8 @@ export default function SubmissionDetailPage() {
             ) : canClaim ? (
               <>
                 <p className="text-sm text-muted-foreground">
-                  Bạn có thể xem thông tin và tải bản thảo trước. Khi sẵn sàng, nhận series để giữ chỗ reviewer ({claimedBoardMembers}/{requiredClaims}).
+                  Bạn có thể xem thông tin và tải bản thảo trước. Khi sẵn sàng, nhận series để giữ chỗ reviewer ({claimedBoardMembers}/{requiredClaims}). Bỏ phiếu chỉ mở khi đủ {requiredClaims} người nhận.
                 </p>
-                {hasLead ? (
-                  <p className="text-xs text-muted-foreground">
-                    Phụ trách chính: <span className="font-semibold">{leadBoardMemberName}</span>
-                  </p>
-                ) : (
-                  <label className="flex items-start gap-3 rounded-xl border border-border px-4 py-3 cursor-pointer hover:bg-muted/40">
-                    <input
-                      type="checkbox"
-                      className="mt-0.5"
-                      checked={wantLead}
-                      onChange={e => setWantLead(e.target.checked)}
-                      disabled={!canClaimAsLead}
-                    />
-                    <span className="text-sm">
-                      <span className="font-semibold block">Nhận làm phụ trách chính</span>
-                      <span className="text-muted-foreground text-xs">
-                        Chịu trách nhiệm lên lịch xuất bản sau khi series được duyệt (mỗi series chỉ 1 người).
-                      </span>
-                    </span>
-                  </label>
-                )}
                 <Button
                   type="button"
                   variant="primary"
@@ -291,6 +317,10 @@ export default function SubmissionDetailPage() {
                 Bạn có lời mời đang chờ — hãy xử lý trong mục Lời mời xét duyệt.
               </p>
             )}
+          </div>
+        ) : !canVote ? (
+          <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+            Bạn đã nhận xét duyệt. Cần đủ {requiredClaims} reviewer ({claimedBoardMembers}/{requiredClaims}) trước khi bỏ phiếu.
           </div>
         ) : submitted ? (
           <div className="text-center py-4 space-y-3">
@@ -326,33 +356,6 @@ export default function SubmissionDetailPage() {
                 </button>
               ))}
             </div>
-            {decision === 'approve' && (
-              <div className="rounded-xl border border-border px-4 py-3 space-y-2">
-                <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                  Hình thức xuất bản (hội đồng)
-                </p>
-                <div className="flex gap-2">
-                  {(['weekly', 'monthly'] as const).map(freq => (
-                    <button
-                      key={freq}
-                      type="button"
-                      onClick={() => setPublishFrequency(freq)}
-                      className={clsx(
-                        'flex-1 rounded-lg border px-3 py-2 text-sm font-medium transition-colors',
-                        publishFrequency === freq
-                          ? 'border-primary bg-primary/10 text-primary'
-                          : 'border-border hover:bg-muted/50'
-                      )}
-                    >
-                      {freq === 'weekly' ? 'Hàng tuần' : 'Hàng tháng'}
-                    </button>
-                  ))}
-                </div>
-                <p className="text-xs text-muted-foreground">
-                  Đề xuất từ mangaka: {series.publishingType || '—'}. Quyết định của phụ trách chính được ưu tiên khi duyệt.
-                </p>
-              </div>
-            )}
             <textarea
               placeholder="Lý do / nhận xét (khuyến nghị nếu từ chối)..."
               rows={4}

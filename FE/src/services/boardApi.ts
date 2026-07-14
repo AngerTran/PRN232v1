@@ -84,6 +84,10 @@ export interface BoardVoteProgress {
   leadBoardMemberId?: string;
   leadBoardMemberName?: string;
   canManagePublishingSchedule: boolean;
+  canVote: boolean;
+  canClaimLead: boolean;
+  leadClaimExpiresAt?: string;
+  seriesStatus?: string;
 }
 
 interface ApiBoardVoteProgress {
@@ -104,6 +108,10 @@ interface ApiBoardVoteProgress {
   leadBoardMemberId?: string | null;
   leadBoardMemberName?: string | null;
   canManagePublishingSchedule: boolean;
+  canVote?: boolean;
+  canClaimLead?: boolean;
+  leadClaimExpiresAt?: string | null;
+  seriesStatus?: string | null;
 }
 
 export interface BoardReviewClaim {
@@ -221,6 +229,10 @@ function mapVoteProgress(item: ApiBoardVoteProgress): BoardVoteProgress {
     leadBoardMemberId: item.leadBoardMemberId ?? undefined,
     leadBoardMemberName: item.leadBoardMemberName ?? undefined,
     canManagePublishingSchedule: item.canManagePublishingSchedule ?? false,
+    canVote: item.canVote ?? false,
+    canClaimLead: item.canClaimLead ?? false,
+    leadClaimExpiresAt: item.leadClaimExpiresAt ?? undefined,
+    seriesStatus: item.seriesStatus ?? undefined,
   };
 }
 
@@ -252,6 +264,27 @@ export async function claimSeriesReview(seriesId: string, wantLead = false): Pro
     await apiRequest<ApiEnvelope<ApiBoardReviewClaim>>(`/api/board/series/${seriesId}/claim-review`, {
       method: 'POST',
       body: JSON.stringify({ wantLead }),
+    })
+  );
+  return {
+    seriesId: item.seriesId,
+    boardMemberId: item.boardMemberId,
+    claimedBoardMembers: item.claimedBoardMembers,
+    requiredClaims: item.requiredClaims,
+    claimsFull: item.claimsFull,
+    isLead: item.isLead,
+    hasLead: item.hasLead,
+    leadBoardMemberId: item.leadBoardMemberId ?? undefined,
+    leadBoardMemberName: item.leadBoardMemberName ?? undefined,
+    claimedAt: item.claimedAt,
+  };
+}
+
+export async function claimSeriesLead(seriesId: string): Promise<BoardReviewClaim> {
+  const item = unwrap(
+    await apiRequest<ApiEnvelope<ApiBoardReviewClaim>>(`/api/board/series/${seriesId}/claim-lead`, {
+      method: 'POST',
+      body: JSON.stringify({}),
     })
   );
   return {

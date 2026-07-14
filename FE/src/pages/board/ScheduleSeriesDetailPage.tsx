@@ -149,12 +149,20 @@ export default function ScheduleSeriesDetailPage() {
             <h1 className="text-2xl font-bold">{series.title}</h1>
             <p className="text-sm text-muted-foreground mt-1">{schedules.length} lịch phát hành</p>
           </div>
-          {canSchedule && (
-            <Button onClick={() => (showForm ? setShowForm(false) : openCreate())}>
-              {showForm ? <X className="h-4 w-4 mr-1" /> : <Plus className="h-4 w-4 mr-1" />}
-              {showForm ? 'Đóng' : 'Thêm kỳ'}
+          <div className="flex flex-wrap items-center gap-2">
+            <Button
+              variant="outline"
+              onClick={() => navigate(`/board/approved-series/${series.id}/read`)}
+            >
+              Xem trang truyện
             </Button>
-          )}
+            {canSchedule && (
+              <Button onClick={() => (showForm ? setShowForm(false) : openCreate())}>
+                {showForm ? <X className="h-4 w-4 mr-1" /> : <Plus className="h-4 w-4 mr-1" />}
+                {showForm ? 'Đóng' : 'Thêm kỳ'}
+              </Button>
+            )}
+          </div>
         </div>
 
         {error && (

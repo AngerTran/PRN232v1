@@ -37,7 +37,7 @@ type StatusSection = {
 const IN_REVIEW_SECTION = {
   id: 'in-review',
   title: 'Đang phê duyệt',
-  description: 'Đủ reviewer — chờ hội đồng bỏ phiếu',
+  description: 'Đủ 3 reviewer — hội đồng bỏ phiếu',
   emptyHint: 'Không có series đang phê duyệt',
 };
 
@@ -122,7 +122,7 @@ export default function BoardApprovedSeriesPage() {
                 : null,
               hasSchedule: schedules.length > 0,
               scheduleCount: schedules.length,
-              canManagePublishingSchedule: progress?.canManagePublishingSchedule ?? true,
+              canManagePublishingSchedule: progress?.canManagePublishingSchedule ?? false,
             } as ApprovedRow;
           })
         );

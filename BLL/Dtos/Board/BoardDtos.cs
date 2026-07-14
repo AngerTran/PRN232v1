@@ -64,7 +64,11 @@ public record BoardVoteProgressResponse(
     bool HasLead,
     Guid? LeadBoardMemberId,
     string? LeadBoardMemberName,
-    bool CanManagePublishingSchedule);
+    bool CanManagePublishingSchedule,
+    bool CanVote,
+    bool CanClaimLead,
+    DateTime? LeadClaimExpiresAt,
+    string? SeriesStatus);
 
 public record BoardReviewClaimResponse(
     Guid SeriesId,

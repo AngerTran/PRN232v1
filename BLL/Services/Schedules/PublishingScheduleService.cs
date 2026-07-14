@@ -203,13 +203,6 @@ public class PublishingScheduleService
 
         if (PageAccessService.IsBoard(caller.Role))
         {
-            var claimCount = await _unitOfWork.Context.SeriesBoardReviewClaims
-                .CountAsync(c => c.SeriesId == seriesId, cancellationToken);
-            if (claimCount == 0)
-            {
-                return series;
-            }
-
             var isLead = await _unitOfWork.Context.SeriesBoardReviewClaims
                 .AnyAsync(c => c.SeriesId == seriesId && c.BoardMemberId == callerId && c.IsLead, cancellationToken);
             if (!isLead)

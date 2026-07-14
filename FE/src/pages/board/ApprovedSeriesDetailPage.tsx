@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router';
-import { ChevronLeft, CalendarDays, CalendarPlus, BookOpen, User } from 'lucide-react';
+import { ChevronLeft, CalendarDays, CalendarPlus, BookOpen, User, Eye } from 'lucide-react';
 import { usePageMeta } from '../../hooks/usePageMeta';
 import { Button } from '../../app/components/ui/button';
 import { Badge } from '../../app/components/ui/badge';
@@ -13,7 +13,7 @@ import {
   canSchedulePublishing,
   type PublishingScheduleItem,
 } from '../../services/seriesApi';
-import { getBoardVoteProgress, type BoardVoteProgress } from '../../services/boardApi';
+import { getBoardVoteProgress, claimSeriesLead, type BoardVoteProgress } from '../../services/boardApi';
 
 function statusLabel(status: SeriesStatus): { text: string; className: string } {
   switch (status) {
@@ -38,6 +38,7 @@ export default function ApprovedSeriesDetailPage() {
   const [boardProgress, setBoardProgress] = useState<BoardVoteProgress | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [claimingLead, setClaimingLead] = useState(false);
 
   useEffect(() => {
     if (!seriesId) return;
@@ -89,7 +90,23 @@ export default function ApprovedSeriesDetailPage() {
     (a, b) => new Date(b.publishDate).getTime() - new Date(a.publishDate).getTime()
   )[0];
   const canScheduleStatus = canSchedulePublishing(series.status);
-  const canManageSchedule = canScheduleStatus && (boardProgress?.canManagePublishingSchedule ?? true);
+  const canManageSchedule = canScheduleStatus && (boardProgress?.canManagePublishingSchedule ?? false);
+  const canClaimLead = boardProgress?.canClaimLead ?? false;
+
+  const handleClaimLead = async () => {
+    if (!seriesId) return;
+    setClaimingLead(true);
+    setError('');
+    try {
+      await claimSeriesLead(seriesId);
+      const progress = await getBoardVoteProgress(seriesId).catch(() => null);
+      if (progress) setBoardProgress(progress);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Không thể nhận phụ trách chính.');
+    } finally {
+      setClaimingLead(false);
+    }
+  };
 
   return (
     <div className="flex flex-1 min-h-0 flex-col overflow-y-auto lg:flex-row lg:overflow-hidden">
@@ -191,12 +208,35 @@ export default function ApprovedSeriesDetailPage() {
             <CardTitle>Thao tác</CardTitle>
           </CardHeader>
           <div className="space-y-3">
+            {error && <p className="text-sm text-destructive">{error}</p>}
             {boardProgress?.hasLead && (
               <p className="text-xs text-muted-foreground">
                 Phụ trách chính: <span className="font-semibold text-foreground">{boardProgress.leadBoardMemberName}</span>
                 {boardProgress.currentUserIsLead && <span className="text-primary"> (bạn)</span>}
               </p>
             )}
+            {canClaimLead && (
+              <div className="rounded-xl border border-border px-3 py-3 space-y-2">
+                <p className="text-sm font-semibold">Nhận làm phụ trách chính</p>
+                <p className="text-xs text-muted-foreground">
+                  Lên lịch xuất bản sau khi series hoàn thành.
+                  {boardProgress?.leadClaimExpiresAt && (
+                    <> Hạn: {new Date(boardProgress.leadClaimExpiresAt).toLocaleString('vi-VN')}.</>
+                  )}
+                </p>
+                <Button className="w-full" disabled={claimingLead} onClick={handleClaimLead}>
+                  {claimingLead ? 'Đang nhận...' : 'Nhận phụ trách chính'}
+                </Button>
+              </div>
+            )}
+            <Button
+              variant="outline"
+              className="w-full"
+              onClick={() => navigate(`/board/approved-series/${series.id}/read`)}
+            >
+              <Eye className="h-4 w-4 mr-2" />
+              Xem trang truyện
+            </Button>
             {canManageSchedule ? (
               <Button className="w-full" onClick={() => navigate(`/board/publishing-schedule/${series.id}`)}>
                 {schedules.length > 0 ? (

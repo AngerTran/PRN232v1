@@ -13,4 +13,5 @@ public static class ActivityActions
     public const string Assign = "assign";
     public const string DangerDecision = "danger_decision";
     public const string DangerAlert = "danger_alert";
+    public const string BoardApproved = "board_approved";
 }

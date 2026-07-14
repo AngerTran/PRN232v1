@@ -102,6 +102,23 @@ public class BoardController : ControllerBase
             cancellationToken));
     }
 
+    [HttpPost("series/{seriesId:guid}/claim-lead")]
+    [SwaggerOperation(
+        Summary = "Claim board lead after approval",
+        Description = "One of the three reviewers claims lead responsibility after the series is approved. Expires after 7 days then auto-assigns.")]
+    [ProducesResponseType(typeof(BoardReviewClaimResponse), StatusCodes.Status200OK)]
+    public async Task<ActionResult<BoardReviewClaimResponse>> ClaimLead(
+        Guid seriesId,
+        CancellationToken cancellationToken)
+    {
+        if (!this.TryGetUserId(out var userId))
+        {
+            return Unauthorized();
+        }
+
+        return Ok(await _boardService.ClaimLeadAsync(userId, seriesId, cancellationToken));
+    }
+
     [HttpGet("vote-progress")]
     [SwaggerOperation(Summary = "Get board vote progress", Description = "Returns vote counts and whether the series has reached the minimum 3 board votes required for a decision.")]
     [ProducesResponseType(typeof(BoardVoteProgressResponse), StatusCodes.Status200OK)]
