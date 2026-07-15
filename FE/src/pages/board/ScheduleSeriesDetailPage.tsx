@@ -1,7 +1,8 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router';
-import { ChevronLeft, CalendarDays, Plus, Pencil, Trash2, X } from 'lucide-react';
+import { ChevronLeft, CalendarDays, Plus, Pencil, Trash2, X, CalendarClock, BookOpen, RefreshCw } from 'lucide-react';
 import { usePageMeta } from '../../hooks/usePageMeta';
+import { useConfirm } from '../../components/ui/ConfirmDialog';
 import { Button } from '../../app/components/ui/button';
 import { Input } from '../../app/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../../app/components/ui/select';
@@ -11,29 +12,52 @@ import { PublishingTypeBadge } from '../../app/components/ui/board';
 import type { Series } from '../../types/domain';
 import {
   getSeries,
+  getSeriesChapters,
   getSeriesSchedules,
   createSchedule,
   updateSchedule,
   deleteSchedule,
   canSchedulePublishing,
+  SUGGESTED_READY_CHAPTERS_BEFORE_PUBLISH,
   type PublishingScheduleItem,
 } from '../../services/seriesApi';
 import { getBoardVoteProgress, type BoardVoteProgress } from '../../services/boardApi';
+import { addDays, addMonths, format, parseISO } from 'date-fns';
+import { toast } from 'sonner';
 
 const emptyForm = { frequency: 'weekly', publishDate: '', issueNumber: '', notes: '' };
+
+function todayIsoDate(): string {
+  return format(new Date(), 'yyyy-MM-dd');
+}
+
+function isPastPublishDate(isoDate: string): boolean {
+  if (!isoDate) return false;
+  return isoDate < todayIsoDate();
+}
+
+function shiftPublishDate(isoDate: string, frequency: string): string {
+  const base = parseISO(isoDate.length === 10 ? `${isoDate}T00:00:00` : isoDate);
+  const next =
+    frequency?.toLowerCase() === 'monthly' ? addMonths(base, 1) : addDays(base, 7);
+  return format(next, 'yyyy-MM-dd');
+}
 
 export default function ScheduleSeriesDetailPage() {
   const { seriesId } = useParams<{ seriesId: string }>();
   const navigate = useNavigate();
   const { setPageMeta } = usePageMeta();
+  const confirm = useConfirm();
   const [series, setSeries] = useState<Series | null>(null);
   const [schedules, setSchedules] = useState<PublishingScheduleItem[]>([]);
+  const [productionChapterCount, setProductionChapterCount] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [form, setForm] = useState(emptyForm);
   const [saving, setSaving] = useState(false);
+  const [postponingId, setPostponingId] = useState<string | null>(null);
   const [boardProgress, setBoardProgress] = useState<BoardVoteProgress | null>(null);
 
   async function load() {
@@ -41,14 +65,16 @@ export default function ScheduleSeriesDetailPage() {
     setLoading(true);
     setError('');
     try {
-      const [s, sc, progress] = await Promise.all([
+      const [s, sc, progress, chapters] = await Promise.all([
         getSeries(seriesId),
         getSeriesSchedules(seriesId),
         getBoardVoteProgress(seriesId).catch(() => null),
+        getSeriesChapters(seriesId).catch(() => []),
       ]);
       setSeries(s);
       setSchedules(sc);
       setBoardProgress(progress);
+      setProductionChapterCount(chapters.filter(c => c.number > 0).length);
       setPageMeta({
         title: `Lịch · ${s.title}`,
         breadcrumb: [
@@ -67,11 +93,18 @@ export default function ScheduleSeriesDetailPage() {
     load();
   }, [seriesId]);
 
+  const bufferShort = productionChapterCount < SUGGESTED_READY_CHAPTERS_BEFORE_PUBLISH;
+  const nextIssueHint = useMemo(() => {
+    const maxIssue = Math.max(0, ...schedules.map(s => s.issueNumber ?? 0));
+    return String(maxIssue + 1);
+  }, [schedules]);
+
   const openCreate = () => {
     setEditingId(null);
     setForm({
       ...emptyForm,
       frequency: series?.publishingType === 'Monthly' ? 'monthly' : 'weekly',
+      issueNumber: nextIssueHint,
     });
     setShowForm(true);
   };
@@ -90,6 +123,30 @@ export default function ScheduleSeriesDetailPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!seriesId || !form.publishDate) return;
+
+    if (isPastPublishDate(form.publishDate)) {
+      toast.error('Không thể chọn ngày phát hành trong quá khứ.');
+      return;
+    }
+
+    if (!editingId && schedules.length === 0 && bufferShort) {
+      const ok = await confirm({
+        title: 'Chưa đủ chương buffer',
+        variant: 'submit',
+        message: (
+          <>
+            Nên có ít nhất{' '}
+            <span className="font-semibold text-foreground">{SUGGESTED_READY_CHAPTERS_BEFORE_PUBLISH} chương</span>{' '}
+            trước kỳ XB đầu (hiện có{' '}
+            <span className="font-semibold text-foreground">{productionChapterCount}</span>).
+          </>
+        ),
+        confirmText: 'Vẫn tạo lịch',
+        cancelText: 'Để sau',
+      });
+      if (!ok) return;
+    }
+
     setSaving(true);
     setError('');
     try {
@@ -106,10 +163,39 @@ export default function ScheduleSeriesDetailPage() {
       setForm(emptyForm);
       const sc = await getSeriesSchedules(seriesId);
       setSchedules(sc);
+      toast.success(editingId ? 'Đã cập nhật lịch' : 'Đã tạo lịch');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Không thể lưu lịch.');
     } finally {
       setSaving(false);
+    }
+  };
+
+  const handlePostpone = async (row: PublishingScheduleItem) => {
+    const freq = row.frequency?.toLowerCase() === 'monthly' ? 'monthly' : 'weekly';
+    const nextDate = shiftPublishDate(row.publishDate, freq);
+    const reason = window.prompt(
+      `Dời kỳ ${row.issueNumber ?? '—'} sang ${nextDate} (+${freq === 'monthly' ? '1 tháng' : '7 ngày'}).\nGhi chú lý do (tuỳ chọn — ví dụ sức khỏe, sự cố studio):`,
+      row.notes ?? ''
+    );
+    if (reason === null) return;
+
+    setPostponingId(row.id);
+    setError('');
+    try {
+      await updateSchedule(row.id, {
+        publishDate: nextDate,
+        frequency: freq,
+        issueNumber: row.issueNumber,
+        notes: reason.trim() || `Dời lịch sang ${nextDate}`,
+      });
+      const sc = await getSeriesSchedules(seriesId!);
+      setSchedules(sc);
+      toast.success(`Đã dời lịch sang ${nextDate}`);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Không thể dời lịch.');
+    } finally {
+      setPostponingId(null);
     }
   };
 
@@ -147,7 +233,9 @@ export default function ScheduleSeriesDetailPage() {
         <div className="flex items-start justify-between gap-4">
           <div>
             <h1 className="text-2xl font-bold">{series.title}</h1>
-            <p className="text-sm text-muted-foreground mt-1">{schedules.length} lịch phát hành</p>
+            <p className="text-sm text-muted-foreground mt-1">
+              {schedules.length} kỳ lịch · {productionChapterCount} chương sản xuất
+            </p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
             <Button
@@ -169,9 +257,55 @@ export default function ScheduleSeriesDetailPage() {
           <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{error}</div>
         )}
 
+        <div className="rounded-2xl border border-border/80 bg-gradient-to-br from-card via-card to-primary/[0.04] overflow-hidden shadow-sm">
+          <div className="px-4 sm:px-5 py-3.5 border-b border-border/60 flex flex-wrap items-center justify-between gap-2">
+            <div className="flex items-center gap-2.5 min-w-0">
+              <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
+                <CalendarClock size={16} />
+              </span>
+              <div className="min-w-0">
+                <p className="font-semibold text-sm">Chính sách thời gian</p>
+                <p className="text-xs text-muted-foreground">Linh hoạt — không khóa cứng sản xuất / lịch XB</p>
+              </div>
+            </div>
+            <span
+              className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-semibold border ${
+                bufferShort
+                  ? 'bg-amber-50 text-amber-900 border-amber-200'
+                  : 'bg-emerald-50 text-emerald-800 border-emerald-200'
+              }`}
+            >
+              <BookOpen size={12} />
+              {productionChapterCount}/{SUGGESTED_READY_CHAPTERS_BEFORE_PUBLISH} chương buffer
+            </span>
+          </div>
+          <div className="grid sm:grid-cols-3 divide-y sm:divide-y-0 sm:divide-x divide-border/60">
+            <div className="px-4 py-3.5 space-y-1">
+              <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Buffer trước XB</p>
+              <p className="text-sm text-foreground/90 leading-snug">
+                Nên có ≥ {SUGGESTED_READY_CHAPTERS_BEFORE_PUBLISH} chương trước kỳ đầu — không chặn tạo lịch.
+              </p>
+            </div>
+            <div className="px-4 py-3.5 space-y-1">
+              <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Mỗi kỳ</p>
+              <p className="text-sm text-foreground/90 leading-snug">
+                ~1 chương phát hành (kỳ 1 ≈ chương 1). Có thể chỉnh số kỳ / ngày tự do.
+              </p>
+            </div>
+            <div className="px-4 py-3.5 space-y-1">
+              <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground inline-flex items-center gap-1">
+                <RefreshCw size={11} /> Sự cố
+              </p>
+              <p className="text-sm text-foreground/90 leading-snug">
+                Sức khỏe, trễ studio… → dùng <span className="font-semibold">Dời lịch</span> hoặc sửa ngày.
+              </p>
+            </div>
+          </div>
+        </div>
+
         {!canScheduleStatus && (
           <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
-            Series chưa được editor đánh dấu hoàn thành — chỉ xem lịch, không tạo mới.
+            Series chưa đủ điều kiện lên lịch xuất bản — chỉ xem lịch hiện có.
           </div>
         )}
         {canScheduleStatus && !canManageSchedule && (
@@ -183,7 +317,7 @@ export default function ScheduleSeriesDetailPage() {
         {showForm && canSchedule && (
           <Card>
             <CardHeader>
-              <CardTitle>{editingId ? 'Sửa lịch' : 'Tạo lịch mới'}</CardTitle>
+              <CardTitle>{editingId ? 'Sửa / dời lịch' : 'Tạo lịch mới'}</CardTitle>
             </CardHeader>
             <form onSubmit={handleSubmit} className="grid gap-4 sm:grid-cols-2">
               <div className="space-y-1.5">
@@ -191,22 +325,28 @@ export default function ScheduleSeriesDetailPage() {
                 <Select value={form.frequency} onValueChange={v => setForm({ ...form, frequency: v })}>
                   <SelectTrigger><SelectValue /></SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="weekly">Hàng tuần</SelectItem>
-                    <SelectItem value="monthly">Hàng tháng</SelectItem>
+                    <SelectItem value="weekly">Hàng tuần (thường 1 chương / kỳ)</SelectItem>
+                    <SelectItem value="monthly">Hàng tháng (thường 1 chương / kỳ)</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
               <div className="space-y-1.5">
                 <label className="text-sm font-medium">Ngày phát hành</label>
-                <Input type="date" value={form.publishDate} onChange={e => setForm({ ...form, publishDate: e.target.value })} required />
+                <Input
+                  type="date"
+                  min={todayIsoDate()}
+                  value={form.publishDate}
+                  onChange={e => setForm({ ...form, publishDate: e.target.value })}
+                  required
+                />
               </div>
               <div className="space-y-1.5">
-                <label className="text-sm font-medium">Kỳ (issue)</label>
+                <label className="text-sm font-medium">Kỳ / số chương dự kiến</label>
                 <Input type="number" min={1} value={form.issueNumber} onChange={e => setForm({ ...form, issueNumber: e.target.value })} />
               </div>
               <div className="sm:col-span-2 space-y-1.5">
-                <label className="text-sm font-medium">Ghi chú</label>
-                <Textarea rows={2} value={form.notes} onChange={e => setForm({ ...form, notes: e.target.value })} className="resize-none" />
+                <label className="text-sm font-medium">Ghi chú (lý do dời lịch, ghi chú nội bộ…)</label>
+                <Textarea rows={2} value={form.notes} onChange={e => setForm({ ...form, notes: e.target.value })} className="resize-none" placeholder="VD: Dời do mangaka nghỉ bệnh 1 tuần" />
               </div>
               <div className="sm:col-span-2 flex gap-2">
                 <Button type="submit" disabled={saving}>{saving ? 'Đang lưu…' : editingId ? 'Lưu' : 'Tạo lịch'}</Button>
@@ -238,7 +378,17 @@ export default function ScheduleSeriesDetailPage() {
                     {s.notes && <p className="text-xs text-muted-foreground mt-1">{s.notes}</p>}
                   </div>
                   {canSchedule && (
-                    <div className="flex gap-1 shrink-0">
+                    <div className="flex flex-wrap gap-1 shrink-0">
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        disabled={postponingId === s.id}
+                        onClick={() => handlePostpone(s)}
+                        title="Dời thêm 1 chu kỳ (7 ngày hoặc 1 tháng)"
+                      >
+                        <CalendarClock className="h-3.5 w-3.5 mr-1" />
+                        {postponingId === s.id ? 'Đang dời…' : 'Dời lịch'}
+                      </Button>
                       <Button size="sm" variant="ghost" onClick={() => openEdit(s)}>
                         <Pencil className="h-3.5 w-3.5 mr-1" /> Sửa
                       </Button>

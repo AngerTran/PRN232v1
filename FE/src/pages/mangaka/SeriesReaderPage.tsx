@@ -112,8 +112,9 @@ export default function SeriesReaderPage() {
 
   useEffect(() => {
     const handleKey = (event: KeyboardEvent) => {
-      if (event.key === 'ArrowLeft') goNext();
-      if (event.key === 'ArrowRight') goBack();
+      // Đọc trái → phải: ← trang trước, → trang sau
+      if (event.key === 'ArrowLeft') goBack();
+      if (event.key === 'ArrowRight') goNext();
     };
     window.addEventListener('keydown', handleKey);
     return () => window.removeEventListener('keydown', handleKey);
@@ -216,25 +217,25 @@ export default function SeriesReaderPage() {
               className="relative flex origin-center items-stretch justify-center shadow-[0_24px_80px_rgba(0,0,0,0.65)] transition-transform"
               style={{ transform: `scale(${zoom})` }}
             >
-              <BookLeaf item={nextPage} side="left" />
+              <BookLeaf item={currentPage} side="left" />
               <div className="hidden w-px bg-black shadow-[0_0_16px_6px_rgba(0,0,0,0.45)] md:block" />
-              <BookLeaf item={currentPage} side="right" />
+              <BookLeaf item={nextPage} side="right" />
             </div>
           </main>
 
           <footer className="border-t border-white/10 bg-[#202020] px-4 py-3">
             <div className="mx-auto flex max-w-xl items-center justify-center gap-4">
               <Button variant="outline" disabled={!canGoBack} onClick={goBack}>
-                <ChevronRight size={18} /> Trang trước
+                <ChevronLeft size={18} /> Trang trước
               </Button>
               <span className="min-w-20 text-center text-xs text-white/50">
                 {Math.min(spreadIndex + 1, bookPages.length)} / {bookPages.length}
               </span>
               <Button variant="outline" disabled={!canGoNext} onClick={goNext}>
-                Trang sau <ChevronLeft size={18} />
+                Trang sau <ChevronRight size={18} />
               </Button>
             </div>
-            <p className="mt-2 text-center text-[11px] text-white/35">Manga đọc từ phải sang trái · dùng phím ← → để lật trang</p>
+            <p className="mt-2 text-center text-[11px] text-white/35">Đọc từ trái sang phải · dùng phím ← → để lật trang</p>
           </footer>
         </>
       )}
@@ -281,8 +282,9 @@ function VerticalReader({ pages, zoom }: { pages: BookPage[]; zoom: number }) {
 
 function BookLeaf({ item, side }: { item?: BookPage; side: 'left' | 'right' }) {
   const source = item?.page.imageUrl ?? item?.page.thumbnailUrl;
+  // Mobile: luôn hiện trang trái (trang chính của spread); trang phải chỉ hiện từ md trở lên.
   return (
-    <figure className={`${side === 'left' ? 'hidden md:flex' : 'flex'} aspect-[3/4] h-[68vh] max-h-[820px] min-h-[420px] flex-col overflow-hidden bg-[#f7f3e9]`}>
+    <figure className={`${side === 'right' ? 'hidden md:flex' : 'flex'} aspect-[3/4] h-[68vh] max-h-[820px] min-h-[420px] flex-col overflow-hidden bg-[#f7f3e9]`}>
       <div className="flex min-h-0 flex-1 items-center justify-center">
         {source ? (
           <img src={source} alt={`Trang ${item?.page.pageNumber}`} className="h-full w-full object-contain" />

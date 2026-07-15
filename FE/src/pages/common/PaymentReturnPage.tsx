@@ -4,6 +4,7 @@ import { Link, useSearchParams } from 'react-router';
 import { toast } from 'sonner';
 import { createTaskPayment } from '../../services/paymentApi';
 import type { TaskPaymentReturnResponse } from '../../services/paymentApi';
+import { formatVnd } from '../../utils/formatCurrency';
 
 interface PaymentReturnParams {
   vnp_Amount: string;
@@ -82,10 +83,9 @@ export default function PaymentReturnPage() {
     return messages[code] || `Mã lỗi: ${code}`;
   };
 
-  const formatAmount = (amount: string): string => {
+  const formatAmount = (amount: string): number => {
     // VNPay amount is in VND * 100
-    const num = parseInt(amount, 10) / 100;
-    return num.toLocaleString('vi-VN');
+    return parseInt(amount, 10) / 100;
   };
 
   const formatDate = (payDate: string): string => {
@@ -150,7 +150,7 @@ export default function PaymentReturnPage() {
                 </div>
                 <div className="flex justify-between">
                   <span className="text-gray-500">Số tiền</span>
-                  <span className="text-white">{formatAmount(details.vnp_Amount)} ¥</span>
+                  <span className="text-white">{formatVnd(formatAmount(details.vnp_Amount))}</span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-gray-500">Ngân hàng</span>

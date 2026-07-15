@@ -1,11 +1,18 @@
 import { useState, useEffect, type ChangeEvent, type FormEvent } from 'react';
 import { useParams, useNavigate } from 'react-router';
-import { ChevronLeft } from 'lucide-react';
+import { ChevronLeft, CalendarClock, FileText, Images, Hash } from 'lucide-react';
 import Button from '../../components/ui/Button';
-import Card, { CardHeader, CardTitle } from '../../components/ui/Card';
+import Card, { CardTitle } from '../../components/ui/Card';
 import UploadBox, { MultiUploadBox } from '../../components/ui/UploadBox';
 import { usePageMeta } from '../../hooks/usePageMeta';
-import { createChapter, getSeries, getSeriesChapters, canMangakaProduceOnSeries, SERIES_PRODUCTION_LOCK_HINT, uploadChapterManuscript } from '../../services/seriesApi';
+import {
+  createChapter,
+  getSeries,
+  getSeriesChapters,
+  canMangakaProduceOnSeries,
+  SERIES_PRODUCTION_LOCK_HINT,
+  uploadChapterManuscript,
+} from '../../services/seriesApi';
 import { uploadChapterPage } from '../../services/workspaceApi';
 
 export default function CreateChapterPage() {
@@ -46,7 +53,9 @@ export default function CreateChapterPage() {
         if (!isActive) return;
         setSeriesTitle(series.title);
         if (!canMangakaProduceOnSeries(series.status)) {
-          setProductionBlocked(SERIES_PRODUCTION_LOCK_HINT[series.status] ?? 'Series chưa được phê duyệt — không thể tạo chương.');
+          setProductionBlocked(
+            SERIES_PRODUCTION_LOCK_HINT[series.status] ?? 'Series chưa được phê duyệt — không thể tạo chương.'
+          );
         } else {
           setProductionBlocked(null);
         }
@@ -82,7 +91,6 @@ export default function CreateChapterPage() {
         chapterNumber: Number(form.number) || 1,
         title: form.title || undefined,
         deadline: form.deadline || undefined,
-        manuscriptUrl: form.description.trim() || undefined,
       });
 
       if (manuscriptFile) {
@@ -105,85 +113,175 @@ export default function CreateChapterPage() {
     }
   };
 
-  const inputClass = 'w-full px-4 py-2.5 text-sm bg-input-background border border-border rounded-xl focus:outline-none focus:ring-2 focus:ring-ring/30 focus:border-primary/50 transition-colors';
+  const inputClass =
+    'w-full px-4 py-2.5 text-sm bg-input-background border border-border rounded-xl focus:outline-none focus:ring-2 focus:ring-ring/30 focus:border-primary/50 transition-colors';
+  const labelClass = 'block text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-1.5';
 
   return (
-    <div className="p-6 max-w-2xl">
-      <div className="flex items-center gap-3 mb-6">
-        <button onClick={() => navigate(`/mangaka/series/${seriesId}/chapters`)}
-          className="p-1.5 rounded-lg hover:bg-muted transition-colors text-muted-foreground hover:text-foreground">
-          <ChevronLeft size={20} />
-        </button>
-        <div>
-          <h1 className="text-xl font-bold">Tạo Chương Mới</h1>
-          <p className="text-sm text-muted-foreground">{seriesTitle}</p>
-        </div>
-      </div>
+    <div className="relative min-h-full">
+      <div
+        aria-hidden
+        className="pointer-events-none absolute inset-0 opacity-[0.3]"
+        style={{
+          backgroundImage:
+            'radial-gradient(circle at 1px 1px, color-mix(in oklab, var(--foreground) 10%, transparent) 1px, transparent 0)',
+          backgroundSize: '22px 22px',
+        }}
+      />
 
-      {productionBlocked && (
-        <div className="mb-5 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
-          {productionBlocked}
-        </div>
-      )}
-
-      <form onSubmit={handleSubmit} className="space-y-5">
-        <Card>
-          <CardHeader><CardTitle>Chi tiết Chương</CardTitle></CardHeader>
-          <div className="space-y-4">
-            <div className="grid grid-cols-3 gap-4">
-              <div>
-                <label className="block text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-1.5">Số chương</label>
-                <input type="number" value={form.number} onChange={update('number')} required className={inputClass} min="1" />
-              </div>
-              <div className="col-span-2">
-                <label className="block text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-1.5">Tiêu đề Chương *</label>
-                <input type="text" value={form.title} onChange={update('title')} required placeholder="Nhập tiêu đề chương…" className={inputClass} />
-              </div>
-            </div>
-            <div>
-              <label className="block text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-1.5">Mô tả</label>
-              <textarea value={form.description} onChange={update('description')} rows={4}
-                placeholder="Tóm tắt ngắn về nội dung chương này…"
-                className={`${inputClass} resize-none`} />
-            </div>
-            <div>
-              <label className="block text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-1.5">Hạn nộp *</label>
-              <input type="date" value={form.deadline} onChange={update('deadline')} required disabled={isWeekly}
-                className={`${inputClass} disabled:cursor-not-allowed disabled:opacity-70`} />
-              {isWeekly && (
-                <p className="mt-1.5 text-xs text-muted-foreground">
-                  Series weekly: hệ thống tự đặt hạn chương kế tiếp cách hạn gần nhất 7 ngày.
-                </p>
-              )}
-            </div>
+      <div className="relative p-5 sm:p-6 lg:p-8 max-w-6xl mx-auto w-full space-y-5">
+        {productionBlocked && (
+          <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+            {productionBlocked}
           </div>
-        </Card>
-
-        <Card>
-          <CardHeader><CardTitle>Bản thảo chương</CardTitle></CardHeader>
-          <UploadBox
-            label="Tải bản thảo (PDF/ZIP/CBZ)"
-            accept=".pdf,.zip,.cbz"
-            hint="Tuỳ chọn — file bản thảo đầy đủ của chương"
-            onChange={file => setManuscriptFile(file)}
-          />
-        </Card>
-
-        <Card>
-          <CardHeader><CardTitle>Tải lên trang nháp</CardTitle></CardHeader>
-          <MultiUploadBox label="Tải lên trang Manga" onChange={setSelectedFiles} />
-          <p className="text-xs text-muted-foreground mt-3">Tải lên trang nháp của bạn. Trợ lý sẽ làm việc từ các file này.</p>
-        </Card>
-
-        {error && (
-          <p className="text-sm text-red-600 bg-red-50 border border-red-200 rounded-xl px-3 py-2">{error}</p>
         )}
 
-        <div className="flex gap-3 justify-end">
-          <Button type="button" variant="outline" onClick={() => navigate(`/mangaka/series/${seriesId}/chapters`)}>Hủy</Button>
-          <Button type="submit" variant="primary" loading={loading} disabled={Boolean(productionBlocked)}>Tạo Chương</Button>
-        </div>
-      </form>
+        <form onSubmit={handleSubmit} className="space-y-5">
+          <div className="flex flex-wrap items-start justify-between gap-4">
+            <div className="flex items-start gap-3 min-w-0">
+              <button
+                type="button"
+                onClick={() => navigate(`/mangaka/series/${seriesId}/chapters`)}
+                className="mt-0.5 p-1.5 rounded-lg hover:bg-muted transition-colors text-muted-foreground hover:text-foreground shrink-0"
+              >
+                <ChevronLeft size={20} />
+              </button>
+              <div className="min-w-0">
+                <h1 className="text-2xl font-bold tracking-tight">Tạo chương mới</h1>
+                <p className="text-sm text-muted-foreground mt-0.5 truncate">{seriesTitle || '—'}</p>
+                {!productionBlocked && (
+                  <p className="mt-1.5 inline-flex items-center gap-1.5 text-xs text-muted-foreground">
+                    <CalendarClock size={12} />
+                    Hạn nộp có thể chỉnh — dời khi cần
+                  </p>
+                )}
+              </div>
+            </div>
+            <div className="flex items-center gap-2 shrink-0 ml-auto">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => navigate(`/mangaka/series/${seriesId}/chapters`)}
+              >
+                Hủy
+              </Button>
+              <Button type="submit" variant="primary" loading={loading} disabled={Boolean(productionBlocked)}>
+                Tạo chương
+              </Button>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 xl:grid-cols-5 gap-5 items-start">
+            {/* Cột trái: thông tin chương */}
+            <Card padding="none" className="xl:col-span-3 overflow-hidden border-border/80 shadow-sm">
+              <div className="px-5 py-4 border-b border-border/60 bg-gradient-to-br from-foreground/[0.03] to-transparent">
+                <CardTitle className="mb-0 flex items-center gap-2">
+                  <Hash size={14} className="text-muted-foreground" />
+                  Chi tiết chương
+                </CardTitle>
+              </div>
+              <div className="p-5 space-y-4">
+                <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
+                  <div className="sm:col-span-1">
+                    <label className={labelClass}>Số chương</label>
+                    <input
+                      type="number"
+                      value={form.number}
+                      onChange={update('number')}
+                      required
+                      className={inputClass}
+                      min={1}
+                    />
+                  </div>
+                  <div className="sm:col-span-3">
+                    <label className={labelClass}>Tiêu đề chương *</label>
+                    <input
+                      type="text"
+                      value={form.title}
+                      onChange={update('title')}
+                      required
+                      placeholder="Nhập tiêu đề chương…"
+                      className={inputClass}
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className={labelClass}>Mô tả</label>
+                  <textarea
+                    value={form.description}
+                    onChange={update('description')}
+                    rows={5}
+                    placeholder="Tóm tắt ngắn về nội dung chương này…"
+                    className={`${inputClass} resize-y min-h-[120px]`}
+                  />
+                </div>
+
+                <div className="rounded-xl border border-border/70 bg-muted/25 p-4 space-y-2">
+                  <label className={`${labelClass} flex items-center gap-1.5 mb-0`}>
+                    <CalendarClock size={12} />
+                    Hạn nộp *
+                  </label>
+                  <input
+                    type="date"
+                    value={form.deadline}
+                    onChange={update('deadline')}
+                    required
+                    className={`${inputClass} max-w-xs`}
+                  />
+                  <p className="text-xs text-muted-foreground leading-relaxed">
+                    {isWeekly
+                      ? 'Series weekly: gợi ý +7 ngày từ hạn gần nhất — chỉnh lại nếu cần dời hạn (sự cố, sức khỏe…).'
+                      : 'Chọn hạn nộp phù hợp tiến độ studio. Có thể dời sau khi tạo nếu cần.'}
+                  </p>
+                </div>
+              </div>
+            </Card>
+
+            {/* Cột phải: tải file */}
+            <div className="xl:col-span-2 space-y-5">
+              <Card padding="none" className="overflow-hidden border-border/80 shadow-sm">
+                <div className="px-5 py-4 border-b border-border/60 bg-gradient-to-br from-foreground/[0.03] to-transparent">
+                  <CardTitle className="mb-0 flex items-center gap-2">
+                    <FileText size={14} className="text-muted-foreground" />
+                    Bản thảo chương
+                  </CardTitle>
+                  <p className="text-xs text-muted-foreground mt-1">Tuỳ chọn — PDF / ZIP / CBZ</p>
+                </div>
+                <div className="p-4">
+                  <UploadBox
+                    label="Tải bản thảo chương"
+                    accept=".pdf,.zip,.cbz"
+                    hint="File bản thảo đầy đủ (không bắt buộc)"
+                    onChange={file => setManuscriptFile(file)}
+                  />
+                </div>
+              </Card>
+
+              <Card padding="none" className="overflow-hidden border-border/80 shadow-sm">
+                <div className="px-5 py-4 border-b border-border/60 bg-gradient-to-br from-foreground/[0.03] to-transparent">
+                  <CardTitle className="mb-0 flex items-center gap-2">
+                    <Images size={14} className="text-muted-foreground" />
+                    Trang nháp
+                  </CardTitle>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    {selectedFiles.length > 0
+                      ? `Đã chọn ${selectedFiles.length} trang`
+                      : 'Trợ lý sẽ làm việc từ các trang này'}
+                  </p>
+                </div>
+                <div className="p-4">
+                  <MultiUploadBox label="Tải lên trang manga" onChange={setSelectedFiles} />
+                </div>
+              </Card>
+            </div>
+          </div>
+
+          {error && (
+            <p className="text-sm text-red-600 bg-red-50 border border-red-200 rounded-xl px-3 py-2">{error}</p>
+          )}
+        </form>
+      </div>
     </div>
   );
 }

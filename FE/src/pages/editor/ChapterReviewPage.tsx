@@ -1,8 +1,19 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router';
-import { ArrowLeft, CheckCircle, Crosshair, MessageSquarePlus, RotateCcw, Trash2, X } from 'lucide-react';
+import {
+  ArrowLeft,
+  CheckCircle2,
+  Crosshair,
+  ImageIcon,
+  ListChecks,
+  MessageSquarePlus,
+  RotateCcw,
+  Trash2,
+  X,
+} from 'lucide-react';
+import { toast } from 'sonner';
 import { usePageMeta } from '../../hooks/usePageMeta';
-import { Card, CardContent, CardHeader, CardTitle } from '../../app/components/ui/card';
+import { useConfirm } from '../../components/ui/ConfirmDialog';
 import { Button } from '../../app/components/ui/button';
 import { Textarea } from '../../app/components/ui/textarea';
 import {
@@ -27,15 +38,31 @@ import {
 } from '../../services/annotationsApi';
 import { getChapter, getSeries, updateChapterStatus } from '../../services/seriesApi';
 import { getChapterPages, type WorkspacePageItem } from '../../services/workspaceApi';
-import type { Chapter, Series } from '../../types/domain';
+import type { Chapter, ChapterStatus, Series } from '../../types/domain';
 
 const ANNOTATION_TYPE_LABELS = Object.fromEntries(
   ANNOTATION_TYPE_OPTIONS.map(option => [option.value, option.label])
 ) as Record<string, string>;
 
+function chapterStatusStyle(status: ChapterStatus): string {
+  switch (status) {
+    case 'Approved':
+      return 'bg-emerald-100 text-emerald-800 border-emerald-200';
+    case 'Review':
+      return 'bg-sky-100 text-sky-800 border-sky-200';
+    case 'In Progress':
+      return 'bg-amber-100 text-amber-900 border-amber-200';
+    case 'Published':
+      return 'bg-violet-100 text-violet-800 border-violet-200';
+    default:
+      return 'bg-muted text-muted-foreground border-border';
+  }
+}
+
 export default function ChapterReviewPage() {
   const { chapterId = '' } = useParams();
   const navigate = useNavigate();
+  const confirm = useConfirm();
   const { setPageMeta } = usePageMeta();
 
   const [series, setSeries] = useState<Series | null>(null);
@@ -166,6 +193,7 @@ export default function ChapterReviewPage() {
       setComment('');
       clearRegion();
       setSelectedAnnotationId(created.id);
+      toast.success('Đã thêm annotation trên trang');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Không thể tạo annotation.');
     } finally {
@@ -179,20 +207,74 @@ export default function ChapterReviewPage() {
       await deletePageAnnotation(id);
       setAnnotations(current => current.filter(item => item.id !== id));
       if (selectedAnnotationId === id) setSelectedAnnotationId(null);
+      toast.success('Đã xóa annotation');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Không thể xóa annotation.');
     }
   };
 
-  const handleChapterStatus = async (status: string) => {
+  const handleApprove = async () => {
     if (!chapter) return;
+    const ok = await confirm({
+      title: 'Duyệt chapter này?',
+      variant: 'success',
+      message: (
+        <>
+          Xác nhận duyệt{' '}
+          <span className="font-semibold text-foreground">{chapter.title}</span>
+          . Sau khi duyệt bạn sẽ quay lại danh sách Chapter Reviews.
+        </>
+      ),
+      confirmText: 'Duyệt và quay lại',
+      cancelText: 'Ở lại',
+    });
+    if (!ok) return;
+
     setStatusUpdating(true);
     setError('');
     try {
-      const updated = await updateChapterStatus(chapter.id, status);
+      const updated = await updateChapterStatus(chapter.id, 'completed');
       setChapter(updated);
+      toast.success('Đã duyệt chapter', {
+        description: `${updated.title} · ${formatChapterStatusLabel(updated.status)}`,
+      });
+      navigate('/editor/reviews');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Không thể duyệt chapter.');
+      toast.error('Không thể duyệt chapter');
+    } finally {
+      setStatusUpdating(false);
+    }
+  };
+
+  const handleRequestRevision = async () => {
+    if (!chapter) return;
+    const ok = await confirm({
+      title: 'Yêu cầu mangaka sửa?',
+      variant: 'submit',
+      message: (
+        <>
+          Chapter sẽ chuyển sang{' '}
+          <span className="font-semibold text-foreground">Đang thực hiện</span>. Bạn có thể tiếp tục annotation
+          trên trang.
+        </>
+      ),
+      confirmText: 'Gửi yêu cầu sửa',
+      cancelText: 'Hủy',
+    });
+    if (!ok) return;
+
+    setStatusUpdating(true);
+    setError('');
+    try {
+      const updated = await updateChapterStatus(chapter.id, 'in_progress');
+      setChapter(updated);
+      toast.success('Đã gửi yêu cầu sửa', {
+        description: 'Trạng thái chapter: Đang thực hiện',
+      });
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Không thể cập nhật trạng thái chapter.');
+      toast.error('Không thể gửi yêu cầu sửa');
     } finally {
       setStatusUpdating(false);
     }
@@ -214,41 +296,77 @@ export default function ChapterReviewPage() {
   }
 
   const pageImage = selectedPage?.imageUrl || selectedPage?.thumbnailUrl;
+  const isApproved = chapter.status === 'Approved' || chapter.status === 'Published';
+  const selectedIndex = Math.max(0, pages.findIndex(p => p.id === selectedPage?.id));
 
   return (
-    <div className="flex h-[calc(100vh-3.5rem)] flex-col">
-      <div className="flex items-center justify-between gap-3 border-b px-4 py-3">
-        <div className="flex items-center gap-3 min-w-0">
-          <Button variant="ghost" size="sm" onClick={() => navigate('/editor/reviews')}>
-            <ArrowLeft className="h-4 w-4" />
-          </Button>
-          <div className="min-w-0">
-            <h1 className="font-semibold truncate">{chapter.title}</h1>
-            <p className="text-xs text-muted-foreground truncate">
-              {series.title} · Chương {chapter.number} · {formatChapterStatusLabel(chapter.status)}
-            </p>
+    <div className="flex h-[calc(100vh-3.5rem)] flex-col bg-background">
+      <header className="shrink-0 border-b bg-gradient-to-r from-card via-card to-primary/[0.04] px-4 py-3">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="flex items-start gap-3 min-w-0">
+            <Button
+              variant="ghost"
+              size="sm"
+              className="mt-0.5 shrink-0"
+              onClick={() => navigate('/editor/reviews')}
+            >
+              <ArrowLeft className="h-4 w-4" />
+            </Button>
+            <div className="min-w-0 space-y-1.5">
+              <div className="flex flex-wrap items-center gap-2">
+                <h1 className="text-lg font-semibold truncate">{chapter.title}</h1>
+                <span
+                  className={`inline-flex items-center rounded-full border px-2.5 py-0.5 text-[11px] font-semibold ${chapterStatusStyle(chapter.status)}`}
+                >
+                  {formatChapterStatusLabel(chapter.status)}
+                </span>
+              </div>
+              <p className="text-xs text-muted-foreground truncate">
+                {series.title} · Chương {chapter.number}
+                {pages.length > 0 ? ` · ${pages.length} trang` : ''}
+                {selectedPage ? ` · đang xem trang ${selectedPage.pageNumber}` : ''}
+              </p>
+            </div>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2 shrink-0">
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={statusUpdating || chapter.status === 'In Progress'}
+              onClick={handleRequestRevision}
+            >
+              <RotateCcw className="h-4 w-4 mr-1" />
+              {chapter.status === 'In Progress' ? 'Đang chờ sửa' : 'Yêu cầu sửa'}
+            </Button>
+            {!isApproved ? (
+              <Button size="sm" disabled={statusUpdating} onClick={handleApprove}>
+                <CheckCircle2 className="h-4 w-4 mr-1" />
+                Duyệt chapter
+              </Button>
+            ) : (
+              <Button size="sm" variant="secondary" onClick={() => navigate('/editor/reviews')}>
+                <ListChecks className="h-4 w-4 mr-1" />
+                Về danh sách review
+              </Button>
+            )}
           </div>
         </div>
-        <div className="flex gap-2 shrink-0">
-          <Button
-            variant="outline"
-            size="sm"
-            disabled={statusUpdating}
-            onClick={() => handleChapterStatus('in_progress')}
-          >
-            <RotateCcw className="h-4 w-4 mr-1" />
-            Yêu cầu sửa
-          </Button>
-          <Button
-            size="sm"
-            disabled={statusUpdating}
-            onClick={() => handleChapterStatus('completed')}
-          >
-            <CheckCircle className="h-4 w-4 mr-1" />
-            Duyệt chapter
-          </Button>
-        </div>
-      </div>
+
+        {isApproved && (
+          <div className="mt-3 flex flex-wrap items-center justify-between gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-3.5 py-2.5 text-sm text-emerald-900">
+            <span className="inline-flex items-center gap-2 font-medium">
+              <CheckCircle2 className="h-4 w-4 shrink-0" />
+              Chapter đã được duyệt. Có thể yêu cầu sửa lại nếu cần, hoặc quay về danh sách.
+            </span>
+          </div>
+        )}
+        {chapter.status === 'In Progress' && (
+          <div className="mt-3 rounded-xl border border-amber-200 bg-amber-50 px-3.5 py-2.5 text-sm text-amber-950">
+            Đã yêu cầu mangaka chỉnh sửa — annotation trên trang vẫn dùng được bình thường.
+          </div>
+        )}
+      </header>
 
       {error && (
         <div className="mx-4 mt-3 rounded-xl border border-red-200 bg-red-50 px-4 py-2 text-sm text-red-700">
@@ -256,30 +374,57 @@ export default function ChapterReviewPage() {
         </div>
       )}
 
-      <div className="grid flex-1 min-h-0 grid-cols-1 lg:grid-cols-[180px_1fr_320px]">
-        <aside className="border-b lg:border-b-0 lg:border-r overflow-y-auto p-3 space-y-2">
-          <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground px-1">Trang</p>
+      <div className="grid flex-1 min-h-0 grid-cols-1 lg:grid-cols-[168px_minmax(0,1fr)_280px]">
+        <aside className="border-b lg:border-b-0 lg:border-r overflow-y-auto p-2.5 space-y-2 bg-muted/20">
+          <div className="flex items-center justify-between px-1 pb-1">
+            <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Trang</p>
+            <span className="text-[11px] text-muted-foreground tabular-nums">
+              {pages.length ? `${selectedIndex + 1}/${pages.length}` : '0'}
+            </span>
+          </div>
           {pages.length === 0 ? (
-            <p className="text-xs text-muted-foreground px-1">Chưa có trang manga.</p>
+            <div className="rounded-xl border border-dashed px-3 py-8 text-center text-xs text-muted-foreground">
+              Chưa có trang manga.
+            </div>
           ) : (
-            pages.map(page => (
-              <button
-                key={page.id}
-                type="button"
-                onClick={() => setSelectedPageId(page.id)}
-                className={`w-full rounded-lg border p-2 text-left text-sm transition-colors ${
-                  selectedPage?.id === page.id ? 'border-primary bg-primary/5' : 'border-border hover:bg-muted/40'
-                }`}
-              >
-                Trang {page.pageNumber}
-                <span className="block text-xs text-muted-foreground">{formatPageStatusLabel(page.status)}</span>
-              </button>
-            ))
+            pages.map(page => {
+              const thumb = page.thumbnailUrl || page.imageUrl;
+              const active = selectedPage?.id === page.id;
+              return (
+                <button
+                  key={page.id}
+                  type="button"
+                  onClick={() => setSelectedPageId(page.id)}
+                  className={`w-full rounded-xl border text-left transition-all overflow-hidden ${
+                    active
+                      ? 'border-primary bg-card shadow-sm ring-1 ring-primary/20'
+                      : 'border-border/80 bg-card/60 hover:bg-card hover:border-border'
+                  }`}
+                >
+                  <div className="aspect-[3/2] bg-muted/60 relative">
+                    {thumb ? (
+                      <img src={thumb} alt="" className="absolute inset-0 h-full w-full object-cover" />
+                    ) : (
+                      <div className="absolute inset-0 flex items-center justify-center text-muted-foreground">
+                        <ImageIcon size={18} />
+                      </div>
+                    )}
+                    <span className="absolute left-1.5 top-1.5 rounded-md bg-black/55 px-1.5 py-0.5 text-[10px] font-semibold text-white">
+                      {page.pageNumber}
+                    </span>
+                  </div>
+                  <div className="px-2.5 py-2">
+                    <p className="text-sm font-medium">Trang {page.pageNumber}</p>
+                    <p className="text-[11px] text-muted-foreground">{formatPageStatusLabel(page.status)}</p>
+                  </div>
+                </button>
+              );
+            })
           )}
         </aside>
 
-        <main className="min-h-[280px] lg:min-h-0 bg-[#2B2B2B] flex flex-col items-center justify-center p-4 overflow-auto gap-3">
-          <div className="flex items-center gap-2 self-start">
+        <main className="min-h-[280px] lg:min-h-0 flex flex-col bg-[#1f1f1f]">
+          <div className="flex flex-wrap items-center gap-2 px-3 py-2.5 border-b border-white/10 bg-black/25">
             <Button
               variant={isSelecting ? 'default' : 'outline'}
               size="sm"
@@ -288,17 +433,21 @@ export default function ChapterReviewPage() {
               disabled={!pageImage}
             >
               <Crosshair className="h-4 w-4 mr-1" />
-              {isSelecting ? 'Đang chọn vùng...' : 'Chọn vùng trên trang'}
+              {isSelecting ? 'Đang chọn vùng…' : 'Chọn vùng'}
             </Button>
             {region && (
               <Button variant="ghost" size="sm" className="text-white hover:bg-white/10" onClick={clearRegion}>
                 <X className="h-4 w-4 mr-1" />
-                Xóa vùng
+                Bỏ vùng
               </Button>
             )}
+            <span className="text-xs text-white/50 ml-auto hidden sm:inline">
+              {region ? 'Đã chọn vùng — nhập nhận xét bên phải' : 'Kéo khung trên ảnh để gắn annotation'}
+            </span>
           </div>
 
-          <PageRegionCanvas
+          <div className="flex-1 min-h-0 flex items-center justify-center p-2 sm:p-3 overflow-hidden">
+            <PageRegionCanvas
               ref={canvasRef}
               imageUrl={pageImage}
               alt={`Trang ${selectedPage?.pageNumber ?? ''}`}
@@ -314,93 +463,96 @@ export default function ChapterReviewPage() {
               onMarkerClick={setSelectedAnnotationId}
               emptyState="Chưa có ảnh trang để review."
             />
+          </div>
         </main>
 
-        <aside className="border-t lg:border-t-0 lg:border-l overflow-y-auto p-4 space-y-4">
-          <Card>
-            <CardHeader className="pb-3">
-              <CardTitle className="text-sm">Thêm annotation</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              <p className="text-xs text-muted-foreground">
-                {region
-                  ? 'Đã chọn vùng trên trang — nhập nhận xét và lưu.'
-                  : 'Bấm "Chọn vùng trên trang" và kéo khung trên ảnh trước khi thêm.'}
+        <aside className="border-t lg:border-t-0 lg:border-l overflow-y-auto p-4 space-y-4 bg-card">
+          <section className="rounded-2xl border bg-background/80 p-4 space-y-3 shadow-sm">
+            <div>
+              <h2 className="text-sm font-semibold">Annotation</h2>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                {region ? 'Vùng đã chọn — nhập nhận xét rồi lưu.' : 'Chọn vùng trên ảnh trước khi thêm.'}
               </p>
-              <Select value={annotationType} onValueChange={setAnnotationType}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Loại annotation" />
-                </SelectTrigger>
-                <SelectContent>
-                  {ANNOTATION_TYPE_OPTIONS.map(option => (
-                    <SelectItem key={option.value} value={option.value}>
-                      {option.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <Textarea
-                value={comment}
-                onChange={event => setComment(event.target.value)}
-                rows={4}
-                placeholder="Nhận xét cho vùng đã chọn..."
-              />
-              <Button
-                className="w-full"
-                size="sm"
-                disabled={!comment.trim() || !region || saving || !selectedPage}
-                onClick={handleAddAnnotation}
-              >
-                <MessageSquarePlus className="h-4 w-4 mr-1" />
-                Thêm annotation
-              </Button>
-            </CardContent>
-          </Card>
+            </div>
+            <Select value={annotationType} onValueChange={setAnnotationType}>
+              <SelectTrigger>
+                <SelectValue placeholder="Loại annotation" />
+              </SelectTrigger>
+              <SelectContent>
+                {ANNOTATION_TYPE_OPTIONS.map(option => (
+                  <SelectItem key={option.value} value={option.value}>
+                    {option.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Textarea
+              value={comment}
+              onChange={event => setComment(event.target.value)}
+              rows={3}
+              placeholder="Nhận xét cho vùng đã chọn..."
+              className="resize-none"
+            />
+            <Button
+              className="w-full"
+              size="sm"
+              disabled={!comment.trim() || !region || saving || !selectedPage}
+              onClick={handleAddAnnotation}
+            >
+              <MessageSquarePlus className="h-4 w-4 mr-1" />
+              {saving ? 'Đang lưu…' : 'Thêm annotation'}
+            </Button>
+          </section>
 
-          <div>
-            <p className="text-sm font-semibold mb-2">
-              Annotations ({annotations.length})
-            </p>
+          <section className="space-y-2">
+            <div className="flex items-center justify-between px-0.5">
+              <h2 className="text-sm font-semibold">Danh sách</h2>
+              <span className="text-xs text-muted-foreground tabular-nums">{annotations.length}</span>
+            </div>
             {annotations.length === 0 ? (
-              <p className="text-xs text-muted-foreground">Chưa có annotation trên trang này.</p>
+              <div className="rounded-xl border border-dashed px-3 py-6 text-center text-xs text-muted-foreground">
+                Chưa có annotation trên trang này.
+              </div>
             ) : (
               <div className="space-y-2">
                 {annotations.map(item => (
-                  <Card
+                  <div
                     key={item.id}
-                    className={selectedAnnotationId === item.id ? 'border-primary shadow-sm' : ''}
+                    className={`rounded-xl border px-3 py-2.5 transition-colors ${
+                      selectedAnnotationId === item.id
+                        ? 'border-primary bg-primary/5'
+                        : 'border-border bg-background/70 hover:bg-muted/30'
+                    }`}
                   >
-                    <CardContent className="p-3 space-y-2">
-                      <div className="flex items-start justify-between gap-2">
-                        <button
-                          type="button"
-                          className="text-left flex-1 min-w-0"
-                          onClick={() => setSelectedAnnotationId(item.id)}
-                        >
-                          <p className="text-xs font-semibold uppercase text-primary">
-                            {ANNOTATION_TYPE_LABELS[item.annotationType ?? 'content'] ?? item.annotationType ?? 'content'}
-                          </p>
-                          <p className="text-sm mt-1">{item.content || '—'}</p>
-                          <p className="text-xs text-muted-foreground mt-1">
-                            {item.createdByName ?? 'Editor'}
-                            {parseAnnotationShape(item.shape) ? ' · có vùng đánh dấu' : ''}
-                          </p>
-                        </button>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          className="text-destructive shrink-0"
-                          onClick={() => handleDeleteAnnotation(item.id)}
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
-                      </div>
-                    </CardContent>
-                  </Card>
+                    <div className="flex items-start justify-between gap-2">
+                      <button
+                        type="button"
+                        className="text-left flex-1 min-w-0"
+                        onClick={() => setSelectedAnnotationId(item.id)}
+                      >
+                        <p className="text-[11px] font-semibold uppercase tracking-wide text-primary">
+                          {ANNOTATION_TYPE_LABELS[item.annotationType ?? 'content'] ?? item.annotationType ?? 'content'}
+                        </p>
+                        <p className="text-sm mt-1 leading-snug">{item.content || '—'}</p>
+                        <p className="text-[11px] text-muted-foreground mt-1">
+                          {item.createdByName ?? 'Editor'}
+                          {parseAnnotationShape(item.shape) ? ' · có vùng' : ''}
+                        </p>
+                      </button>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="text-destructive shrink-0 h-8 w-8 p-0"
+                        onClick={() => handleDeleteAnnotation(item.id)}
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  </div>
                 ))}
               </div>
             )}
-          </div>
+          </section>
         </aside>
       </div>
     </div>

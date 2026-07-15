@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router';
-import { ChevronLeft, CalendarDays, CalendarPlus, BookOpen, User, Eye } from 'lucide-react';
+import { ChevronLeft, CalendarDays, CalendarPlus, BookOpen, User, Eye, UserRoundPen } from 'lucide-react';
 import { usePageMeta } from '../../hooks/usePageMeta';
 import { Button } from '../../app/components/ui/button';
 import { Badge } from '../../app/components/ui/badge';
@@ -15,7 +15,13 @@ import {
   type PublishingScheduleItem,
   type SeriesTeam,
 } from '../../services/seriesApi';
-import { getBoardVoteProgress, type BoardVoteProgress } from '../../services/boardApi';
+import {
+  getBoardVoteProgress,
+  assignSeriesEditor,
+  clearSeriesEditor,
+  type BoardVoteProgress,
+} from '../../services/boardApi';
+import { getEditors, type ProfileSummary } from '../../services/profilesApi';
 import SeriesTeamCard from '../../components/series/SeriesTeamCard';
 
 function statusLabel(status: SeriesStatus): { text: string; className: string } {
@@ -40,8 +46,21 @@ export default function ApprovedSeriesDetailPage() {
   const [schedules, setSchedules] = useState<PublishingScheduleItem[]>([]);
   const [boardProgress, setBoardProgress] = useState<BoardVoteProgress | null>(null);
   const [team, setTeam] = useState<SeriesTeam | null>(null);
+  const [editors, setEditors] = useState<ProfileSummary[]>([]);
+  const [selectedEditorId, setSelectedEditorId] = useState('');
+  const [assigning, setAssigning] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+
+  const reloadTeamAndSeries = async (id: string) => {
+    const [s, teamData] = await Promise.all([
+      getSeries(id),
+      getSeriesTeam(id).catch(() => null),
+    ]);
+    setSeries(s);
+    setTeam(teamData);
+    setSelectedEditorId(s.editorId ?? '');
+  };
 
   useEffect(() => {
     if (!seriesId) return;
@@ -52,13 +71,16 @@ export default function ApprovedSeriesDetailPage() {
       getSeriesSchedules(seriesId).catch(() => []),
       getBoardVoteProgress(seriesId).catch(() => null),
       getSeriesTeam(seriesId).catch(() => null),
+      getEditors().catch(() => []),
     ])
-      .then(([s, sc, progress, teamData]) => {
+      .then(([s, sc, progress, teamData, editorList]) => {
         if (!isActive) return;
         setSeries(s);
         setSchedules(sc);
         setBoardProgress(progress);
         setTeam(teamData);
+        setEditors(editorList);
+        setSelectedEditorId(s.editorId ?? '');
         setPageMeta({
           title: s.title,
           breadcrumb: [
@@ -78,6 +100,34 @@ export default function ApprovedSeriesDetailPage() {
     };
   }, [seriesId, setPageMeta]);
 
+  const handleAssignEditor = async () => {
+    if (!series || !selectedEditorId) return;
+    setAssigning(true);
+    setError('');
+    try {
+      await assignSeriesEditor(series.id, selectedEditorId);
+      await reloadTeamAndSeries(series.id);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Không thể gán editor.');
+    } finally {
+      setAssigning(false);
+    }
+  };
+
+  const handleClearEditor = async () => {
+    if (!series?.editorId) return;
+    setAssigning(true);
+    setError('');
+    try {
+      await clearSeriesEditor(series.id);
+      await reloadTeamAndSeries(series.id);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Không thể hủy gán editor.');
+    } finally {
+      setAssigning(false);
+    }
+  };
+
   if (loading) {
     return <div className="p-6 text-sm text-muted-foreground">Đang tải...</div>;
   }
@@ -96,6 +146,10 @@ export default function ApprovedSeriesDetailPage() {
   )[0];
   const canScheduleStatus = canSchedulePublishing(series.status);
   const canManageSchedule = canScheduleStatus && (boardProgress?.canManagePublishingSchedule ?? false);
+  const canAssignEditor = series.status === 'Approved'
+    || series.status === 'In Progress'
+    || series.status === 'Completed'
+    || series.status === 'Published';
 
   return (
     <div className="flex flex-1 min-h-0 flex-col overflow-y-auto lg:flex-row lg:overflow-hidden">
@@ -189,10 +243,73 @@ export default function ApprovedSeriesDetailPage() {
         </Card>
       </div>
 
-      <aside className="shrink-0 w-full lg:w-[min(360px,34vw)] border-t lg:border-t-0 lg:border-l border-border p-6 space-y-5 bg-background">
-        <div className="rounded-2xl border border-border overflow-hidden aspect-[280/380] max-h-[420px]">
-          <img src={series.coverUrl} alt={series.title} className="w-full h-full object-cover" />
+      <aside className="shrink-0 w-full lg:w-[min(360px,34vw)] lg:min-h-0 lg:overflow-y-auto border-t lg:border-t-0 lg:border-l border-border p-6 space-y-5 bg-background">
+        <div className="w-full rounded-2xl border border-border overflow-hidden bg-muted">
+          <img
+            src={series.coverUrl}
+            alt={series.title}
+            className="block w-full h-64 object-cover"
+          />
         </div>
+
+        <section className="rounded-2xl border border-border bg-card shadow-sm px-5 py-5 space-y-4">
+          <div className="space-y-1.5">
+            <h3 className="text-sm font-semibold text-foreground tracking-wide uppercase">
+              Phân công Editor
+            </h3>
+            <p className="text-xs leading-relaxed text-muted-foreground">
+              Hội đồng gán biên tập viên theo dõi tiến độ sản xuất của mangaka.
+            </p>
+          </div>
+
+          {series.editorId && series.editorName && (
+            <div className="rounded-xl bg-muted/50 px-3.5 py-2.5 text-sm">
+              Hiện tại:{' '}
+              <span className="font-semibold text-foreground">{series.editorName}</span>
+            </div>
+          )}
+
+          {canAssignEditor ? (
+            <div className="space-y-3">
+              <label className="block space-y-1.5">
+                <span className="text-xs font-medium text-muted-foreground">Biên tập viên</span>
+                <select
+                  className="w-full rounded-xl border border-border bg-background px-3.5 py-2.5 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
+                  value={selectedEditorId}
+                  onChange={e => setSelectedEditorId(e.target.value)}
+                >
+                  <option value="">Chọn editor...</option>
+                  {editors.map(editor => (
+                    <option key={editor.id} value={editor.id}>{editor.name}</option>
+                  ))}
+                </select>
+              </label>
+              <Button
+                className="w-full"
+                disabled={!selectedEditorId || assigning || selectedEditorId === series.editorId}
+                onClick={handleAssignEditor}
+              >
+                <UserRoundPen className="h-4 w-4 mr-2" />
+                Phân Công
+              </Button>
+              {series.editorId && (
+                <Button
+                  variant="outline"
+                  className="w-full"
+                  disabled={assigning}
+                  onClick={handleClearEditor}
+                >
+                  Hủy phân công
+                </Button>
+              )}
+            </div>
+          ) : (
+            <p className="text-sm text-muted-foreground">Series chưa ở giai đoạn có thể gán editor.</p>
+          )}
+          {editors.length === 0 && (
+            <p className="text-xs text-muted-foreground">Không có editor khả dụng trong hệ thống.</p>
+          )}
+        </section>
 
         <Card>
           <CardHeader>
@@ -208,7 +325,7 @@ export default function ApprovedSeriesDetailPage() {
             )}
             {!boardProgress?.hasLead && (
               <p className="text-xs text-muted-foreground">
-                Chưa có Lead — Admin gán Lead trong 3 board reviewer.
+                Chưa có Board Lead — Admin gán tại Cài đặt Admin.
               </p>
             )}
             <Button
@@ -239,7 +356,7 @@ export default function ApprovedSeriesDetailPage() {
               </p>
             ) : (
               <p className="text-sm text-muted-foreground">
-                Chờ editor đánh dấu hoàn thành sản xuất trước khi lên lịch xuất bản.
+                Series chưa đủ điều kiện lên lịch xuất bản.
               </p>
             )}
             {canScheduleStatus && !canManageSchedule && schedules.length > 0 && (

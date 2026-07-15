@@ -1,8 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate, useLocation } from 'react-router';
-import { ArrowLeft, BookOpen, FileText, BarChart2, Send, Plus, UserPlus, CheckCircle2, Pencil, FileDown } from 'lucide-react';
+import { ArrowLeft, BookOpen, FileText, BarChart2, Send, Plus, CheckCircle2, Pencil, FileDown } from 'lucide-react';
 import { getStoredUser } from '../../services/authApi';
-import { getEditors, type ProfileSummary } from '../../services/profilesApi';
 import { Tabs, TabsList, Tab, TabPanel } from '../../components/ui/Tabs';
 import Badge from '../../components/ui/Badge';
 import Button from '../../components/ui/Button';
@@ -26,10 +25,7 @@ import {
   SERIES_PRODUCTION_LOCK_HINT,
   SERIES_SUBMISSION_STATUS_HINT,
   submitSeriesForReview,
-  inviteSeriesEditor,
-  getSentEditorInvitations,
   markSeriesCompleted,
-  type SeriesEditorInvitation,
   type SeriesStats,
   type SeriesTeam,
 } from '../../services/seriesApi';
@@ -50,10 +46,6 @@ export default function SeriesDetailPage() {
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [completing, setCompleting] = useState(false);
-  const [invitingEditor, setInvitingEditor] = useState(false);
-  const [pendingEditorInvite, setPendingEditorInvite] = useState<SeriesEditorInvitation | null>(null);
-  const [editors, setEditors] = useState<ProfileSummary[]>([]);
-  const [selectedEditorId, setSelectedEditorId] = useState('');
   const [error, setError] = useState('');
   const [submissionStats, setSubmissionStats] = useState<SeriesStats | null>(null);
   const [submissionStatsLoading, setSubmissionStatsLoading] = useState(false);
@@ -67,11 +59,12 @@ export default function SeriesDetailPage() {
     : false;
   const canProduce = series ? canMangakaProduceOnSeries(series.status) : false;
   const productionLockHint = series ? SERIES_PRODUCTION_LOCK_HINT[series.status] : undefined;
-  const canInviteEditor = isMangakaView && series && canProduce && !series.editorId && !pendingEditorInvite;
   const isAssignedEditor = Boolean(isEditorView && series && user && series.editorId === user.id);
   const canMarkComplete = isAssignedEditor && canProduce;
   const canEditProfile = isMangakaView && series && (series.status === 'Draft' || series.status === 'Cancelled');
-  const proposalChapter = chapters.find(c => c.number === 0);
+  const waitingForBoardEditor = isMangakaView && series && canProduce && !series.editorId;
+  const proposalChapter = chapters.find(c => c.number === 0) ?? chapters.find(c => Boolean(c.description?.trim()));
+  const manuscriptUrl = proposalChapter?.description?.trim() || null;
   const productionChapters = chapters.filter(c => c.number > 0);
 
   useEffect(() => {
@@ -170,48 +163,6 @@ export default function SeriesDetailPage() {
   }, [seriesId, series?.status, tab]);
 
   useEffect(() => {
-    if (!canInviteEditor) {
-      setEditors([]);
-      return;
-    }
-
-    let active = true;
-    getEditors()
-      .then(items => {
-        if (active) setEditors(items);
-      })
-      .catch(() => {
-        if (active) setEditors([]);
-      });
-
-    return () => {
-      active = false;
-    };
-  }, [canInviteEditor]);
-
-  useEffect(() => {
-    if (!isMangakaView || !seriesId) {
-      setPendingEditorInvite(null);
-      return;
-    }
-
-    let active = true;
-    getSentEditorInvitations()
-      .then(items => {
-        if (!active) return;
-        const pending = items.find(item => item.seriesId === seriesId && item.status === 'pending') ?? null;
-        setPendingEditorInvite(pending);
-      })
-      .catch(() => {
-        if (active) setPendingEditorInvite(null);
-      });
-
-    return () => {
-      active = false;
-    };
-  }, [isMangakaView, seriesId, series?.editorId]);
-
-  useEffect(() => {
     if (!seriesId || !series || tab !== 'ranking' || !showRankingTab) {
       setRanking(null);
       return;
@@ -235,34 +186,22 @@ export default function SeriesDetailPage() {
     };
   }, [seriesId, series?.status, tab, showRankingTab]);
 
-  const handleInviteEditor = async () => {
-    if (!series || !selectedEditorId) return;
-    setInvitingEditor(true);
-    setError('');
-    try {
-      const invitation = await inviteSeriesEditor(series.id, selectedEditorId);
-      setPendingEditorInvite(invitation);
-      setSelectedEditorId('');
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Không thể gửi lời mời editor.');
-    } finally {
-      setInvitingEditor(false);
-    }
-  };
-
   const handleMarkComplete = async () => {
     if (!series) return;
     const confirmed = await confirm({
-      title: 'Hoàn thành sản xuất',
+      title: 'Gắn nhãn đóng sản xuất',
       variant: 'success',
       message: (
         <>
-          Xác nhận series <span className="font-semibold text-foreground">{series.title}</span> đã hoàn thành?
+          Gắn nhãn đóng sản xuất cho{' '}
+          <span className="font-semibold text-foreground">{series.title}</span>?
           <br />
-          <span className="text-xs">Hội đồng chỉ có thể lên lịch xuất bản sau bước này.</span>
+          <span className="text-xs">
+            Đây chỉ là nhãn trạng thái — vẫn tạo thêm chương và board vẫn dời lịch XB được khi có sự cố.
+          </span>
         </>
       ),
-      confirmText: 'Đánh dấu hoàn thành',
+      confirmText: 'Gắn nhãn',
     });
     if (!confirmed) return;
 
@@ -351,17 +290,17 @@ export default function SeriesDetailPage() {
 
       {isEditorView && series && !series.editorId && (
         <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
-          Bạn chưa được gán phụ trách series này. Kiểm tra{' '}
-          <button type="button" className="font-semibold underline" onClick={() => navigate('/editor/invitations')}>
-            lời mời phụ trách
+          Bạn chưa được hội đồng phân công phụ trách series này. Series được gán sẽ xuất hiện ở{' '}
+          <button type="button" className="font-semibold underline" onClick={() => navigate('/editor/series')}>
+            Series phụ trách
           </button>
-          {' '}từ mangaka.
+          .
         </div>
       )}
 
-      {pendingEditorInvite && (
+      {waitingForBoardEditor && (
         <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
-          Đã gửi lời mời tới <span className="font-semibold">{pendingEditorInvite.editorName}</span> — chờ editor chấp nhận.
+          Series đã được duyệt — hội đồng sẽ phân công biên tập viên theo dõi tiến độ sản xuất.
         </div>
       )}
 
@@ -410,7 +349,7 @@ export default function SeriesDetailPage() {
               )}
               {canMarkComplete && (
                 <Button variant="primary" size="sm" loading={completing} onClick={handleMarkComplete}>
-                  <CheckCircle2 size={14} /> Hoàn thành sản xuất
+                  <CheckCircle2 size={14} /> Đóng sản xuất
                 </Button>
               )}
               {isMangakaView && (
@@ -446,100 +385,112 @@ export default function SeriesDetailPage() {
         </TabsList>
 
         <TabPanel value="overview" className="mt-5">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-            <Card>
-              <CardHeader><CardTitle>Tóm tắt</CardTitle></CardHeader>
-              <p className="text-sm text-foreground/80 leading-relaxed">{series.synopsis}</p>
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-5 items-start">
+            {/* Cột trái: tóm tắt + chi tiết + bản thảo */}
+            <Card padding="none" className="overflow-hidden border-border/80 shadow-sm">
+              <div className="px-5 py-4 border-b border-border/60 bg-gradient-to-br from-foreground/[0.03] to-transparent">
+                <CardTitle className="mb-0">Nội dung series</CardTitle>
+              </div>
+
+              <div className="px-5 py-4 space-y-5">
+                <section>
+                  <div className="flex items-center gap-2 mb-2.5">
+                    <span className="h-3.5 w-1 rounded-full bg-primary shrink-0" />
+                    <h4 className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+                      Tóm tắt
+                    </h4>
+                  </div>
+                  <p className="text-sm text-foreground/85 leading-relaxed whitespace-pre-line rounded-xl bg-muted/30 px-3.5 py-3 min-h-[4.5rem]">
+                    {series.synopsis?.trim() || 'Chưa có tóm tắt.'}
+                  </p>
+                </section>
+
+                <section className="pt-1">
+                  <div className="flex items-center gap-2 mb-2.5">
+                    <span className="h-3.5 w-1 rounded-full bg-foreground/35 shrink-0" />
+                    <h4 className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+                      Chi tiết series
+                    </h4>
+                  </div>
+                  <dl className="rounded-xl border border-border/70 divide-y divide-border/60 overflow-hidden">
+                    {[
+                      { label: 'Trạng thái', value: <Badge status={series.status} /> },
+                      { label: 'Thể loại', value: series.genre },
+                      { label: 'Đối tượng độc giả', value: series.targetAudience },
+                      { label: 'Lịch xuất bản', value: series.publishingType },
+                      { label: 'Tổng số chương', value: series.chaptersCount },
+                      { label: 'Ngày tạo', value: series.createdAt },
+                    ].map(({ label, value }) => (
+                      <div key={label} className="flex justify-between items-center gap-3 text-sm px-3.5 py-2.5 bg-card">
+                        <dt className="text-muted-foreground font-medium">{label}</dt>
+                        <dd className="font-semibold text-right">{value}</dd>
+                      </div>
+                    ))}
+                  </dl>
+                </section>
+
+                <section>
+                  <div className="flex items-center gap-2 mb-2.5">
+                    <span className="h-3.5 w-1 rounded-full bg-amber-500 shrink-0" />
+                    <h4 className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+                      Bản thảo
+                    </h4>
+                  </div>
+                  {manuscriptUrl ? (
+                    <div className="rounded-xl border border-dashed border-amber-300/70 bg-amber-50/50 px-3.5 py-3 flex flex-wrap items-center justify-between gap-3">
+                      <div className="min-w-0 flex items-center gap-2.5">
+                        <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
+                          <FileText size={16} />
+                        </span>
+                        <div className="min-w-0">
+                          <p className="text-sm font-semibold truncate">File bản thảo</p>
+                          <p className="text-xs text-muted-foreground">Đính kèm khi mangaka gửi duyệt</p>
+                        </div>
+                      </div>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <a
+                          href={manuscriptUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="inline-flex items-center gap-1.5 rounded-lg border border-primary/25 bg-primary/5 px-3 py-1.5 text-sm font-semibold text-primary hover:bg-primary/10"
+                        >
+                          <FileDown size={14} />
+                          Tải bản thảo
+                        </a>
+                        {canEditProfile && (
+                          <Button variant="outline" size="sm" onClick={() => navigate(`/mangaka/series/${series.id}/edit`)}>
+                            Thay file
+                          </Button>
+                        )}
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="rounded-xl border border-dashed border-border bg-muted/25 px-3.5 py-3.5 text-sm text-muted-foreground">
+                      {canEditProfile ? (
+                        <div className="flex flex-wrap items-center justify-between gap-3">
+                          <span>Chưa có file — cần tải trước khi gửi duyệt.</span>
+                          <Button variant="outline" size="sm" onClick={() => navigate(`/mangaka/series/${series.id}/edit`)}>
+                            Tải bản thảo
+                          </Button>
+                        </div>
+                      ) : (
+                        'Không có file đính kèm'
+                      )}
+                    </div>
+                  )}
+                </section>
+              </div>
             </Card>
-            {series.mainCharacters && (
-              <Card>
-                <CardHeader><CardTitle>Nhân vật chính</CardTitle></CardHeader>
-                <p className="text-sm text-foreground/80 leading-relaxed whitespace-pre-line">{series.mainCharacters}</p>
-              </Card>
-            )}
-            <Card>
-              <CardHeader><CardTitle>Chi tiết Series</CardTitle></CardHeader>
-              <dl className="space-y-3">
-                {[
-                  { label: 'Trạng thái', value: <Badge status={series.status} /> },
-                  { label: 'Thể loại', value: series.genre },
-                  { label: 'Đối tượng độc giả', value: series.targetAudience },
-                  { label: 'Lịch xuất bản', value: series.publishingType },
-                  { label: 'Tổng số chương', value: series.chaptersCount },
-                  { label: 'Ngày tạo', value: series.createdAt },
-                ].map(({ label, value }) => (
-                  <div key={label} className="flex justify-between items-center text-sm">
-                    <dt className="text-muted-foreground font-medium">{label}</dt>
-                    <dd className="font-semibold text-right">{value}</dd>
-                  </div>
-                ))}
-              </dl>
+
+            {/* Cột phải: đội ngũ */}
+            <Card padding="none" className="overflow-hidden border-border/80 shadow-sm">
+              <div className="px-5 py-4 border-b border-border/60 bg-gradient-to-br from-foreground/[0.03] to-transparent">
+                <CardTitle className="mb-0">Đội ngũ series</CardTitle>
+              </div>
+              <div className="px-5 py-4">
+                <SeriesTeamCard team={team} loading={teamLoading} embedded />
+              </div>
             </Card>
-            <SeriesTeamCard team={team} loading={teamLoading} />
-            {canEditProfile && (
-              <Card>
-                <CardHeader><CardTitle>Bản thảo đề xuất</CardTitle></CardHeader>
-                <p className="text-sm text-muted-foreground mb-3">
-                  File PDF/ZIP/CBZ gửi kèm hồ sơ khi hội đồng xét duyệt series. Tải lên hoặc thay thế trong phần chỉnh sửa hồ sơ.
-                </p>
-                {proposalChapter?.description ? (
-                  <div className="flex flex-wrap items-center gap-3">
-                    <a
-                      href={proposalChapter.description}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="inline-flex items-center gap-2 text-sm font-semibold text-primary hover:underline"
-                    >
-                      <FileDown size={15} />
-                      Xem / tải bản thảo
-                    </a>
-                    <Button variant="outline" size="sm" onClick={() => navigate(`/mangaka/series/${series.id}/edit`)}>
-                      Thay bản thảo
-                    </Button>
-                  </div>
-                ) : (
-                  <div className="rounded-xl border border-dashed border-amber-300 bg-amber-50/80 px-4 py-3 text-sm text-amber-900">
-                    Chưa có bản thảo đính kèm — cần tải lên trước khi gửi xét duyệt.
-                    <Button variant="outline" size="sm" className="mt-3" onClick={() => navigate(`/mangaka/series/${series.id}/edit`)}>
-                      Tải bản thảo
-                    </Button>
-                  </div>
-                )}
-              </Card>
-            )}
-            {canInviteEditor && (
-              <Card>
-                <CardHeader><CardTitle>Mời Editor phụ trách</CardTitle></CardHeader>
-                <p className="text-sm text-muted-foreground mb-3">
-                  Chọn editor giám sát quá trình sản xuất series sau khi được hội đồng phê duyệt.
-                </p>
-                {editors.length === 0 ? (
-                  <p className="text-sm text-muted-foreground">Không có editor khả dụng.</p>
-                ) : (
-                  <div className="flex flex-col sm:flex-row gap-2">
-                    <select
-                      className="flex-1 rounded-lg border border-border bg-background px-3 py-2 text-sm"
-                      value={selectedEditorId}
-                      onChange={e => setSelectedEditorId(e.target.value)}
-                    >
-                      <option value="">Chọn editor...</option>
-                      {editors.map(editor => (
-                        <option key={editor.id} value={editor.id}>{editor.name}</option>
-                      ))}
-                    </select>
-                    <Button
-                      variant="primary"
-                      size="sm"
-                      loading={invitingEditor}
-                      disabled={!selectedEditorId}
-                      onClick={handleInviteEditor}
-                    >
-                      <UserPlus size={14} /> Gửi lời mời
-                    </Button>
-                  </div>
-                )}
-              </Card>
-            )}
           </div>
         </TabPanel>
 

@@ -40,7 +40,6 @@ const MANGAKA_GROUPS: NavGroup[] = [
     items: [
       { label: 'Nhiệm vụ', icon: <ClipboardList size={18} />, href: '/mangaka/tasks' },
       { label: 'Trợ lý', icon: <Users size={18} />, href: '/mangaka/assistants' },
-      { label: 'Editor', icon: <ShieldCheck size={18} />, href: '/mangaka/editors' },
       { label: 'Nộp series', icon: <Send size={18} />, href: '/mangaka/submissions' },
       { label: 'Xếp hạng', icon: <BarChart2 size={18} />, href: '/mangaka/ranking' },
     ],
@@ -73,7 +72,6 @@ const EDITOR_GROUPS: NavGroup[] = [
     items: [
       { label: 'Dashboard', icon: <LayoutDashboard size={18} />, href: '/editor/dashboard', exact: true },
       { label: 'Series phụ trách', icon: <BookOpen size={18} />, href: '/editor/series' },
-      { label: 'Lời mời phụ trách', icon: <Mail size={18} />, href: '/editor/invitations' },
       { label: 'Chapter Reviews', icon: <FileText size={18} />, href: '/editor/reviews' },
       { label: 'Tiến độ Studio', icon: <Activity size={18} />, href: '/editor/studio' },
     ],

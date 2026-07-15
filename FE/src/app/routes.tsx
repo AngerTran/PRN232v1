@@ -34,7 +34,6 @@ import SubmissionHistoryPage from '../pages/mangaka/SubmissionHistoryPage';
 import RankingOverviewPage from '../pages/mangaka/RankingOverviewPage';
 import ChaptersOverviewPage from '../pages/mangaka/ChaptersOverviewPage';
 import AssistantsPage from '../pages/mangaka/AssistantsPage';
-import EditorsPage from '../pages/mangaka/EditorsPage';
 import SeriesReaderPage from '../pages/mangaka/SeriesReaderPage';
 
 // Assistant pages
@@ -55,7 +54,6 @@ import ChapterReviewsPage from '../pages/editor/ChapterReviewsPage';
 import RankingWatchPage from '../pages/editor/RankingWatchPage';
 import SeriesDefensePage from '../pages/editor/SeriesDefensePage';
 import ChapterReviewPage from '../pages/editor/ChapterReviewPage';
-import EditorInvitationsPage from '../pages/editor/EditorInvitationsPage';
 import EditorStudioPage from '../pages/editor/EditorStudioPage';
 
 // Admin pages
@@ -155,7 +153,6 @@ export const router = createBrowserRouter([
       { path: '/mangaka/tasks', element: <TaskManagementPage /> },
       { path: '/mangaka/tasks/:taskId/review', element: <TaskReviewPage /> },
       { path: '/mangaka/assistants', element: <AssistantsPage /> },
-      { path: '/mangaka/editors', element: <EditorsPage /> },
 
       // Series submission history
       { path: '/mangaka/submissions', element: <SubmissionHistoryPage /> },
@@ -177,7 +174,6 @@ export const router = createBrowserRouter([
       // Editor
       { path: '/editor/dashboard', element: <EditorDashboardPage /> },
       { path: '/editor/series', element: <AssignedSeriesPage /> },
-      { path: '/editor/invitations', element: <EditorInvitationsPage /> },
       { path: '/editor/studio', element: <EditorStudioPage /> },
       { path: '/editor/series/:seriesId', element: <SeriesDetailPage /> },
       { path: '/editor/reviews', element: <ChapterReviewsPage /> },

@@ -1,19 +1,30 @@
 namespace DAL.Common;
 
 /// <summary>
-/// Quy tắc luồng nghiệp vụ: mangaka chỉ sản xuất sau khi hội đồng duyệt;
-/// hội đồng chỉ lên lịch xuất bản khi editor đánh dấu hoàn thành.
+/// Quy tắc luồng nghiệp vụ linh hoạt:
+/// - Mangaka sản xuất sau khi hội đồng duyệt.
+/// - Lead lên lịch XB khi đã duyệt; có thể dời lịch bất cứ lúc nào (không khóa cứng).
+/// - "Completed" chỉ là nhãn kết thúc dự kiến — không khóa sản xuất/dời lịch.
 /// </summary>
 public static class SeriesWorkflowRules
 {
+    /// <summary>Gợi ý số chương nên có trước khi phát hành kỳ đầu (mềm — không chặn).</summary>
+    public const int SuggestedReadyChaptersBeforeFirstPublish = 5;
+
     public static bool AllowsStudioProduction(SeriesStatus status) =>
-        status is SeriesStatus.Approved or SeriesStatus.Publishing or SeriesStatus.Hiatus;
+        status is SeriesStatus.Approved
+            or SeriesStatus.Publishing
+            or SeriesStatus.Hiatus
+            or SeriesStatus.Completed;
 
     public static bool AllowsProposalChapter(SeriesStatus status) =>
         status == SeriesStatus.Draft;
 
     public static bool AllowsPublishingSchedule(SeriesStatus status) =>
-        status == SeriesStatus.Completed;
+        status is SeriesStatus.Approved
+            or SeriesStatus.Publishing
+            or SeriesStatus.Hiatus
+            or SeriesStatus.Completed;
 
     public static bool AllowsChapterCreation(SeriesStatus status, int chapterNumber)
     {
@@ -57,11 +68,6 @@ public static class SeriesWorkflowRules
             throw new InvalidOperationException("Series đang chờ hội đồng xét duyệt — không thể tiếp tục sản xuất.");
         }
 
-        if (status == SeriesStatus.Completed)
-        {
-            throw new InvalidOperationException("Series đã hoàn thành — không thể tiếp tục sản xuất.");
-        }
-
         throw new InvalidOperationException("Series chưa được hội đồng phê duyệt — không thể sản xuất.");
     }
 
@@ -72,6 +78,6 @@ public static class SeriesWorkflowRules
             return;
         }
 
-        throw new InvalidOperationException("Chỉ có thể lên lịch xuất bản khi editor đã đánh dấu series hoàn thành.");
+        throw new InvalidOperationException("Chỉ có thể lên lịch xuất bản khi series đã được hội đồng phê duyệt.");
     }
 }

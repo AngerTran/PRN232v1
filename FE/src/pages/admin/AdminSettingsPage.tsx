@@ -5,8 +5,8 @@ import { usePageMeta } from '../../hooks/usePageMeta';
 import { getBoardMembers, type ProfileSummary } from '../../services/profilesApi';
 import {
   assignGlobalBoardLead,
-  clearGlobalBoardLead,
-  getGlobalBoardLead,
+  clearBoardLeadRole,
+  listBoardLeads,
   type GlobalBoardLead,
 } from '../../services/boardApi';
 
@@ -65,22 +65,32 @@ export default function AdminSettingsPage() {
   const [saving, setSaving] = useState(false);
 
   const [boards, setBoards] = useState<ProfileSummary[]>([]);
-  const [globalLead, setGlobalLead] = useState<GlobalBoardLead | null>(null);
-  const [leadDraft, setLeadDraft] = useState('');
+  const [leads, setLeads] = useState<GlobalBoardLead[]>([]);
   const [leadLoading, setLeadLoading] = useState(true);
-  const [leadSaving, setLeadSaving] = useState(false);
+  const [busyLeadId, setBusyLeadId] = useState<string | null>(null);
   const [leadError, setLeadError] = useState('');
   const [leadOk, setLeadOk] = useState('');
+
+  const leadIdSet = new Set(leads.map(l => l.boardMemberId));
+
+  const reloadLeads = async () => {
+    const [boardList, leadList] = await Promise.all([
+      getBoardMembers().catch(() => [] as ProfileSummary[]),
+      listBoardLeads().catch(() => [] as GlobalBoardLead[]),
+    ]);
+    setBoards(boardList);
+    setLeads(leadList);
+  };
 
   useEffect(() => {
     let active = true;
     setLeadLoading(true);
-    Promise.all([getBoardMembers().catch(() => []), getGlobalBoardLead().catch(() => null)])
-      .then(([boardList, lead]) => {
-        if (!active) return;
-        setBoards(boardList);
-        setGlobalLead(lead);
-        setLeadDraft(lead?.boardMemberId ?? '');
+    reloadLeads()
+      .catch(() => {
+        if (active) {
+          setBoards([]);
+          setLeads([]);
+        }
       })
       .finally(() => {
         if (active) setLeadLoading(false);
@@ -90,39 +100,23 @@ export default function AdminSettingsPage() {
     };
   }, []);
 
-  const handleSaveLead = async () => {
-    if (!leadDraft) {
-      setLeadError('Chọn một board để gán Lead.');
-      return;
-    }
-    setLeadSaving(true);
+  const handleToggleLead = async (board: ProfileSummary, makeLead: boolean) => {
+    setBusyLeadId(board.id);
     setLeadError('');
     setLeadOk('');
     try {
-      const lead = await assignGlobalBoardLead(leadDraft);
-      setGlobalLead(lead);
-      setLeadDraft(lead.boardMemberId);
-      setLeadOk(`Đã gán ${lead.boardMemberName} làm Board Lead toàn cục.`);
+      if (makeLead) {
+        await assignGlobalBoardLead(board.id);
+        setLeadOk(`Đã gán chức vụ Lead cho ${board.name}.`);
+      } else {
+        await clearBoardLeadRole(board.id);
+        setLeadOk(`Đã gỡ chức vụ Lead của ${board.name}.`);
+      }
+      await reloadLeads();
     } catch (err) {
-      setLeadError(err instanceof Error ? err.message : 'Không thể gán Board Lead.');
+      setLeadError(err instanceof Error ? err.message : 'Không thể cập nhật chức vụ Lead.');
     } finally {
-      setLeadSaving(false);
-    }
-  };
-
-  const handleClearLead = async () => {
-    setLeadSaving(true);
-    setLeadError('');
-    setLeadOk('');
-    try {
-      await clearGlobalBoardLead();
-      setGlobalLead(null);
-      setLeadDraft('');
-      setLeadOk('Đã hủy Board Lead. Không ai lên lịch cho đến khi gán lại.');
-    } catch (err) {
-      setLeadError(err instanceof Error ? err.message : 'Không thể hủy Board Lead.');
-    } finally {
-      setLeadSaving(false);
+      setBusyLeadId(null);
     }
   };
 
@@ -146,62 +140,58 @@ export default function AdminSettingsPage() {
         <CardHeader>
           <CardTitle className="text-sm flex items-center gap-2">
             <Crown size={16} className="text-amber-600" />
-            Lead hội đồng (toàn cục — chỉ 1 người)
+            Chức vụ Board Lead (có thể nhiều người)
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-3">
           <p className="text-xs text-gray-500">
-            Người này luôn là Lead trên mọi series (ưu tiên trong 3 board xét duyệt, lên lịch xuất bản).
-            Đổi Lead = thay thế người hiện tại; không thể có 2 Lead cùng lúc.
+            Admin gán chức vụ Lead cho một hoặc nhiều account Board. Khi mangaka nộp series, hệ thống chọn{' '}
+            <strong>3 board</strong>: <strong>1 Lead ít việc nhất</strong> + <strong>2 board thường ít việc nhất</strong>.
+            Lead của series đó phụ trách lên lịch xuất bản sau khi duyệt.
           </p>
           {leadLoading ? (
             <p className="text-sm text-muted-foreground">Đang tải…</p>
+          ) : boards.length === 0 ? (
+            <p className="text-xs text-red-600">Không có board active để chọn.</p>
           ) : (
-            <>
-              {globalLead ? (
-                <p className="text-sm">
-                  Hiện tại: <strong className="text-amber-800">{globalLead.boardMemberName}</strong>
-                </p>
-              ) : (
-                <p className="text-sm text-amber-800">Chưa gán Board Lead.</p>
-              )}
-              <div className="flex flex-wrap gap-2 items-center">
-                <select
-                  className="flex-1 min-w-[200px] px-3 py-2 text-sm border border-gray-200 rounded-lg bg-white"
-                  value={leadDraft}
-                  onChange={e => setLeadDraft(e.target.value)}
-                  disabled={leadSaving || boards.length === 0}
-                >
-                  <option value="">Chọn board…</option>
-                  {boards.map(b => (
-                    <option key={b.id} value={b.id}>
-                      {b.name} ({b.email})
-                    </option>
-                  ))}
-                </select>
-                <button
-                  type="button"
-                  disabled={leadSaving || !leadDraft}
-                  onClick={() => void handleSaveLead()}
-                  className="px-3 py-2 text-sm font-medium text-white bg-red-600 hover:bg-red-700 rounded-lg disabled:opacity-50"
-                >
-                  {leadSaving ? 'Đang lưu…' : globalLead ? 'Đổi Lead' : 'Gán Lead'}
-                </button>
-                {globalLead && (
-                  <button
-                    type="button"
-                    disabled={leadSaving}
-                    onClick={() => void handleClearLead()}
-                    className="px-3 py-2 text-sm font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-lg disabled:opacity-50"
-                  >
-                    Hủy Lead
-                  </button>
-                )}
-              </div>
-              {boards.length === 0 && (
-                <p className="text-xs text-red-600">Không có board active để chọn.</p>
-              )}
-            </>
+            <ul className="divide-y rounded-lg border border-amber-100 bg-white">
+              {boards.map(board => {
+                const isLead = leadIdSet.has(board.id);
+                const busy = busyLeadId === board.id;
+                return (
+                  <li key={board.id} className="flex items-center justify-between gap-3 px-3 py-2.5">
+                    <div className="min-w-0">
+                      <p className="text-sm font-medium text-gray-900 truncate">
+                        {board.name}
+                        {isLead && (
+                          <span className="ml-2 text-[11px] font-semibold text-amber-700 bg-amber-50 border border-amber-200 px-1.5 py-0.5 rounded">
+                            Lead
+                          </span>
+                        )}
+                      </p>
+                      <p className="text-xs text-gray-500 truncate">{board.email}</p>
+                    </div>
+                    <button
+                      type="button"
+                      disabled={busy || busyLeadId != null}
+                      onClick={() => void handleToggleLead(board, !isLead)}
+                      className={`shrink-0 px-3 py-1.5 text-xs font-medium rounded-lg disabled:opacity-50 ${
+                        isLead
+                          ? 'text-gray-700 bg-gray-100 hover:bg-gray-200'
+                          : 'text-white bg-red-600 hover:bg-red-700'
+                      }`}
+                    >
+                      {busy ? '…' : isLead ? 'Gỡ Lead' : 'Gán Lead'}
+                    </button>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+          {leads.length > 0 && (
+            <p className="text-xs text-amber-900/80">
+              Đang có <strong>{leads.length}</strong> Board Lead · {Math.max(0, boards.length - leads.length)} board thường
+            </p>
           )}
           {leadError && <p className="text-sm text-red-600">{leadError}</p>}
           {leadOk && <p className="text-sm text-green-700">{leadOk}</p>}

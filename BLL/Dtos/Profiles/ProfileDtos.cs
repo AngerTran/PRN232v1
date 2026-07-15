@@ -12,7 +12,8 @@ public record ProfileResponse(
     bool EmailConfirmed,
     bool? IsActive,
     DateTime? CreatedAt,
-    DateTime? UpdatedAt);
+    DateTime? UpdatedAt,
+    bool IsBoardLead = false);
 
 public record UpdateProfileRequest(
     [MaxLength(255)] string? FullName,
@@ -22,7 +23,8 @@ public record UpdateProfileRequest(
     bool? IsActive);
 
 public record AddAssistantRequest(
-    [Required, EmailAddress, MaxLength(255)] string Email);
+    [EmailAddress, MaxLength(255)] string? Email,
+    Guid? AssistantId);
 
 public record AssistantInvitationResponse(
     Guid MangakaId,

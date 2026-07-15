@@ -667,10 +667,6 @@ namespace DAL.Migrations
                     b.HasIndex(new[] { "Email" }, "profiles_email_key")
                         .IsUnique();
 
-                    b.HasIndex("IsBoardLead", "idx_profiles_one_board_lead")
-                        .IsUnique()
-                        .HasFilter("is_board_lead = true");
-
                     b.ToTable("profiles", (string)null);
                 });
 

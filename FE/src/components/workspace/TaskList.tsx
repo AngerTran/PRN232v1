@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { ChevronDown, ChevronUp, Calendar, DollarSign, Trash2, CreditCard, Loader2, CheckCircle, RotateCcw, ExternalLink } from 'lucide-react';
+import { ChevronDown, ChevronUp, Calendar, Banknote, Trash2, CreditCard, Loader2, CheckCircle, RotateCcw, ExternalLink } from 'lucide-react';
 import { clsx } from 'clsx';
 import type { WorkspaceAssistant, WorkspaceTask } from '../../services/workspaceApi';
 import { TypeBadge } from '../ui/Badge';
@@ -8,6 +8,8 @@ import { createTaskPayment } from '../../services/paymentApi';
 import { toast } from 'sonner';
 import { getStoredUser } from '../../services/authApi';
 import { getTaskSubmissions, reviewSubmission, type SubmissionItem } from '../../services/submissionsApi';
+import { formatVnd } from '../../utils/formatCurrency';
+import { TASK_STATUS_LABELS } from '../../utils/statusLabels';
 
 const STATUS_DOT: Record<string, string> = {
   'Pending': 'bg-gray-400',
@@ -16,8 +18,6 @@ const STATUS_DOT: Record<string, string> = {
   'Approved': 'bg-green-500',
   'Revision Required': 'bg-orange-500',
 };
-
-import { TASK_STATUS_LABELS } from '../../utils/statusLabels';
 
 interface TaskListProps {
   tasks: WorkspaceTask[];
@@ -172,8 +172,8 @@ export default function TaskList({ tasks, assistants, onHoverTask, onDeleteTask,
                     {format(new Date(task.deadline), 'MMM d, yyyy')}
                   </span>
                   <span className="flex items-center gap-1">
-                    <DollarSign size={11} />
-                    ¥{task.price.toLocaleString()}
+                    <Banknote size={11} />
+                    {formatVnd(task.price)}
                   </span>
                 </div>
                 <div className="flex items-center gap-1.5">
@@ -282,7 +282,7 @@ export default function TaskList({ tasks, assistants, onHoverTask, onDeleteTask,
                       ) : (
                         <>
                           <CreditCard size={14} />
-                          Thanh toán ({task.price.toLocaleString()} ¥)
+                          Thanh toán ({formatVnd(task.price)})
                         </>
                       )}
                     </button>

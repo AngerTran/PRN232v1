@@ -71,8 +71,8 @@ export default function EditorDashboardPage() {
     const days = Math.ceil((new Date(chapter.deadline).getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24));
     return days >= 0 && days <= 7;
   }).length;
-  const seriesTitleById = useMemo(
-    () => new Map(assignedSeries.map(series => [series.id, series.title])),
+  const seriesById = useMemo(
+    () => new Map(assignedSeries.map(series => [series.id, series])),
     [assignedSeries]
   );
 
@@ -175,15 +175,19 @@ export default function EditorDashboardPage() {
             </CardContent>
           </Card>
         ) : chaptersNeedReview.length > 0 ? (
-          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-            {chaptersNeedReview.map(chapter => (
-              <ChapterReviewCard
-                key={chapter.id}
-                chapter={chapter}
-                seriesTitle={seriesTitleById.get(chapter.seriesId)}
-                onReview={() => navigate(`/editor/chapters/${chapter.id}/review`)}
-              />
-            ))}
+          <div className="flex flex-wrap gap-3">
+            {chaptersNeedReview.map(chapter => {
+              const series = seriesById.get(chapter.seriesId);
+              return (
+                <ChapterReviewCard
+                  key={chapter.id}
+                  chapter={chapter}
+                  seriesTitle={series?.title}
+                  coverUrl={series?.coverUrl}
+                  onReview={() => navigate(`/editor/chapters/${chapter.id}/review`)}
+                />
+              );
+            })}
           </div>
         ) : (
           <Card>

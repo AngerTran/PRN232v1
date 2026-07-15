@@ -1,9 +1,8 @@
 import { Task } from '../../../../types/domain';
 import { Card, CardContent, CardHeader, CardTitle } from '../card';
 import { TaskStatusBadge } from './TaskStatusBadge';
-import { Calendar, DollarSign } from 'lucide-react';
-import { formatDistanceToNow } from 'date-fns';
-import { vi } from 'date-fns/locale';
+import { Calendar, Banknote } from 'lucide-react';
+import { formatVnd } from '../../../../utils/formatCurrency';
 
 interface TaskCardProps {
   task: Task;
@@ -47,8 +46,8 @@ export function TaskCard({ task, onClick }: TaskCardProps) {
               </span>
             </div>
             <div className="flex items-center gap-1 text-muted-foreground">
-              <DollarSign className="h-4 w-4" />
-              <span>{task.price.toLocaleString('vi-VN')} ¥</span>
+              <Banknote className="h-4 w-4" />
+              <span>{formatVnd(task.price)}</span>
             </div>
           </div>
         </div>

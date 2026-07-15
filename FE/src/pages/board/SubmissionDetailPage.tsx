@@ -249,7 +249,7 @@ export default function SubmissionDetailPage() {
               </p>
             ) : (
               <p className="text-xs text-muted-foreground">
-                Admin sẽ gán Lead trong 3 board reviewer để lên lịch xuất bản.
+                Chưa có Board Lead — Admin gán tại Cài đặt Admin.
               </p>
             )}
           </div>

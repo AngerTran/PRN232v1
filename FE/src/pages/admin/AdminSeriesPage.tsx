@@ -4,7 +4,7 @@ import { Card, CardContent } from '../../app/components/ui/card';
 import { usePageMeta } from '../../hooks/usePageMeta';
 import { useConfirm } from '../../components/ui/ConfirmDialog';
 import { deleteSeries, getVisibleSeriesLight } from '../../services/seriesApi';
-import { getGlobalBoardLead, type GlobalBoardLead } from '../../services/boardApi';
+import { listBoardLeads, type GlobalBoardLead } from '../../services/boardApi';
 import { getBoardMembers } from '../../services/profilesApi';
 import type { Series, SeriesStatus } from '../../types/domain';
 import { SERIES_STATUS_FILTER_OPTIONS, SERIES_STATUS_LABELS } from '../../utils/statusLabels';
@@ -35,20 +35,20 @@ export default function AdminSeriesPage() {
   const [statusFilter, setStatusFilter] = useState<'all' | SeriesStatus>('all');
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [activeBoardCount, setActiveBoardCount] = useState<number | null>(null);
-  const [globalLead, setGlobalLead] = useState<GlobalBoardLead | null>(null);
+  const [boardLeads, setBoardLeads] = useState<GlobalBoardLead[]>([]);
 
   const load = async () => {
     setLoading(true);
     setError('');
     try {
-      const [list, boards, lead] = await Promise.all([
+      const [list, boards, leads] = await Promise.all([
         getVisibleSeriesLight(),
         getBoardMembers().catch(() => []),
-        getGlobalBoardLead().catch(() => null),
+        listBoardLeads().catch(() => []),
       ]);
       setSeries(list);
       setActiveBoardCount(boards.length);
-      setGlobalLead(lead);
+      setBoardLeads(leads);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Không thể tải danh sách series.');
       setSeries([]);
@@ -98,24 +98,30 @@ export default function AdminSeriesPage() {
       <div>
         <h1 className="text-xl font-bold text-gray-900">Quản lý Series</h1>
         <p className="text-sm text-gray-500 mt-0.5">
-          Quản lý / xóa series. Board Lead toàn cục gán tại Cài đặt Admin.
+          Quản lý / xóa series. Chức vụ Board Lead gán tại Cài đặt Admin (có thể nhiều Lead).
         </p>
       </div>
 
-      {globalLead ? (
-        <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900 inline-flex items-center gap-2">
-          <Crown size={16} />
-          Board Lead: <strong>{globalLead.boardMemberName}</strong>
+      {boardLeads.length > 0 ? (
+        <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900 inline-flex items-start gap-2">
+          <Crown size={16} className="mt-0.5 shrink-0" />
+          <span>
+            Board Lead ({boardLeads.length}):{' '}
+            <strong>{boardLeads.map(l => l.boardMemberName).join(', ')}</strong>
+            {activeBoardCount != null && (
+              <> · {Math.max(0, activeBoardCount - boardLeads.length)} board thường</>
+            )}
+          </span>
         </div>
       ) : (
         <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
-          Chưa có Board Lead — vào <strong>Cài đặt Admin</strong> để gán 1 board làm Lead.
+          Chưa có Board Lead — vào <strong>Cài đặt Admin</strong> để gán chức vụ Lead cho ít nhất 1 board.
         </div>
       )}
 
-      {activeBoardCount != null && activeBoardCount !== 3 && (
+      {activeBoardCount != null && activeBoardCount < 3 && (
         <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
-          Hệ thống đang có <strong>{activeBoardCount}</strong> board active (khuyến nghị đúng 3).
+          Hệ thống đang có <strong>{activeBoardCount}</strong> board active (khuyến nghị ≥ 3 để đủ hội đồng mỗi series).
         </div>
       )}
 

@@ -58,6 +58,12 @@ function mapNotification(item: ApiNotification): Notification {
   };
 }
 
+export const NOTIFICATIONS_CHANGED_EVENT = 'mangaflow:notifications-changed';
+
+export function emitNotificationsChanged() {
+  window.dispatchEvent(new Event(NOTIFICATIONS_CHANGED_EVENT));
+}
+
 export async function getNotifications(unreadOnly = false): Promise<Notification[]> {
   const query = unreadOnly ? '?unreadOnly=true' : '';
   const items = unwrap(await apiRequest<ApiEnvelope<ApiNotification[]>>(`/api/notifications${query}`));
@@ -68,6 +74,7 @@ export async function markNotificationRead(id: string): Promise<boolean> {
   const result = unwrap(await apiRequest<ApiEnvelope<ApiMarkReadResult>>(`/api/notifications/${id}/read`, {
     method: 'PATCH',
   }));
+  emitNotificationsChanged();
   return result.isRead;
 }
 
@@ -75,5 +82,6 @@ export async function markAllNotificationsRead(): Promise<number> {
   const result = unwrap(await apiRequest<ApiEnvelope<ApiMarkAllReadResult>>('/api/notifications/read-all', {
     method: 'PATCH',
   }));
+  emitNotificationsChanged();
   return result.updatedCount;
 }

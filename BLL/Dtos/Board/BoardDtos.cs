@@ -98,6 +98,18 @@ public record GlobalBoardLeadResponse(
 public record AssignGlobalBoardLeadRequest(
     [Required] Guid BoardMemberId);
 
+public record ClearBoardLeadRoleRequest(
+    [Required] Guid BoardMemberId);
+
+public record AssignSeriesEditorRequest(
+    [Required] Guid EditorId);
+
+public record SeriesEditorAssignmentResponse(
+    Guid SeriesId,
+    string SeriesTitle,
+    Guid? EditorId,
+    string? EditorName);
+
 public record LeaderboardItemResponse(
     Guid SeriesId,
     string Title,

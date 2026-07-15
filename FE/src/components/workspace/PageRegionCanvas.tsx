@@ -223,7 +223,8 @@ const PageRegionCanvas = forwardRef<HTMLDivElement, PageRegionCanvasProps>(funct
     <div
       ref={ref}
       className={clsx(
-        'relative inline-block max-h-full max-w-full select-none touch-none',
+        // shrink-wrap theo ảnh (đã scale vừa khung) để vùng annotation khớp pixel
+        'relative inline-block h-full max-h-full max-w-full select-none touch-none',
         isSelecting && 'cursor-crosshair',
         className
       )}
@@ -236,7 +237,7 @@ const PageRegionCanvas = forwardRef<HTMLDivElement, PageRegionCanvasProps>(funct
         <img
           src={imageUrl}
           alt={alt}
-          className="max-h-[calc(100vh-12rem)] max-w-full object-contain shadow-lg pointer-events-none"
+          className="block h-full w-auto max-w-full object-contain shadow-lg pointer-events-none"
           draggable={false}
         />
       ) : (

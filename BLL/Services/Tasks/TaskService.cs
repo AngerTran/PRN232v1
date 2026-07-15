@@ -241,6 +241,14 @@ public class TaskService
             await EnsureCanAssignAssistantAsync(caller, request.AssignedTo.Value, cancellationToken);
         }
 
+        // Cùng trang có thể giao nhiều vùng, nhưng chỉ cho cùng 1 trợ lí đang có task mở
+        // (tránh 2 người làm song song rồi đè ảnh trang).
+        await EnsurePageOpenTasksSameAssigneeAsync(
+            pageId,
+            request.AssignedTo,
+            excludeTaskId: null,
+            cancellationToken);
+
         var now = DateTime.UtcNow;
         var task = new EditorTask
         {
@@ -304,6 +312,15 @@ public class TaskService
         if (request.AssignedTo is not null)
         {
             await EnsureCanAssignAssistantAsync(caller, request.AssignedTo.Value, cancellationToken);
+
+            if (request.AssignedTo != previousAssigneeId)
+            {
+                await EnsurePageOpenTasksSameAssigneeAsync(
+                    task.PageId,
+                    request.AssignedTo,
+                    excludeTaskId: task.Id,
+                    cancellationToken);
+            }
 
             task.AssignedTo = request.AssignedTo;
         }
@@ -553,6 +570,65 @@ public class TaskService
             {
                 throw new WorkflowForbiddenException("Mangaka can only assign tasks to assistants in their studio.");
             }
+        }
+    }
+
+    /// <summary>
+    /// Cùng trang được có nhiều task mở (nhiều vùng), nhưng tất cả phải cùng một trợ lí.
+    /// Không giao song song cho người khác khi còn task mở.
+    /// </summary>
+    private async Task EnsurePageOpenTasksSameAssigneeAsync(
+        Guid pageId,
+        Guid? newAssigneeId,
+        Guid? excludeTaskId,
+        CancellationToken cancellationToken)
+    {
+        var openStatuses = new[]
+        {
+            TaskStatuses.Todo,
+            TaskStatuses.InProgress,
+            TaskStatuses.Submitted
+        };
+
+        var query = _unitOfWork.Context.Tasks
+            .AsNoTracking()
+            .Where(t => t.PageId == pageId && openStatuses.Contains(t.Status));
+
+        if (excludeTaskId is Guid id)
+        {
+            query = query.Where(t => t.Id != id);
+        }
+
+        var openAssignees = await query
+            .Where(t => t.AssignedTo != null)
+            .Select(t => t.AssignedTo!.Value)
+            .Distinct()
+            .ToListAsync(cancellationToken);
+
+        if (openAssignees.Count == 0)
+        {
+            return;
+        }
+
+        // Đã có nhiều người mở task (dữ liệu cũ) — chặn giao thêm.
+        if (openAssignees.Count > 1)
+        {
+            throw new ArgumentException(
+                "Trang này đang có task mở của nhiều trợ lí. Hãy duyệt hoặc hủy các task đó trước khi giao tiếp.");
+        }
+
+        var currentAssignee = openAssignees[0];
+        if (newAssigneeId is null || newAssigneeId != currentAssignee)
+        {
+            var name = await _unitOfWork.Context.Profiles
+                .AsNoTracking()
+                .Where(p => p.Id == currentAssignee)
+                .Select(p => p.FullName)
+                .FirstOrDefaultAsync(cancellationToken);
+
+            throw new ArgumentException(
+                $"Trang này đang có task mở của {(string.IsNullOrWhiteSpace(name) ? "một trợ lí" : name)}. " +
+                "Có thể giao thêm vùng khác cho cùng người đó — không giao song song cho trợ lí khác.");
         }
     }
 

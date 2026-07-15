@@ -267,21 +267,33 @@ export function isSeriesSubmitted(status: SeriesStatus): boolean {
   return status !== 'Draft';
 }
 
-/** Mangaka chỉ được sản xuất (chương, trang, task) sau khi hội đồng duyệt. */
+/** Gợi ý mềm: nên có đủ chương buffer trước kỳ XB đầu (không chặn cứng). */
+export const SUGGESTED_READY_CHAPTERS_BEFORE_PUBLISH = 5;
+
+/** Mangaka sản xuất sau khi hội đồng duyệt (kể cả sau khi editor gắn nhãn đóng SX). */
 export function canMangakaProduceOnSeries(status: SeriesStatus): boolean {
-  return status === 'Approved' || status === 'In Progress' || status === 'At Risk';
+  return (
+    status === 'Approved' ||
+    status === 'In Progress' ||
+    status === 'At Risk' ||
+    status === 'Completed'
+  );
 }
 
-/** Hội đồng chỉ lên lịch xuất bản khi editor đánh dấu hoàn thành. */
+/** Hội đồng lên lịch XB khi series đã duyệt (không cần đợi editor đóng sản xuất). */
 export function canSchedulePublishing(status: SeriesStatus): boolean {
-  return status === 'Completed';
+  return (
+    status === 'Approved' ||
+    status === 'In Progress' ||
+    status === 'At Risk' ||
+    status === 'Completed'
+  );
 }
 
 export const SERIES_PRODUCTION_LOCK_HINT: Partial<Record<SeriesStatus, string>> = {
   Draft: 'Hoàn tất hồ sơ và gửi hội đồng xét duyệt trước khi bắt đầu sản xuất.',
   Submitted: 'Series đang chờ hội đồng xét duyệt — tạm khóa mọi thao tác sản xuất.',
   Cancelled: 'Series đã bị từ chối — không thể tiếp tục sản xuất.',
-  Completed: 'Series đã hoàn thành — không thể thêm chương mới.',
 };
 
 export const SERIES_SUBMISSION_STATUS_HINT: Record<SeriesStatus, string> = {
@@ -291,7 +303,7 @@ export const SERIES_SUBMISSION_STATUS_HINT: Record<SeriesStatus, string> = {
   'In Progress': 'Series đang trong quá trình xuất bản.',
   'Revision Required': 'Hội đồng yêu cầu chỉnh sửa trước khi duyệt.',
   'At Risk': 'Series đang có nguy cơ bị tạm dừng do xếp hạng thấp.',
-  Completed: 'Editor đã đánh dấu series hoàn thành sản xuất.',
+  Completed: 'Editor gắn nhãn đóng sản xuất — vẫn có thể làm thêm chương và dời lịch XB khi cần.',
   Published: 'Series đã xuất bản.',
   Cancelled: 'Hội đồng đã từ chối hoặc hết hạn 48 giờ xét duyệt — bạn có thể chỉnh sửa và gửi lại.',
 };
@@ -334,7 +346,7 @@ export async function getApprovedSeries(): Promise<Series[]> {
     .map(item => mapSeries(item));
 }
 
-/** Series editor đã đánh dấu hoàn thành — đủ điều kiện lên lịch xuất bản. */
+/** Series editor đã đóng sản xuất (không còn tạo chương mới). */
 export async function getCompletedSeries(): Promise<Series[]> {
   const items = unwrap(await apiRequest<ApiEnvelope<ApiSeries[]>>('/api/series'));
   return items
@@ -514,44 +526,6 @@ export async function upsertSeriesProposalManuscript(
   return uploadSeriesProposalManuscript(seriesId, file);
 }
 
-export interface SeriesEditorInvitation {
-  seriesId: string;
-  seriesTitle: string;
-  mangakaId: string;
-  mangakaName: string;
-  editorId: string;
-  editorName: string;
-  status: 'pending' | 'accepted' | 'rejected';
-  createdAt: string;
-  respondedAt?: string | null;
-}
-
-/** Mangaka gửi lời mời editor phụ trách series (chờ editor chấp nhận). */
-export async function inviteSeriesEditor(seriesId: string, editorId: string): Promise<SeriesEditorInvitation> {
-  return unwrap(await apiRequest<ApiEnvelope<SeriesEditorInvitation>>(`/api/series/${seriesId}/editor-invitations`, {
-    method: 'POST',
-    body: JSON.stringify({ editorId }),
-  }));
-}
-
-export async function getSentEditorInvitations(): Promise<SeriesEditorInvitation[]> {
-  return unwrap(await apiRequest<ApiEnvelope<SeriesEditorInvitation[]>>('/api/series/editor-invitations/sent'));
-}
-
-export async function getMyEditorInvitations(): Promise<SeriesEditorInvitation[]> {
-  return unwrap(await apiRequest<ApiEnvelope<SeriesEditorInvitation[]>>('/api/series/editor-invitations/mine'));
-}
-
-export async function respondToEditorInvitation(
-  seriesId: string,
-  action: 'accept' | 'reject'
-): Promise<SeriesEditorInvitation> {
-  return unwrap(await apiRequest<ApiEnvelope<SeriesEditorInvitation>>(
-    `/api/series/editor-invitations/${seriesId}/${action}`,
-    { method: 'PATCH' }
-  ));
-}
-
 export async function updateSeriesStatus(id: string, status: string): Promise<Series> {
   const updated = unwrap(await apiRequest<ApiEnvelope<ApiSeries>>(`/api/series/${id}/status`, {
     method: 'PUT',
@@ -560,7 +534,7 @@ export async function updateSeriesStatus(id: string, status: string): Promise<Se
   return mapSeries(updated);
 }
 
-/** Editor đánh dấu series hoàn thành sản xuất. */
+/** Editor đóng sản xuất series (khóa tạo chương mới). */
 export async function markSeriesCompleted(id: string): Promise<Series> {
   return updateSeriesStatus(id, 'completed');
 }
@@ -650,9 +624,9 @@ export function canMangakaDeleteChapter(status: ChapterStatus): boolean {
   return status === 'Draft';
 }
 
-/** Series đã kết thúc sản xuất — deadline chương nháp còn sót không còn là việc cần làm. */
+/** Series thực sự dừng (hủy / đã XB xong) — không còn theo dõi hạn chương. "Completed" chỉ là nhãn. */
 export function isSeriesClosedForProduction(status: SeriesStatus): boolean {
-  return status === 'Completed' || status === 'Cancelled' || status === 'Published';
+  return status === 'Cancelled' || status === 'Published';
 }
 
 export async function deleteSeries(id: string): Promise<void> {

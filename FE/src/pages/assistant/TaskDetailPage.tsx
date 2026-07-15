@@ -13,7 +13,7 @@ import { type Task } from '../../types/domain';
 import { getTask, startTask } from '../../services/tasksApi';
 import {
   Calendar,
-  DollarSign,
+  Banknote,
   User,
   FileText,
   Play,
@@ -26,6 +26,7 @@ import {
 import { format } from 'date-fns';
 import { vi } from 'date-fns/locale';
 import { toast } from 'sonner';
+import { formatVnd } from '../../utils/formatCurrency';
 
 function resourceFileName(url: string, index: number): string {
   try {
@@ -164,11 +165,11 @@ export default function TaskDetailPage() {
 
             <div className="flex items-center gap-3">
               <div className="rounded-lg bg-primary/10 p-2">
-                <DollarSign className="h-5 w-5 text-primary" />
+                <Banknote className="h-5 w-5 text-primary" />
               </div>
               <div>
-                <p className="text-sm text-muted-foreground">Giá</p>
-                <p className="font-medium">{task.price.toLocaleString('vi-VN')} ¥</p>
+                <p className="text-sm text-muted-foreground">Thù lao</p>
+                <p className="font-medium">{formatVnd(task.price)}</p>
               </div>
             </div>
 

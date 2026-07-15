@@ -15,6 +15,7 @@ import {
   type WorkspacePayload,
 } from '../../services/workspaceApi';
 import { useConfirm } from '../../components/ui/ConfirmDialog';
+import { parseVndInput } from '../../utils/formatCurrency';
 
 export default function WorkspacePage() {
   const { pageId } = useParams<{ pageId: string }>();
@@ -49,6 +50,20 @@ export default function WorkspacePage() {
   const page = workspace?.page;
   const allPages = workspace?.pages ?? [];
   const pageTasks = workspace?.tasks ?? [];
+  const openTasks = pageTasks.filter(t =>
+    t.status === 'Pending' || t.status === 'In Progress' || t.status === 'Submitted'
+  );
+  const openAssigneeIds = [...new Set(openTasks.map(t => t.assistantId).filter(Boolean))];
+  const lockedAssistantId = openAssigneeIds.length === 1 ? openAssigneeIds[0] : undefined;
+  const lockedAssistantName = lockedAssistantId
+    ? (openTasks.find(t => t.assistantId === lockedAssistantId)?.assistantName
+      ?? workspace?.assistants.find(a => a.id === lockedAssistantId)?.name)
+    : undefined;
+  const openTaskHint = openAssigneeIds.length > 1
+    ? 'Trang đang có task mở của nhiều trợ lí. Duyệt hoặc hủy trước khi giao tiếp.'
+    : lockedAssistantId
+      ? `Có thể giao thêm vùng khác cho ${lockedAssistantName ?? 'cùng trợ lí'}. Không giao song song cho người khác.`
+      : undefined;
   const assistants = workspace?.assistants ?? [];
 
   useEffect(() => {
@@ -161,7 +176,7 @@ export default function WorkspacePage() {
         assistantId: data.assistantId,
         description: data.description,
         deadline: data.deadline,
-        price: Number(data.price) || 0,
+        price: parseVndInput(data.price),
         region,
       });
 
@@ -446,6 +461,8 @@ export default function WorkspacePage() {
             onAssignTask={handleAssignTask}
             assistants={assistants}
             isSubmitting={isSubmitting}
+            lockedAssistantId={lockedAssistantId}
+            openTaskHint={openTaskHint}
           />
         </div>
 

@@ -1,6 +1,17 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router';
-import { ChevronLeft, CheckCircle, RotateCcw, AlertCircle, User, Calendar, ExternalLink } from 'lucide-react';
+import {
+  ChevronLeft,
+  CheckCircle,
+  RotateCcw,
+  AlertCircle,
+  User,
+  Calendar,
+  ExternalLink,
+  CreditCard,
+  Banknote,
+} from 'lucide-react';
+import { toast } from 'sonner';
 import Button from '../../components/ui/Button';
 import Badge from '../../components/ui/Badge';
 import { TypeBadge } from '../../components/ui/Badge';
@@ -10,7 +21,9 @@ import MangaPanelPreview from '../../components/workspace/MangaPanelPreview';
 import { usePageMeta } from '../../hooks/usePageMeta';
 import type { Task } from '../../types/domain';
 import { getTask } from '../../services/tasksApi';
+import { createTaskPayment } from '../../services/paymentApi';
 import { getTaskSubmissions, reviewSubmission, type SubmissionItem } from '../../services/submissionsApi';
+import { formatVnd } from '../../utils/formatCurrency';
 import { format } from 'date-fns';
 
 export default function TaskReviewPage() {
@@ -23,6 +36,7 @@ export default function TaskReviewPage() {
   const [loading, setLoading] = useState(true);
   const [status, setStatus] = useState<'idle' | 'approving' | 'revising' | 'approved' | 'revised'>('idle');
   const [revisionComment, setRevisionComment] = useState('');
+  const [paying, setPaying] = useState(false);
 
   useEffect(() => {
     setPageMeta({
@@ -32,7 +46,7 @@ export default function TaskReviewPage() {
         { label: 'Xét duyệt' },
       ],
     });
-  }, []);
+  }, [setPageMeta]);
 
   const loadData = () => {
     if (!taskId) return;
@@ -58,7 +72,6 @@ export default function TaskReviewPage() {
     return <div className="p-6"><EmptyState title="Không tìm thấy nhiệm vụ" /></div>;
   }
 
-  // Bản nộp mới nhất (version cao nhất) là bản cần duyệt.
   const latest = [...submissions].sort((a, b) => b.versionNumber - a.versionNumber)[0];
   const submittedResult = latest?.previewImageUrl ?? latest?.fileUrl;
   const assistantName = latest?.assistantName;
@@ -87,165 +100,269 @@ export default function TaskReviewPage() {
     }
   };
 
+  const handlePay = async () => {
+    if (!task) return;
+    setPaying(true);
+    try {
+      const payment = await createTaskPayment(task.id);
+      if (payment.paymentUrl) {
+        window.location.href = payment.paymentUrl;
+      } else {
+        toast.error('Không tạo được đường dẫn thanh toán.');
+      }
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Không thể tạo thanh toán.');
+    } finally {
+      setPaying(false);
+    }
+  };
+
+  const isApproved = task.status === 'Approved' || status === 'approved';
+  const isPaid = task.paymentStatus?.toLowerCase() === 'paid';
+  const canPay = isApproved && !isPaid && (task.price ?? 0) > 0;
+  const canReviewActions =
+    status === 'idle'
+    && latest
+    && (task.status === 'Submitted' || task.status === 'Revision Required');
+
   return (
-    <div className="p-6 max-w-4xl space-y-5">
-      <div className="flex items-center gap-3">
-        <button onClick={() => navigate('/mangaka/tasks')} className="p-1.5 rounded-lg hover:bg-muted transition-colors text-muted-foreground hover:text-foreground">
-          <ChevronLeft size={20} />
-        </button>
-        <div className="flex-1">
-          <h1 className="text-xl font-bold">{task.title}</h1>
-          <p className="text-sm text-muted-foreground mt-0.5">{task.seriesTitle} · {task.chapterTitle} · Trang {task.pageNumber}</p>
+    <div className="p-6 max-w-6xl mx-auto space-y-5">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="flex items-start gap-3 min-w-0">
+          <button
+            type="button"
+            onClick={() => navigate('/mangaka/tasks')}
+            className="mt-0.5 p-1.5 rounded-lg hover:bg-muted transition-colors text-muted-foreground hover:text-foreground shrink-0"
+          >
+            <ChevronLeft size={20} />
+          </button>
+          <div className="min-w-0">
+            <div className="flex flex-wrap items-center gap-2">
+              <h1 className="text-xl font-bold truncate">{task.title}</h1>
+              <Badge status={task.status} statusKind="task" size="md" />
+            </div>
+            <p className="text-sm text-muted-foreground mt-0.5">
+              {task.seriesTitle} · {task.chapterTitle} · Trang {task.pageNumber}
+            </p>
+          </div>
         </div>
-        <Badge status={task.status} statusKind="task" size="md" />
+
+        {canPay && (
+          <Button variant="primary" loading={paying} onClick={handlePay} className="shrink-0">
+            <CreditCard size={15} />
+            Thanh toán {formatVnd(task.price ?? 0)}
+          </Button>
+        )}
+        {isPaid && (
+          <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-100 border border-emerald-200 px-3 py-1.5 text-xs font-semibold text-emerald-800 shrink-0">
+            <Banknote size={13} /> Đã thanh toán {formatVnd(task.price ?? 0)}
+          </span>
+        )}
       </div>
 
-      {/* Result notification */}
-      {status === 'approved' && (
-        <div className="flex items-center gap-3 p-4 bg-green-50 border border-green-200 rounded-xl">
-          <CheckCircle size={20} className="text-green-600" />
-          <p className="text-sm font-semibold text-green-800">Nhiệm vụ đã được phê duyệt. Trợ lý đã được thông báo.</p>
+      {isApproved && (
+        <div className="flex items-center gap-3 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3">
+          <CheckCircle size={18} className="text-emerald-600 shrink-0" />
+          <p className="text-sm text-emerald-900">
+            <span className="font-semibold">Đã phê duyệt.</span>
+            {' '}Trợ lý đã được thông báo
+            {isPaid ? ' · Đã thanh toán thù lao.' : canPay ? ' · Thanh toán bằng nút góc trên.' : '.'}
+          </p>
         </div>
       )}
       {status === 'revised' && (
-        <div className="flex items-center gap-3 p-4 bg-orange-50 border border-orange-200 rounded-xl">
-          <RotateCcw size={20} className="text-orange-600" />
-          <p className="text-sm font-semibold text-orange-800">Đã yêu cầu chỉnh sửa. Trợ lý đã được thông báo kèm phản hồi của bạn.</p>
+        <div className="flex items-center gap-3 rounded-xl border border-orange-200 bg-orange-50 px-4 py-3">
+          <RotateCcw size={18} className="text-orange-600 shrink-0" />
+          <p className="text-sm font-medium text-orange-900">
+            Đã yêu cầu chỉnh sửa — trợ lý nhận kèm phản hồi của bạn.
+          </p>
         </div>
       )}
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
-        {/* Task info card */}
-        <Card className="lg:col-span-1">
-          <CardHeader><CardTitle>Chi tiết Nhiệm vụ</CardTitle></CardHeader>
-          <div className="space-y-3 text-sm">
-            <div className="flex justify-between items-center">
-              <span className="text-muted-foreground">Loại</span>
-              <TypeBadge type={task.type} />
-            </div>
-            <div className="flex justify-between items-center">
-              <span className="text-muted-foreground">Trạng thái</span>
-              <Badge status={task.status} statusKind="task" />
-            </div>
-            <div className="flex items-center gap-2">
-              <User size={14} className="text-muted-foreground shrink-0" />
-              <span className="font-medium">{assistantName ?? 'Chưa rõ trợ lý'}</span>
-            </div>
-            <div className="flex items-center gap-2 text-muted-foreground">
-              <Calendar size={14} className="shrink-0" />
-              <span>Hạn {task.deadline ? format(new Date(task.deadline), 'dd/MM/yyyy') : '—'}</span>
-            </div>
-            <div className="pt-2 border-t border-border">
-              <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-1">Hướng dẫn</p>
-              <p className="text-sm text-foreground/80 leading-relaxed">{task.description}</p>
-            </div>
-            {latest?.note && (
-              <div className="pt-2 border-t border-border">
-                <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-1">Ghi chú của trợ lý</p>
-                <p className="text-sm text-foreground/80 leading-relaxed">{latest.note}</p>
-              </div>
-            )}
+      {/* Meta strip */}
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2">
+        <div className="rounded-xl border bg-card px-3 py-2.5">
+          <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Loại</p>
+          <div className="mt-1"><TypeBadge type={task.type} /></div>
+        </div>
+        <div className="rounded-xl border bg-card px-3 py-2.5">
+          <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Trợ lí</p>
+          <p className="mt-1 text-sm font-medium inline-flex items-center gap-1.5 truncate">
+            <User size={13} className="text-muted-foreground shrink-0" />
+            {assistantName ?? '—'}
+          </p>
+        </div>
+        <div className="rounded-xl border bg-card px-3 py-2.5">
+          <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Hạn</p>
+          <p className="mt-1 text-sm font-medium inline-flex items-center gap-1.5">
+            <Calendar size={13} className="text-muted-foreground shrink-0" />
+            {task.deadline ? format(new Date(task.deadline), 'dd/MM/yyyy') : '—'}
+          </p>
+        </div>
+        <div className="rounded-xl border bg-card px-3 py-2.5">
+          <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Thù lao</p>
+          <p className="mt-1 text-sm font-semibold tabular-nums">{formatVnd(task.price ?? 0)}</p>
+        </div>
+        <div className="rounded-xl border bg-card px-3 py-2.5">
+          <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Thanh toán</p>
+          <p className={`mt-1 text-sm font-semibold ${
+            !isApproved ? 'text-muted-foreground' : isPaid ? 'text-emerald-700' : 'text-amber-700'
+          }`}>
+            {!isApproved ? '—' : isPaid ? 'Đã trả' : 'Chưa trả'}
+          </p>
+        </div>
+        <div className="rounded-xl border bg-card px-3 py-2.5 col-span-2 sm:col-span-3 lg:col-span-1">
+          <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Bản nộp</p>
+          <p className="mt-1 text-sm font-medium">
+            {latest ? `v${latest.versionNumber}` : 'Chưa có'}
+          </p>
+        </div>
+      </div>
+
+      {/* Comparison — full width */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div className="rounded-2xl border bg-card overflow-hidden shadow-sm">
+          <div className="px-3.5 py-2.5 border-b bg-muted/30">
+            <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Trang gốc</p>
           </div>
-        </Card>
-
-        {/* Page comparison */}
-        <div className="lg:col-span-2 space-y-4">
-          <div className="grid grid-cols-2 gap-4">
-            <Card padding="none">
-              <div className="p-3 border-b border-border">
-                <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Trang gốc</p>
-              </div>
-              <div className="relative bg-[#F0EBE0] aspect-[3/4]">
-                {task.pageImageUrl ? (
-                  <img src={task.pageImageUrl} alt={`Trang ${task.pageNumber}`} className="w-full h-full object-cover" />
-                ) : (
-                  <MangaPanelPreview layout={(task.pageNumber - 1) % 4} />
-                )}
-                {/* Highlight assigned region */}
-                <div
-                  className="absolute border-2 border-primary bg-primary/15"
-                  style={{
-                    left: `${task.region.x}%`, top: `${task.region.y}%`,
-                    width: `${task.region.width}%`, height: `${task.region.height}%`,
-                  }}
-                >
-                  <span className="absolute top-0 left-0 text-[8px] font-bold bg-primary text-white px-1">
-                    {task.type.slice(0, 2).toUpperCase()}
-                  </span>
-                </div>
-              </div>
-            </Card>
-
-            <Card padding="none">
-              <div className="p-3 border-b border-border flex items-center justify-between">
-                <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Kết quả đã nộp</p>
-                {latest?.fileUrl && (
-                  <a href={latest.fileUrl} target="_blank" rel="noopener noreferrer"
-                    className="text-primary text-xs flex items-center gap-1 hover:underline">
-                    <ExternalLink size={11} /> View
-                  </a>
-                )}
-              </div>
-              {submittedResult ? (
-                <div className="relative aspect-[3/4] overflow-hidden bg-muted">
-                  <img src={submittedResult} alt="Submitted result" className="w-full h-full object-cover" />
-                  <div className="absolute inset-0 flex items-end p-3">
-                    <div className="bg-black/60 text-white text-xs px-2 py-1 rounded-lg">
-                      Nộp bởi {assistantName ?? 'trợ lý'} · v{latest?.versionNumber}
-                    </div>
+          <div className="relative bg-[#1f1f1f] flex items-center justify-center min-h-[320px] max-h-[min(70vh,640px)] p-3">
+            <div className="relative w-full h-full flex items-center justify-center">
+              {task.pageImageUrl ? (
+                <div className="relative inline-block max-h-[min(66vh,600px)] max-w-full">
+                  <img
+                    src={task.pageImageUrl}
+                    alt={`Trang ${task.pageNumber}`}
+                    className="max-h-[min(66vh,600px)] max-w-full object-contain shadow-lg"
+                  />
+                  <div
+                    className="absolute border-2 border-primary bg-primary/20"
+                    style={{
+                      left: `${task.region.x}%`,
+                      top: `${task.region.y}%`,
+                      width: `${task.region.width}%`,
+                      height: `${task.region.height}%`,
+                    }}
+                  >
+                    <span className="absolute top-0 left-0 text-[9px] font-bold bg-primary text-white px-1 leading-4">
+                      {task.type.slice(0, 2).toUpperCase()}
+                    </span>
                   </div>
                 </div>
               ) : (
-                <div className="aspect-[3/4] flex items-center justify-center bg-muted">
-                  <div className="text-center">
-                    <AlertCircle size={24} className="text-muted-foreground mx-auto mb-2" />
-                    <p className="text-xs text-muted-foreground">Chưa có kết quả được nộp</p>
-                  </div>
+                <div className="w-48 aspect-[3/4]">
+                  <MangaPanelPreview layout={(task.pageNumber - 1) % 4} />
                 </div>
               )}
-            </Card>
+            </div>
           </div>
+        </div>
 
-          {/* Approve / Revise actions */}
-          {status === 'idle' && latest && (
-            <div className="space-y-4">
-              <Card>
-                <CardHeader><CardTitle>Hành động xét duyệt</CardTitle></CardHeader>
-                <div className="space-y-4">
-                  <div>
-                    <label className="block text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-2">
-                      Nhận xét chỉnh sửa (bắt buộc khi yêu cầu chỉnh sửa)
-                    </label>
-                    <textarea
-                      value={revisionComment}
-                      onChange={e => setRevisionComment(e.target.value)}
-                      rows={3}
-                      placeholder="Mô tả những gì cần thay đổi…"
-                      className="w-full px-4 py-2.5 text-sm bg-input-background border border-border rounded-xl resize-none focus:outline-none focus:ring-2 focus:ring-ring/30"
-                    />
-                  </div>
-                  <div className="flex gap-3">
-                    <Button
-                      variant="outline"
-                      onClick={handleRevise}
-                      disabled={!revisionComment}
-                      className="flex-1"
-                    >
-                      <RotateCcw size={15} /> Yêu cầu chỉnh sửa
-                    </Button>
-                    <Button
-                      variant="primary"
-                      onClick={handleApprove}
-                      className="flex-1"
-                    >
-                      <CheckCircle size={15} /> Phê duyệt Nhiệm vụ
-                    </Button>
-                  </div>
+        <div className="rounded-2xl border bg-card overflow-hidden shadow-sm">
+          <div className="px-3.5 py-2.5 border-b bg-muted/30 flex items-center justify-between gap-2">
+            <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Kết quả đã nộp</p>
+            {latest?.fileUrl && (
+              <a
+                href={latest.fileUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-primary text-xs inline-flex items-center gap-1 hover:underline"
+              >
+                <ExternalLink size={11} /> Mở file
+              </a>
+            )}
+          </div>
+          <div className="relative bg-[#1f1f1f] flex items-center justify-center min-h-[320px] max-h-[min(70vh,640px)] p-3">
+            {submittedResult ? (
+              <div className="relative inline-block max-h-[min(66vh,600px)] max-w-full">
+                <img
+                  src={submittedResult}
+                  alt="Kết quả đã nộp"
+                  className="max-h-[min(66vh,600px)] max-w-full object-contain shadow-lg"
+                />
+                <div className="absolute left-2 bottom-2 rounded-md bg-black/65 px-2 py-1 text-[11px] text-white">
+                  {assistantName ?? 'Trợ lí'} · v{latest?.versionNumber}
                 </div>
-              </Card>
+              </div>
+            ) : (
+              <div className="text-center py-16 px-4">
+                <AlertCircle size={28} className="text-muted-foreground mx-auto mb-2" />
+                <p className="text-sm text-muted-foreground">Chưa có kết quả được nộp</p>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* Notes + actions */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm">Hướng dẫn giao việc</CardTitle>
+          </CardHeader>
+          <p className="text-sm text-foreground/85 leading-relaxed whitespace-pre-wrap">
+            {task.description || '—'}
+          </p>
+          {latest?.note && (
+            <div className="mt-4 pt-3 border-t">
+              <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-1">
+                Ghi chú trợ lí
+              </p>
+              <p className="text-sm text-foreground/85 leading-relaxed whitespace-pre-wrap">{latest.note}</p>
             </div>
           )}
-        </div>
+        </Card>
+
+        {canReviewActions ? (
+          <Card>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm">Hành động xét duyệt</CardTitle>
+            </CardHeader>
+            <div className="space-y-3">
+              <textarea
+                value={revisionComment}
+                onChange={e => setRevisionComment(e.target.value)}
+                rows={3}
+                placeholder="Nhận xét khi yêu cầu chỉnh sửa…"
+                className="w-full px-3 py-2.5 text-sm bg-input-background border border-border rounded-xl resize-none focus:outline-none focus:ring-2 focus:ring-ring/30"
+              />
+              <div className="flex flex-col sm:flex-row gap-2">
+                <Button
+                  variant="outline"
+                  onClick={handleRevise}
+                  disabled={!revisionComment || status === 'approving'}
+                  className="flex-1"
+                >
+                  <RotateCcw size={15} /> Yêu cầu chỉnh sửa
+                </Button>
+                <Button
+                  variant="primary"
+                  onClick={handleApprove}
+                  loading={status === 'approving'}
+                  className="flex-1"
+                >
+                  <CheckCircle size={15} /> Phê duyệt
+                </Button>
+              </div>
+            </div>
+          </Card>
+        ) : (
+          <Card className="flex flex-col justify-center">
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm">Trạng thái</CardTitle>
+            </CardHeader>
+            <p className="text-sm text-muted-foreground leading-relaxed">
+              {isApproved
+                ? isPaid
+                  ? 'Task đã duyệt và đã thanh toán thù lao.'
+                  : canPay
+                    ? 'Task đã duyệt. Dùng nút Thanh toán góc trên để trả qua VNPay.'
+                    : 'Task đã duyệt. Không có thù lao cần thanh toán.'
+                : status === 'revised'
+                  ? 'Đang chờ trợ lí nộp bản chỉnh sửa.'
+                  : 'Chờ kết quả nộp để xét duyệt.'}
+            </p>
+          </Card>
+        )}
       </div>
     </div>
   );

@@ -101,7 +101,11 @@ try
         create index if not exists idx_mangaka_assistants_assistant
             on public.mangaka_assistants(assistant_id);
 
-        alter table public.rankings add column if not exists notes text null;";
+        alter table public.rankings add column if not exists notes text null;
+
+        -- Cho phép nhiều Board Lead (bỏ unique partial index cũ).
+        alter table public.profiles add column if not exists is_board_lead boolean not null default false;
+        drop index if exists public.idx_profiles_one_board_lead;";
     await ensureCmd.ExecuteNonQueryAsync();
 }
 catch (Exception ex)

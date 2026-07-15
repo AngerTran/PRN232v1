@@ -1,6 +1,5 @@
 import { useEffect, useState, type ReactNode } from 'react';
-import { useNavigate } from 'react-router';
-import { Bell, BellOff, ExternalLink, AlertTriangle, CheckCircle, Clock, TrendingDown, Send } from 'lucide-react';
+import { Bell, BellOff, AlertTriangle, CheckCircle, Clock, TrendingDown, Send } from 'lucide-react';
 import { clsx } from 'clsx';
 import Card from '../../components/ui/Card';
 import Button from '../../components/ui/Button';
@@ -20,7 +19,6 @@ const NOTIF_ICON: Record<NotifType, ReactNode> = {
 };
 
 export default function NotificationsPage() {
-  const navigate = useNavigate();
   const { setPageMeta } = usePageMeta();
   const [notifs, setNotifs] = useState<Notification[]>([]);
   const [loading, setLoading] = useState(true);
@@ -106,13 +104,11 @@ export default function NotificationsPage() {
               <div
                 key={n.id}
                 onClick={() => {
-                  markRead(n.id);
-                  if (n.linkTo) navigate(n.linkTo);
+                  if (!n.read) markRead(n.id);
                 }}
                 className={clsx(
                   'flex items-start gap-4 px-5 py-4 transition-colors',
-                  n.linkTo ? 'cursor-pointer hover:bg-muted/50' : '',
-                  !n.read ? 'bg-primary/3' : ''
+                  !n.read ? 'cursor-pointer hover:bg-muted/50 bg-primary/3' : ''
                 )}
               >
                 <div className={clsx('w-9 h-9 rounded-xl flex items-center justify-center shrink-0',
@@ -132,7 +128,6 @@ export default function NotificationsPage() {
                     {formatDistanceToNow(new Date(n.createdAt), { addSuffix: true })}
                   </p>
                 </div>
-                {n.linkTo && <ExternalLink size={14} className="text-muted-foreground mt-1 shrink-0" />}
               </div>
             ))}
           </div>

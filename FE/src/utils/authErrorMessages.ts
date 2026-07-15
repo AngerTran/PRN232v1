@@ -106,6 +106,16 @@ export function formatAuthError(error: unknown, context: AuthErrorContext = 'gen
   if (/request failed with status 403/.test(normalized) || normalized.includes('forbidden')) {
     return 'Bạn không có quyền thực hiện thao tác này.';
   }
+  if (/request failed with status 404/.test(normalized) || normalized.includes('not found')) {
+    return 'API không tìm thấy — hãy restart lại backend rồi thử lại.';
+  }
+  if (
+    normalized.includes('idx_profiles_one_board_lead') ||
+    normalized.includes('unique constraint') ||
+    normalized.includes('duplicate key')
+  ) {
+    return 'Chưa bỏ giới hạn 1 Lead trên database. Chạy migration rồi thử lại.';
+  }
   if (/request failed with status 5\d\d/.test(normalized)) {
     return 'Hệ thống tạm thời gián đoạn. Vui lòng thử lại sau.';
   }

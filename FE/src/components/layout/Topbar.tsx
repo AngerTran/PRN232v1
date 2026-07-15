@@ -1,9 +1,12 @@
-import { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router';
+import { useCallback, useEffect, useState } from 'react';
+import { useLocation, useNavigate } from 'react-router';
 import { Search, Bell, ChevronDown } from 'lucide-react';
 import { clsx } from 'clsx';
 import { getStoredUser } from '../../services/authApi';
-import { getNotifications } from '../../services/notificationsApi';
+import {
+  getNotifications,
+  NOTIFICATIONS_CHANGED_EVENT,
+} from '../../services/notificationsApi';
 
 interface TopbarProps {
   title: string;
@@ -12,13 +15,22 @@ interface TopbarProps {
 
 export default function Topbar({ title, breadcrumb }: TopbarProps) {
   const navigate = useNavigate();
+  const location = useLocation();
   const user = getStoredUser();
   const [searchFocused, setSearchFocused] = useState(false);
   const [unreadCount, setUnreadCount] = useState(0);
 
-  useEffect(() => {
-    getNotifications(true).then(items => setUnreadCount(items.length)).catch(() => setUnreadCount(0));
+  const refreshUnread = useCallback(() => {
+    getNotifications(true)
+      .then(items => setUnreadCount(items.length))
+      .catch(() => setUnreadCount(0));
   }, []);
+
+  useEffect(() => {
+    refreshUnread();
+    window.addEventListener(NOTIFICATIONS_CHANGED_EVENT, refreshUnread);
+    return () => window.removeEventListener(NOTIFICATIONS_CHANGED_EVENT, refreshUnread);
+  }, [refreshUnread, location.pathname]);
 
   const initials = user?.name.split(' ').map(n => n[0]).join('').toUpperCase() ?? 'TH';
 
@@ -49,7 +61,6 @@ export default function Topbar({ title, breadcrumb }: TopbarProps) {
       </div>
 
       <div className="flex items-center gap-3">
-        {/* Search */}
         <div className={clsx(
           'hidden md:flex items-center gap-2 px-3 py-1.5 border rounded-lg text-sm transition-all duration-150',
           searchFocused ? 'w-64 border-primary/50 ring-2 ring-ring/20' : 'w-48 border-border bg-card'
@@ -64,10 +75,10 @@ export default function Topbar({ title, breadcrumb }: TopbarProps) {
           />
         </div>
 
-        {/* Notifications */}
         <button
           onClick={() => navigate('/notifications')}
           className="relative w-9 h-9 flex items-center justify-center rounded-xl hover:bg-muted transition-colors text-muted-foreground hover:text-foreground"
+          aria-label={unreadCount > 0 ? `${unreadCount} thông báo chưa đọc` : 'Thông báo'}
         >
           <Bell size={18} />
           {unreadCount > 0 && (
@@ -75,7 +86,6 @@ export default function Topbar({ title, breadcrumb }: TopbarProps) {
           )}
         </button>
 
-        {/* Avatar */}
         <button
           onClick={() => navigate('/profile')}
           className="flex items-center gap-2 px-2 py-1.5 rounded-xl hover:bg-muted transition-colors group"

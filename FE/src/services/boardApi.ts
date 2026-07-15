@@ -283,24 +283,40 @@ export interface GlobalBoardLead {
   boardMemberName: string;
 }
 
-export async function getGlobalBoardLead(): Promise<GlobalBoardLead | null> {
+export async function listBoardLeads(): Promise<GlobalBoardLead[]> {
   try {
-    const raw = await apiRequest<
-      ApiEnvelope<{ boardMemberId: string; boardMemberName: string }> | { boardMemberId: string; boardMemberName: string } | null | undefined
-    >('/api/board/global-lead');
-    if (raw == null) return null;
-    const item = unwrap(raw as ApiEnvelope<{ boardMemberId: string; boardMemberName: string }>);
-    if (!item?.boardMemberId) return null;
-    return {
+    const items = unwrap(
+      await apiRequest<ApiEnvelope<Array<{ boardMemberId: string; boardMemberName: string }>>>(
+        '/api/board/leads'
+      )
+    );
+    return (items ?? []).map(item => ({
       boardMemberId: item.boardMemberId,
       boardMemberName: item.boardMemberName,
-    };
+    }));
   } catch {
-    return null;
+    // Compat BE cũ: chỉ có 1 lead qua /global-lead
+    try {
+      const raw = await apiRequest<
+        ApiEnvelope<{ boardMemberId: string; boardMemberName: string }> | null | undefined
+      >('/api/board/global-lead');
+      if (raw == null) return [];
+      const item = unwrap(raw as ApiEnvelope<{ boardMemberId: string; boardMemberName: string }>);
+      if (!item?.boardMemberId) return [];
+      return [{ boardMemberId: item.boardMemberId, boardMemberName: item.boardMemberName }];
+    } catch {
+      return [];
+    }
   }
 }
 
+export async function getGlobalBoardLead(): Promise<GlobalBoardLead | null> {
+  const leads = await listBoardLeads();
+  return leads[0] ?? null;
+}
+
 export async function assignGlobalBoardLead(boardMemberId: string): Promise<GlobalBoardLead> {
+  // PUT /global-lead vẫn được BE mới map cùng logic gán chức vụ Lead (cho phép nhiều Lead).
   const item = unwrap(
     await apiRequest<ApiEnvelope<{ boardMemberId: string; boardMemberName: string }>>(
       '/api/board/global-lead',
@@ -314,6 +330,50 @@ export async function assignGlobalBoardLead(boardMemberId: string): Promise<Glob
     boardMemberId: item.boardMemberId,
     boardMemberName: item.boardMemberName,
   };
+}
+
+export async function clearBoardLeadRole(boardMemberId: string): Promise<void> {
+  try {
+    await apiRequest(`/api/board/leads/${boardMemberId}`, { method: 'DELETE' });
+  } catch (err) {
+    const message = err instanceof Error ? err.message.toLowerCase() : '';
+    if (!message.includes('không tìm thấy') && !message.includes('not found')) {
+      throw err;
+    }
+    // Compat BE cũ: chỉ hỗ trợ xóa toàn bộ
+    await apiRequest('/api/board/global-lead', { method: 'DELETE' });
+  }
+}
+
+export interface SeriesEditorAssignment {
+  seriesId: string;
+  seriesTitle: string;
+  editorId?: string | null;
+  editorName?: string | null;
+}
+
+export async function assignSeriesEditor(seriesId: string, editorId: string): Promise<SeriesEditorAssignment> {
+  const item = unwrap(
+    await apiRequest<ApiEnvelope<{
+      seriesId: string;
+      seriesTitle: string;
+      editorId?: string | null;
+      editorName?: string | null;
+    }>>(`/api/board/series/${seriesId}/editor`, {
+      method: 'PUT',
+      body: JSON.stringify({ editorId }),
+    })
+  );
+  return {
+    seriesId: item.seriesId,
+    seriesTitle: item.seriesTitle,
+    editorId: item.editorId,
+    editorName: item.editorName,
+  };
+}
+
+export async function clearSeriesEditor(seriesId: string): Promise<void> {
+  await apiRequest(`/api/board/series/${seriesId}/editor`, { method: 'DELETE' });
 }
 
 export async function clearGlobalBoardLead(): Promise<void> {

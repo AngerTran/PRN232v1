@@ -24,6 +24,7 @@ import { getMyTasks } from '../../services/tasksApi';
 import { Eye, CheckCircle } from 'lucide-react';
 import { format } from 'date-fns';
 import { vi } from 'date-fns/locale';
+import { formatVnd } from '../../utils/formatCurrency';
 
 function currentMonthKey(): string {
   const d = new Date();
@@ -140,7 +141,7 @@ export default function ApprovedTasksPage() {
                             : '—'}
                         </TableCell>
                         <TableCell className="font-medium">
-                          {task.price.toLocaleString('vi-VN')} ¥
+                          {formatVnd(task.price)}
                         </TableCell>
                         <TableCell>
                           <Badge variant={paid ? 'default' : 'secondary'}>

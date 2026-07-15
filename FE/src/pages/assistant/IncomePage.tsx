@@ -25,6 +25,7 @@ import { getMyEarnings, type AssistantEarnings } from '../../services/submission
 import { FileCheck, ClipboardCheck, Clock, CheckCircle, Eye, Wallet } from 'lucide-react';
 import { format } from 'date-fns';
 import { vi } from 'date-fns/locale';
+import { formatVnd } from '../../utils/formatCurrency';
 
 function currentMonthKey(): string {
   const d = new Date();
@@ -112,9 +113,9 @@ export default function IncomePage() {
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-5">
         <IncomeSummaryCard
           title="Thu Nhập Tháng"
-          value={`${(earnings?.totalEarnings ?? 0).toLocaleString('vi-VN')} ¥`}
+          value={formatVnd(earnings?.totalEarnings ?? 0)}
           icon={Wallet}
-          description={`Đã thanh toán: ${(earnings?.paidEarnings ?? 0).toLocaleString('vi-VN')} ¥`}
+          description={`Đã thanh toán: ${formatVnd(earnings?.paidEarnings ?? 0)}`}
         />
         <IncomeSummaryCard
           title="Bài Được Duyệt"
@@ -174,7 +175,7 @@ export default function IncomePage() {
                         : '—'}
                     </TableCell>
                     <TableCell className="text-right font-medium">
-                      {task.price.toLocaleString('vi-VN')} ¥
+                      {formatVnd(task.price)}
                     </TableCell>
                     <TableCell className="text-right">
                       <Button

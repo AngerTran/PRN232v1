@@ -1,6 +1,7 @@
 import { useEffect, useState, type FormEvent } from 'react';
-import { User, Calendar, DollarSign, FileText, Plus } from 'lucide-react';
+import { User, Calendar, Banknote, FileText, Plus } from 'lucide-react';
 import type { TaskType, WorkspaceAssistant } from '../../services/workspaceApi';
+import { formatVndInput } from '../../utils/formatCurrency';
 
 const TASK_TYPES: TaskType[] = ['Background', 'Shading', 'Effect', 'Screentone', 'Clean Line', 'Dialogue Edit'];
 
@@ -31,6 +32,9 @@ interface TaskPanelProps {
   onAssignTask?: (data: TaskFormData & { region: string; files: File[] }) => void | Promise<void>;
   assistants: WorkspaceAssistant[];
   isSubmitting?: boolean;
+  /** Nếu trang đang có task mở — chỉ được giao thêm cho cùng trợ lí này. */
+  lockedAssistantId?: string;
+  openTaskHint?: string;
 }
 
 export interface TaskFormData {
@@ -47,10 +51,12 @@ export default function TaskPanel({
   onAssignTask,
   assistants,
   isSubmitting = false,
+  lockedAssistantId,
+  openTaskHint,
 }: TaskPanelProps) {
   const [form, setForm] = useState<TaskFormData>({
     type: 'Background',
-    assistantId: assistants[0]?.id ?? '',
+    assistantId: lockedAssistantId ?? assistants[0]?.id ?? '',
     description: '',
     deadline: '',
     price: '',
@@ -59,14 +65,22 @@ export default function TaskPanel({
   const [files, setFiles] = useState<File[]>([]);
 
   useEffect(() => {
+    if (lockedAssistantId) {
+      setForm(f => (f.assistantId === lockedAssistantId ? f : { ...f, assistantId: lockedAssistantId }));
+      return;
+    }
     if (!form.assistantId && assistants[0]?.id) {
       setForm(f => ({ ...f, assistantId: assistants[0].id }));
     }
-  }, [assistants, form.assistantId]);
+  }, [assistants, form.assistantId, lockedAssistantId]);
+
+  const blockedByDifferentAssignee = Boolean(
+    lockedAssistantId && form.assistantId && form.assistantId !== lockedAssistantId
+  );
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
-    if (!hasRegion || !region) return;
+    if (!hasRegion || !region || blockedByDifferentAssignee) return;
     try {
       await onAssignTask?.({ ...form, region: JSON.stringify(region), files });
     } catch {
@@ -81,10 +95,18 @@ export default function TaskPanel({
     <form className="flex flex-col h-full" onSubmit={handleSubmit}>
       <div className="px-4 py-3 border-b border-[#3A3A3A]">
         <h3 className="text-sm font-semibold text-white">Giao nhiệm vụ</h3>
-        <p className="text-xs text-gray-400 mt-0.5">Chọn vùng trên canvas, sau đó điền thông tin</p>
+        <p className="text-xs text-gray-400 mt-0.5">
+          Được giao nhiều vùng trên cùng trang cho 1 trợ lí. Không giao song song cho người khác.
+        </p>
       </div>
 
       <div className="flex-1 overflow-y-auto p-4 space-y-4">
+        {openTaskHint && (
+          <div className="rounded-lg border border-amber-700/50 bg-amber-950/40 px-3 py-2.5 text-xs text-amber-100 leading-relaxed">
+            {openTaskHint}
+          </div>
+        )}
+
         <div className="rounded-lg border border-[#3A3A3A] bg-[#242424] p-3 text-xs text-gray-300 space-y-2">
           <p className="font-semibold text-white">Cách chọn vùng</p>
           <ol className="space-y-1 leading-relaxed text-gray-400">
@@ -125,8 +147,8 @@ export default function TaskPanel({
           <select
             value={form.assistantId}
             onChange={e => setForm(f => ({ ...f, assistantId: e.target.value }))}
-            disabled={assistants.length === 0}
-            className="w-full px-3 py-2 text-sm bg-[#3A3A3A] border border-[#4A4A4A] rounded-lg text-white focus:outline-none focus:border-gray-500"
+            disabled={assistants.length === 0 || Boolean(lockedAssistantId)}
+            className="w-full px-3 py-2 text-sm bg-[#3A3A3A] border border-[#4A4A4A] rounded-lg text-white focus:outline-none focus:border-gray-500 disabled:opacity-70"
           >
             {assistants.map(a => (
               <option key={a.id} value={a.id}>{a.name}</option>
@@ -135,6 +157,11 @@ export default function TaskPanel({
               <option value="">Chưa có trợ lý trong studio</option>
             )}
           </select>
+          {lockedAssistantId && (
+            <p className="text-xs text-amber-400/90 mt-2">
+              Đang khóa theo trợ lí có task mở trên trang này.
+            </p>
+          )}
           {assistants.length === 0 && (
             <p className="text-xs text-amber-400 mt-2">
               Hãy thêm trợ lý tại mục Trợ lý trước khi giao nhiệm vụ.
@@ -171,14 +198,15 @@ export default function TaskPanel({
           </div>
           <div>
             <label className="block text-xs font-semibold text-gray-300 uppercase tracking-wide mb-2">
-              <span className="flex items-center gap-1"><DollarSign size={12} /> Thù lao (¥)</span>
+              <span className="flex items-center gap-1"><Banknote size={12} /> Thù lao (VNĐ)</span>
             </label>
             <input
-              type="number"
+              type="text"
+              inputMode="numeric"
               value={form.price}
-              onChange={e => setForm(f => ({ ...f, price: e.target.value }))}
-              placeholder="3500"
-              className="w-full px-3 py-2 text-sm bg-[#3A3A3A] border border-[#4A4A4A] rounded-lg text-white placeholder:text-gray-500 focus:outline-none focus:border-gray-500"
+              onChange={e => setForm(f => ({ ...f, price: formatVndInput(e.target.value) }))}
+              placeholder="50.000"
+              className="w-full px-3 py-2 text-sm bg-[#3A3A3A] border border-[#4A4A4A] rounded-lg text-white placeholder:text-gray-500 focus:outline-none focus:border-gray-500 tabular-nums"
             />
           </div>
         </div>
@@ -226,11 +254,22 @@ export default function TaskPanel({
         ) : (
           <button
             type="submit"
-            disabled={!hasRegion || !form.description || !form.deadline || !form.assistantId || isSubmitting}
+            disabled={
+              blockedByDifferentAssignee
+              || !hasRegion
+              || !form.description
+              || !form.deadline
+              || !form.assistantId
+              || isSubmitting
+            }
             className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-primary text-white text-sm font-semibold rounded-xl hover:bg-[#B81E2E] disabled:opacity-40 disabled:cursor-not-allowed transition-all duration-150"
           >
             <Plus size={15} />
-            {isSubmitting ? 'Đang giao...' : 'Giao nhiệm vụ'}
+            {blockedByDifferentAssignee
+              ? 'Chỉ giao cùng 1 người'
+              : isSubmitting
+                ? 'Đang giao...'
+                : 'Giao nhiệm vụ'}
           </button>
         )}
       </div>

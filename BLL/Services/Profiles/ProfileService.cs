@@ -3,10 +3,9 @@ using BLL.Dtos.Tasks;
 using DAL.Models;
 using DAL.Repositories;
 using BLL.Services.Workflow;
-using BLL.Services.Workflow;
 using BLL.Dtos.Auth;
 using BLL.Dtos.Profiles;
-using BLL.Services.Profiles;
+using BLL.Common;
 using Microsoft.EntityFrameworkCore;
 using BLL.Services.Notifications;
 
@@ -68,9 +67,9 @@ public class ProfileService
         var caller = await Repository.GetByIdAsync(callerId, cancellationToken: cancellationToken)
             ?? throw new ProfileForbiddenException("Caller profile not found.");
 
-        if (caller.Role != ProfileRole.Admin && caller.Role != ProfileRole.Mangaka)
+        if (caller.Role != ProfileRole.Admin && caller.Role != ProfileRole.Board)
         {
-            throw new ProfileForbiddenException("Requires mangaka or admin role.");
+            throw new ProfileForbiddenException("Requires board or admin role.");
         }
 
         var profiles = await Repository.FindListAsync(
@@ -116,6 +115,23 @@ public class ProfileService
         return profiles.Select(MapToDto).ToList();
     }
 
+    /// <summary>Danh sách mọi assistant đang active — để mangaka chọn khi mời.</summary>
+    public async Task<IReadOnlyList<ProfileResponse>> ListActiveAssistantsDirectoryAsync(
+        Guid callerId,
+        CancellationToken cancellationToken = default)
+    {
+        await EnsureRoleAsync(callerId, ProfileRoles.Mangaka, cancellationToken);
+
+        var profiles = await _unitOfWork.Context.Profiles
+            .AsNoTracking()
+            .Where(p => p.Role == ProfileRole.Assistant && (p.IsActive == null || p.IsActive == true))
+            .OrderBy(p => p.FullName)
+            .ThenBy(p => p.Email)
+            .ToListAsync(cancellationToken);
+
+        return profiles.Select(MapToDto).ToList();
+    }
+
     public async Task<AssistantInvitationResponse> InviteAssistantAsync(
         Guid callerId,
         AddAssistantRequest request,
@@ -123,14 +139,36 @@ public class ProfileService
     {
         await EnsureRoleAsync(callerId, ProfileRoles.Mangaka, cancellationToken);
 
-        var normalizedEmail = request.Email.Trim().ToLowerInvariant();
-        var assistant = await _unitOfWork.Context.Profiles
-            .FirstOrDefaultAsync(
-                p => p.Email.ToLower() == normalizedEmail
-                    && p.Role == ProfileRole.Assistant
-                    && p.IsActive != false,
-                cancellationToken)
-            ?? throw new ArgumentException("No active assistant profile was found with this email.");
+        Profile? assistant = null;
+        if (request.AssistantId is Guid assistantId)
+        {
+            assistant = await Repository.GetByIdAsync(assistantId, cancellationToken: cancellationToken);
+            if (assistant is null
+                || assistant.Role != ProfileRole.Assistant
+                || assistant.IsActive == false)
+            {
+                throw new ArgumentException("Không tìm thấy tài khoản trợ lý hợp lệ.");
+            }
+        }
+        else if (!string.IsNullOrWhiteSpace(request.Email))
+        {
+            var normalizedEmail = request.Email.Trim().ToLowerInvariant();
+            assistant = await _unitOfWork.Context.Profiles
+                .FirstOrDefaultAsync(
+                    p => p.Email.ToLower() == normalizedEmail
+                        && p.Role == ProfileRole.Assistant
+                        && p.IsActive != false,
+                    cancellationToken);
+            if (assistant is null)
+            {
+                throw new ArgumentException(
+                    "Chưa có tài khoản Assistant với email này. Nhờ Admin tạo tài khoản hoặc người đó tự đăng ký với role Assistant trước khi mời.");
+            }
+        }
+        else
+        {
+            throw new ArgumentException("Chọn trợ lý từ danh sách hoặc nhập email tài khoản Assistant.");
+        }
 
         var invitation = await _unitOfWork.Context.MangakaAssistants
             .Include(link => link.Mangaka)
@@ -152,6 +190,14 @@ public class ProfileService
             await _unitOfWork.Context.MangakaAssistants.AddAsync(invitation, cancellationToken);
             shouldNotify = true;
         }
+        else if (invitation.Status == "accepted")
+        {
+            throw new ArgumentException("Trợ lý này đã trong studio của bạn.");
+        }
+        else if (invitation.Status == "pending")
+        {
+            throw new ArgumentException("Đã gửi lời mời — đang chờ trợ lý xác nhận.");
+        }
         else if (invitation.Status == "rejected")
         {
             invitation.Status = "pending";
@@ -172,6 +218,8 @@ public class ProfileService
                 assistant.Id,
                 "Lời mời tham gia studio",
                 $"{invitation.Mangaka.FullName} đã mời bạn tham gia studio với vai trò trợ lý.",
+                "/assistant/invitations",
+                WorkflowNotificationPaths.CategorySubmission,
                 cancellationToken: cancellationToken);
         }
 
@@ -493,7 +541,8 @@ public class ProfileService
             profile.EmailConfirmed,
             profile.IsActive,
             profile.CreatedAt,
-            profile.UpdatedAt);
+            profile.UpdatedAt,
+            profile.IsBoardLead);
 
     private IQueryable<MangakaAssistant> InvitationQuery(bool asNoTracking = true)
     {

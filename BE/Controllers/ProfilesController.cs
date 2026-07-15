@@ -70,9 +70,9 @@ public class ProfilesController : ControllerBase
         return Ok(profiles);
     }
 
-    /// <summary>Danh sách assistant — Mangaka.</summary>
+    /// <summary>Danh sách assistant đã liên kết (accepted) — Mangaka.</summary>
     [HttpGet("assistants")]
-    [SwaggerOperation(Summary = "List assistants", Description = "Returns active assistant profiles. Requires mangaka role.")]
+    [SwaggerOperation(Summary = "List my assistants", Description = "Returns assistants accepted into the mangaka studio.")]
     [ProducesResponseType(typeof(IReadOnlyList<ProfileResponse>), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
     public async Task<ActionResult<IReadOnlyList<ProfileResponse>>> ListAssistants(CancellationToken cancellationToken)
@@ -86,8 +86,22 @@ public class ProfilesController : ControllerBase
         return Ok(profiles);
     }
 
+    /// <summary>Danh sách assistant có thể mời (mọi account Assistant active).</summary>
+    [HttpGet("assistants/directory")]
+    [SwaggerOperation(Summary = "List assistant directory", Description = "Returns all active assistant profiles for mangaka to invite.")]
+    [ProducesResponseType(typeof(IReadOnlyList<ProfileResponse>), StatusCodes.Status200OK)]
+    public async Task<ActionResult<IReadOnlyList<ProfileResponse>>> ListAssistantsDirectory(CancellationToken cancellationToken)
+    {
+        if (!this.TryGetUserId(out var callerId))
+        {
+            return Unauthorized();
+        }
+
+        return Ok(await _profileService.ListActiveAssistantsDirectoryAsync(callerId, cancellationToken));
+    }
+
     [HttpPost("assistants")]
-    [SwaggerOperation(Summary = "Invite assistant", Description = "Sends an invitation to an existing active assistant profile by email.")]
+    [SwaggerOperation(Summary = "Invite assistant", Description = "Invites an assistant by account id or email of an existing assistant profile.")]
     [ProducesResponseType(typeof(AssistantInvitationResponse), StatusCodes.Status201Created)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
@@ -150,9 +164,9 @@ public class ProfilesController : ControllerBase
         return removed ? NoContent() : NotFound();
     }
 
-    /// <summary>Danh sách editor — Mangaka (mời phụ trách) hoặc Admin.</summary>
+    /// <summary>Danh sách editor — Board (gán phụ trách) hoặc Admin.</summary>
     [HttpGet("editors")]
-    [SwaggerOperation(Summary = "List editors", Description = "Returns active editor profiles. Mangaka and admin can list editors for assignment.")]
+    [SwaggerOperation(Summary = "List editors", Description = "Returns active editor profiles. Board and admin can list editors for assignment.")]
     [ProducesResponseType(typeof(IReadOnlyList<ProfileResponse>), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
     public async Task<ActionResult<IReadOnlyList<ProfileResponse>>> ListEditors(CancellationToken cancellationToken)

@@ -213,7 +213,7 @@ public class SeriesService
     {
       if (!IsAdmin(caller.Role))
       {
-        throw new SeriesForbiddenException("Chỉ admin mới có thể gán editor trực tiếp. Mangaka hãy gửi lời mời editor.");
+        throw new SeriesForbiddenException("Chỉ admin được gán editor qua API cập nhật series. Board dùng endpoint gán editor.");
       }
 
       if (!await ProfileRepository.AnyAsync(p => p.Id == request.EditorId && p.Role == ProfileRole.Editor, cancellationToken))
@@ -262,188 +262,6 @@ public class SeriesService
     await _unitOfWork.SaveChangesAsync(cancellationToken);
 
     return await GetByIdAsync(callerId, id, cancellationToken);
-  }
-
-  public async Task<SeriesEditorInvitationResponse> InviteEditorAsync(
-    Guid callerId,
-    Guid seriesId,
-    InviteSeriesEditorRequest request,
-    CancellationToken cancellationToken = default)
-  {
-    var caller = await RequireCallerAsync(callerId, cancellationToken);
-    var series = await SeriesRepository.GetByIdAsync(seriesId, asNoTracking: false, cancellationToken)
-      ?? throw new SeriesForbiddenException("Series not found.");
-
-    if (!IsMangaka(caller.Role) || series.AuthorId != caller.Id)
-    {
-      throw new SeriesForbiddenException("Only the series author can invite an editor.");
-    }
-
-    if (!SeriesWorkflowRules.AllowsStudioProduction(series.Status))
-    {
-      throw new SeriesForbiddenException("Chỉ có thể mời editor sau khi series được hội đồng phê duyệt.");
-    }
-
-    if (series.EditorId is not null)
-    {
-      throw new SeriesForbiddenException("Series đã có editor phụ trách.");
-    }
-
-    var editor = await ProfileRepository.GetByIdAsync(request.EditorId, cancellationToken: cancellationToken)
-      ?? throw new ArgumentException("Editor profile not found.");
-    if (editor.Role != ProfileRole.Editor || editor.IsActive == false)
-    {
-      throw new ArgumentException("EditorId must reference an active profile with role 'editor'.");
-    }
-
-    // Không Include Series/Author/Editor — INNER JOIN có thể che bản ghi; đủ SeriesId+EditorId.
-    var invitation = await _unitOfWork.Context.SeriesEditorInvitations
-      .FirstOrDefaultAsync(
-        i => i.SeriesId == seriesId && i.EditorId == request.EditorId,
-        cancellationToken);
-
-    var shouldNotify = false;
-    if (invitation is null)
-    {
-      invitation = new SeriesEditorInvitation
-      {
-        SeriesId = seriesId,
-        EditorId = request.EditorId,
-        Status = "pending",
-        CreatedAt = DateTime.UtcNow
-      };
-      await _unitOfWork.Context.SeriesEditorInvitations.AddAsync(invitation, cancellationToken);
-      shouldNotify = true;
-    }
-    else if (invitation.Status == "rejected")
-    {
-      invitation.Status = "pending";
-      invitation.CreatedAt = DateTime.UtcNow;
-      invitation.RespondedAt = null;
-      shouldNotify = true;
-    }
-    else if (invitation.Status == "pending")
-    {
-      throw new ArgumentException("Lời mời đang chờ editor phản hồi.");
-    }
-    else
-    {
-      throw new ArgumentException("Editor đã chấp nhận lời mời cho series này.");
-    }
-
-    await _unitOfWork.SaveChangesAsync(cancellationToken);
-
-    if (shouldNotify)
-    {
-      await _notificationService.CreateAsync(
-        request.EditorId,
-        "Lời mời phụ trách series",
-        $"{caller.FullName} đã mời bạn phụ trách series \"{series.Title}\".",
-        WorkflowNotificationPaths.EditorInvitations(),
-        WorkflowNotificationPaths.CategorySubmission,
-        cancellationToken: cancellationToken);
-    }
-
-    return new SeriesEditorInvitationResponse(
-      invitation.SeriesId,
-      series.Title,
-      series.AuthorId,
-      caller.FullName,
-      invitation.EditorId,
-      editor.FullName,
-      invitation.Status,
-      invitation.CreatedAt,
-      invitation.RespondedAt);
-  }
-
-  public async Task<IReadOnlyList<SeriesEditorInvitationResponse>> ListSentEditorInvitationsAsync(
-    Guid callerId,
-    CancellationToken cancellationToken = default)
-  {
-    var caller = await RequireCallerAsync(callerId, cancellationToken);
-    if (!IsMangaka(caller.Role))
-    {
-      throw new SeriesForbiddenException("Requires mangaka role.");
-    }
-
-    var invitations = await EditorInvitationQuery()
-      .Where(i => i.Series.AuthorId == callerId)
-      .OrderByDescending(i => i.CreatedAt)
-      .ToListAsync(cancellationToken);
-
-    return invitations.Select(MapEditorInvitation).ToList();
-  }
-
-  public async Task<IReadOnlyList<SeriesEditorInvitationResponse>> ListMyEditorInvitationsAsync(
-    Guid callerId,
-    CancellationToken cancellationToken = default)
-  {
-    var caller = await RequireCallerAsync(callerId, cancellationToken);
-    if (!IsEditor(caller.Role))
-    {
-      throw new SeriesForbiddenException("Requires editor role.");
-    }
-
-    var invitations = await EditorInvitationQuery()
-      .Where(i => i.EditorId == callerId)
-      .OrderByDescending(i => i.CreatedAt)
-      .ToListAsync(cancellationToken);
-
-    return invitations.Select(MapEditorInvitation).ToList();
-  }
-
-  public async Task<SeriesEditorInvitationResponse?> RespondToEditorInvitationAsync(
-    Guid callerId,
-    Guid seriesId,
-    bool accept,
-    CancellationToken cancellationToken = default)
-  {
-    var caller = await RequireCallerAsync(callerId, cancellationToken);
-    if (!IsEditor(caller.Role))
-    {
-      throw new SeriesForbiddenException("Requires editor role.");
-    }
-
-    var invitation = await EditorInvitationQuery(asNoTracking: false)
-      .FirstOrDefaultAsync(i => i.SeriesId == seriesId && i.EditorId == callerId, cancellationToken);
-    if (invitation is null)
-    {
-      return null;
-    }
-
-    if (invitation.Status != "pending")
-    {
-      throw new ArgumentException("Lời mời này đã được phản hồi.");
-    }
-
-    invitation.Status = accept ? "accepted" : "rejected";
-    invitation.RespondedAt = DateTime.UtcNow;
-
-    if (accept)
-    {
-      var series = await SeriesRepository.GetByIdAsync(seriesId, asNoTracking: false, cancellationToken)
-        ?? throw new SeriesForbiddenException("Series not found.");
-      if (series.EditorId is not null && series.EditorId != callerId)
-      {
-        throw new SeriesForbiddenException("Series đã có editor phụ trách.");
-      }
-
-      series.EditorId = callerId;
-      series.UpdatedAt = DateTime.UtcNow;
-      SeriesRepository.Update(series);
-    }
-
-    await _unitOfWork.SaveChangesAsync(cancellationToken);
-
-    await _notificationService.CreateAsync(
-      invitation.Series.AuthorId,
-      accept ? "Editor đã chấp nhận lời mời" : "Editor đã từ chối lời mời",
-      $"{caller.FullName} đã {(accept ? "chấp nhận" : "từ chối")} phụ trách series \"{invitation.Series.Title}\".",
-      WorkflowNotificationPaths.MangakaSeries(invitation.SeriesId),
-      WorkflowNotificationPaths.CategorySubmission,
-      cancellationToken: cancellationToken);
-
-    return MapEditorInvitation(invitation);
   }
 
   public async Task<SeriesBoardReviewInvitationResponse> InviteBoardMemberAsync(
@@ -825,7 +643,8 @@ public class SeriesService
   }
 
   /// <summary>
-  /// Gán cả board active (tối đa 3) làm reviewer cố định, rồi thông báo hạn 48h.
+  /// Gán tối đa 3 board: 1 Lead (title Lead ít việc nhất) + 2 board thường ít việc;
+  /// thiếu thì bổ sung Lead khác với tư cách reviewer thường.
   /// </summary>
   private async Task AssignFixedBoardReviewersAndNotifyAsync(
     SeriesEntity series,
@@ -834,26 +653,29 @@ public class SeriesService
     var allBoards = await _unitOfWork.Context.Profiles
       .AsNoTracking()
       .Where(p => p.Role == ProfileRole.Board && (p.IsActive == null || p.IsActive == true))
-      .OrderBy(p => p.FullName)
       .ToListAsync(cancellationToken);
-    var boards = Board.BoardService.SelectFixedBoardMembers(allBoards, SeriesReviewRules.MaxActiveReviewSlots);
+    var loads = await _boardService.GetActiveBoardSeriesCountsAsync(cancellationToken);
+    var panel = Board.BoardService.SelectFixedBoardPanel(
+      allBoards,
+      loads,
+      SeriesReviewRules.MaxActiveReviewSlots);
 
     var claimedAt = DateTime.UtcNow;
-    foreach (var board in boards)
+    foreach (var seat in panel)
     {
       _unitOfWork.Context.SeriesBoardReviewClaims.Add(new SeriesBoardReviewClaim
       {
         SeriesId = series.Id,
-        BoardMemberId = board.Id,
+        BoardMemberId = seat.Profile.Id,
         Source = "fixed_board",
         ClaimedAt = claimedAt,
-        IsLead = board.IsBoardLead
+        IsLead = seat.IsLead
       });
     }
 
     await _unitOfWork.SaveChangesAsync(cancellationToken);
 
-    if (boards.Count == 0)
+    if (panel.Count == 0)
     {
       return;
     }
@@ -862,12 +684,24 @@ public class SeriesService
     var deadline = (series.SubmittedForReviewAt ?? DateTime.UtcNow).AddHours(hours);
     var deadlineLocal = deadline.ToLocalTime().ToString("HH:mm dd/MM/yyyy");
     await _notificationService.CreateForUsersAsync(
-      boards.Select(b => b.Id).ToList(),
+      panel.Select(s => s.Profile.Id).ToList(),
       "Có series cần xét duyệt",
       $"Series \"{series.Title}\" đang chờ bạn xét duyệt. Hạn còn {hours} giờ (đến {deadlineLocal}). Mở hồ sơ để bỏ phiếu.",
       WorkflowNotificationPaths.BoardSubmission(series.Id),
       WorkflowNotificationPaths.CategorySubmission,
       cancellationToken);
+
+    var leadSeat = panel.FirstOrDefault(s => s.IsLead);
+    if (leadSeat is not null)
+    {
+      await _notificationService.CreateAsync(
+        leadSeat.Profile.Id,
+        "Bạn là Board Lead của series này",
+        $"Với tư cách Lead hội đồng, bạn phụ trách \"{series.Title}\" (sau khi duyệt sẽ lên lịch xuất bản).",
+        WorkflowNotificationPaths.BoardSubmission(series.Id),
+        WorkflowNotificationPaths.CategorySubmission,
+        cancellationToken: cancellationToken);
+    }
   }
 
   private async Task NotifyLeadOnSeriesCompletedAsync(
@@ -885,8 +719,8 @@ public class SeriesService
 
     await _notificationService.CreateAsync(
       lead.BoardMemberId,
-      "Series hoàn thành sản xuất",
-      $"Editor đã đánh dấu series \"{series.Title}\" là hoàn thành. Bạn có thể lên lịch xuất bản.",
+      "Series đóng sản xuất (nhãn)",
+      $"Editor gắn nhãn đóng sản xuất cho \"{series.Title}\". Vẫn có thể dời lịch XB hoặc làm thêm chương nếu cần.",
       WorkflowNotificationPaths.BoardSchedule(series.Id),
       WorkflowNotificationPaths.CategorySubmission,
       cancellationToken: cancellationToken);
@@ -1457,8 +1291,9 @@ public class SeriesService
     }
 
     var now = DateTime.UtcNow;
+    // Ưu tiên hạn do mangaka/editor nhập. Weekly chỉ gợi ý +7 khi không gửi deadline.
     var deadline = request.Deadline;
-    if (series.PublishingFrequency == PublishingFrequency.Weekly && request.ChapterNumber > 0)
+    if (deadline is null && series.PublishingFrequency == PublishingFrequency.Weekly && request.ChapterNumber > 0)
     {
       var latestDeadline = await _unitOfWork.Context.Chapters
         .AsNoTracking()
@@ -1482,6 +1317,15 @@ public class SeriesService
     };
 
     await ChapterRepository.AddAsync(chapter, cancellationToken);
+
+    // Chương sản xuất đầu tiên: Approved → Publishing để board/editor theo dõi đúng giai đoạn.
+    if (request.ChapterNumber > 0 && series.Status == SeriesStatus.Approved)
+    {
+      series.Status = SeriesStatus.Publishing;
+      series.UpdatedAt = now;
+      SeriesRepository.Update(series);
+    }
+
     await _unitOfWork.SaveChangesAsync(cancellationToken);
 
     return MapChapterToDto(chapter);
@@ -1649,29 +1493,6 @@ public class SeriesService
 
     return false;
   }
-
-  private IQueryable<SeriesEditorInvitation> EditorInvitationQuery(bool asNoTracking = true)
-  {
-    var query = _unitOfWork.Context.SeriesEditorInvitations
-      .Include(i => i.Series)
-      .ThenInclude(s => s.Author)
-      .Include(i => i.Editor)
-      .AsQueryable();
-
-    return asNoTracking ? query.AsNoTracking() : query;
-  }
-
-  private static SeriesEditorInvitationResponse MapEditorInvitation(SeriesEditorInvitation invitation) =>
-    new(
-      invitation.SeriesId,
-      invitation.Series?.Title ?? string.Empty,
-      invitation.Series?.AuthorId ?? Guid.Empty,
-      invitation.Series?.Author?.FullName ?? string.Empty,
-      invitation.EditorId,
-      invitation.Editor?.FullName ?? string.Empty,
-      invitation.Status,
-      invitation.CreatedAt,
-      invitation.RespondedAt);
 
   private IQueryable<SeriesBoardReviewInvitation> BoardInvitationQuery(bool asNoTracking = true)
   {

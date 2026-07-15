@@ -15,6 +15,7 @@ export interface ProfileSummary {
   email: string;
   avatar?: string;
   role: string;
+  isBoardLead?: boolean;
 }
 
 interface ApiProfile {
@@ -23,6 +24,7 @@ interface ApiProfile {
   fullName: string;
   role: string;
   avatarUrl?: string | null;
+  isBoardLead?: boolean;
 }
 
 function mapProfile(item: ApiProfile): ProfileSummary {
@@ -32,16 +34,23 @@ function mapProfile(item: ApiProfile): ProfileSummary {
     email: item.email,
     avatar: item.avatarUrl ?? undefined,
     role: item.role,
+    isBoardLead: !!item.isBoardLead,
   };
 }
 
-/** Danh sách assistant đang hoạt động — yêu cầu vai trò mangaka. */
+/** Danh sách assistant đã chấp nhận vào studio — để giao task. */
 export async function getAssistants(): Promise<ProfileSummary[]> {
   const items = unwrap(await apiRequest<ApiEnvelope<ApiProfile[]>>('/api/profiles/assistants'));
   return items.map(mapProfile);
 }
 
-/** Danh sách editor để mangaka mời phụ trách series. */
+/** Danh sách mọi assistant active — để mangaka chọn khi mời. */
+export async function getAssistantDirectory(): Promise<ProfileSummary[]> {
+  const items = unwrap(await apiRequest<ApiEnvelope<ApiProfile[]>>('/api/profiles/assistants/directory'));
+  return items.map(mapProfile);
+}
+
+/** Danh sách editor để hội đồng gán phụ trách series. */
 export async function getEditors(): Promise<ProfileSummary[]> {
   const items = unwrap(await apiRequest<ApiEnvelope<ApiProfile[]>>('/api/profiles/editors'));
   return items.map(mapProfile);
@@ -65,10 +74,13 @@ export interface AssistantInvitation {
   respondedAt?: string | null;
 }
 
-export async function addAssistant(email: string): Promise<AssistantInvitation> {
+export async function addAssistant(payload: { email?: string; assistantId?: string }): Promise<AssistantInvitation> {
   return unwrap(await apiRequest<ApiEnvelope<AssistantInvitation>>('/api/profiles/assistants', {
     method: 'POST',
-    body: JSON.stringify({ email: email.trim() }),
+    body: JSON.stringify({
+      email: payload.email?.trim() || null,
+      assistantId: payload.assistantId || null,
+    }),
   }));
 }
 

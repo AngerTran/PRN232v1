@@ -50,6 +50,8 @@ public class PublishingScheduleService
             throw new ArgumentException($"Invalid frequency. Allowed: {string.Join(", ", PublishingFrequencies.All)}.");
         }
 
+        EnsurePublishDateNotInPast(request.PublishDate);
+
         var series = await RequireScheduleManagerAsync(callerId, seriesId, cancellationToken);
         try
         {
@@ -117,10 +119,14 @@ public class PublishingScheduleService
             return null;
         }
 
-        await RequireScheduleManagerAsync(callerId, schedule.SeriesId.Value, cancellationToken);
+        var series = await RequireScheduleManagerAsync(callerId, schedule.SeriesId.Value, cancellationToken);
+        var oldDate = schedule.PublishDate;
+        var dateChanged = false;
 
         if (request.PublishDate is not null)
         {
+            EnsurePublishDateNotInPast(request.PublishDate.Value);
+            dateChanged = request.PublishDate.Value != oldDate;
             schedule.PublishDate = request.PublishDate.Value;
         }
 
@@ -141,6 +147,34 @@ public class PublishingScheduleService
 
         Repository.Update(schedule);
         await _unitOfWork.SaveChangesAsync(cancellationToken);
+
+        if (dateChanged)
+        {
+            var newLabel = schedule.PublishDate.ToString("dd/MM/yyyy");
+            var oldLabel = oldDate.ToString("dd/MM/yyyy");
+            var note = string.IsNullOrWhiteSpace(schedule.Notes) ? "" : $" Lý do/ghi chú: {schedule.Notes}";
+            var message =
+                $"Lịch XB \"{series.Title}\" kỳ {schedule.IssueNumber?.ToString() ?? "—"} đã dời từ {oldLabel} sang {newLabel}.{note}";
+
+            await _notificationService.CreateAsync(
+                series.AuthorId,
+                "Đã dời lịch xuất bản",
+                message,
+                WorkflowNotificationPaths.MangakaSeries(series.Id),
+                WorkflowNotificationPaths.CategorySubmission,
+                cancellationToken: cancellationToken);
+
+            if (series.EditorId is Guid editorId)
+            {
+                await _notificationService.CreateAsync(
+                    editorId,
+                    "Đã dời lịch xuất bản",
+                    message,
+                    WorkflowNotificationPaths.EditorSeries(series.Id),
+                    WorkflowNotificationPaths.CategorySubmission,
+                    cancellationToken: cancellationToken);
+            }
+        }
 
         return Map(schedule);
     }
@@ -214,6 +248,15 @@ public class PublishingScheduleService
         }
 
         throw new WorkflowForbiddenException("Requires board lead or admin.");
+    }
+
+    private static void EnsurePublishDateNotInPast(DateOnly publishDate)
+    {
+        var today = DateOnly.FromDateTime(DateTime.UtcNow);
+        if (publishDate < today)
+        {
+            throw new ArgumentException("Không thể chọn ngày phát hành trong quá khứ.");
+        }
     }
 
     private static PublishingScheduleResponse Map(PublishingSchedule s) =>
