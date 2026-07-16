@@ -22,6 +22,8 @@ interface ApiTask {
   resourceUrls?: string[] | null;
   price?: number | null;
   paymentStatus?: string | null;
+  paidAt?: string | null;
+  paymentReference?: string | null;
   latestSubmissionFileUrl?: string | null;
   latestSubmissionPreviewUrl?: string | null;
   assistantSubmissionNote?: string | null;
@@ -151,6 +153,8 @@ async function enrichTask(task: ApiTask, cache: EnrichCache): Promise<Task> {
     assignedByName: task.assignedByName ?? '',
     pageImageUrl: page?.imageUrl ?? page?.thumbnailUrl ?? '',
     paymentStatus: task.paymentStatus ?? null,
+    paidAt: task.paidAt?.slice(0, 10) ?? undefined,
+    paymentReference: task.paymentReference ?? undefined,
     submittedResult: task.latestSubmissionPreviewUrl ?? task.latestSubmissionFileUrl ?? undefined,
     submittedFileUrl: task.latestSubmissionFileUrl ?? undefined,
     mangakaFeedback: task.reviewNote ?? undefined,

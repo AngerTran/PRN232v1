@@ -1,12 +1,10 @@
 import { useState } from 'react';
-import { ChevronDown, ChevronUp, Calendar, Banknote, Trash2, CreditCard, Loader2, CheckCircle, RotateCcw, ExternalLink } from 'lucide-react';
+import { ChevronDown, ChevronUp, Calendar, Banknote, Trash2, CheckCircle, RotateCcw, ExternalLink } from 'lucide-react';
 import { clsx } from 'clsx';
 import type { WorkspaceAssistant, WorkspaceTask } from '../../services/workspaceApi';
 import { TypeBadge } from '../ui/Badge';
 import { format } from 'date-fns';
-import { createTaskPayment } from '../../services/paymentApi';
 import { toast } from 'sonner';
-import { getStoredUser } from '../../services/authApi';
 import { getTaskSubmissions, reviewSubmission, type SubmissionItem } from '../../services/submissionsApi';
 import { formatVnd } from '../../utils/formatCurrency';
 import { TASK_STATUS_LABELS } from '../../utils/statusLabels';
@@ -30,42 +28,11 @@ interface TaskListProps {
 
 export default function TaskList({ tasks, assistants, onHoverTask, onDeleteTask, deletingTaskId, onTaskReviewed }: TaskListProps) {
   const [expanded, setExpanded] = useState<string | null>(null);
-  const [payingTaskId, setPayingTaskId] = useState<string | null>(null);
   const [reviewingTaskId, setReviewingTaskId] = useState<string | null>(null);
   const [revisionComment, setRevisionComment] = useState('');
   const [submissionsByTask, setSubmissionsByTask] = useState<Record<string, SubmissionItem[]>>({});
   const [loadingSubmissions, setLoadingSubmissions] = useState<string | null>(null);
   const assistantNames = new Map(assistants.map(assistant => [assistant.id, assistant.name]));
-  const user = getStoredUser();
-
-  const handlePayment = async (taskId: string) => {
-    if (!user) {
-      toast.error('Vui lòng đăng nhập để thanh toán');
-      return;
-    }
-
-    const isStaff = ['admin', 'mangaka', 'editor'].includes(user.role);
-
-    if (!isStaff) {
-      toast.error('Chỉ mangaka/editor/admin mới có quyền thanh toán cho task này');
-      return;
-    }
-
-    setPayingTaskId(taskId);
-    try {
-      const response = await createTaskPayment(taskId, {});
-      if (response.paymentUrl) {
-        window.location.href = response.paymentUrl;
-      } else {
-        toast.error('Không thể tạo URL thanh toán');
-      }
-    } catch (error) {
-      console.error('Payment error:', error);
-      toast.error('Có lỗi xảy ra khi tạo thanh toán');
-    } finally {
-      setPayingTaskId(null);
-    }
-  };
 
   const loadSubmissions = async (taskId: string) => {
     if (submissionsByTask[taskId]) return;
@@ -267,29 +234,15 @@ export default function TaskList({ tasks, assistants, onHoverTask, onDeleteTask,
                     {deletingTaskId === task.id ? 'Đang hủy…' : 'Hủy task'}
                   </button>
                 )}
-                {task.status === 'Approved' && task.paymentStatus?.toLowerCase() !== 'paid' && (
-                  <div className="mt-3 pt-3 border-t border-[#3A3A3A]">
-                    <button
-                      onClick={() => handlePayment(task.id)}
-                      disabled={payingTaskId === task.id}
-                      className="w-full inline-flex items-center justify-center gap-2 rounded-md bg-green-600 px-3 py-2 text-xs font-medium text-white hover:bg-green-700 transition-colors disabled:opacity-50 disabled:pointer-events-none"
-                    >
-                      {payingTaskId === task.id ? (
-                        <>
-                          <Loader2 size={14} className="animate-spin" />
-                          Đang chuyển hướng...
-                        </>
-                      ) : (
-                        <>
-                          <CreditCard size={14} />
-                          Thanh toán ({formatVnd(task.price)})
-                        </>
-                      )}
-                    </button>
-                    <p className="mt-1 text-[10px] text-gray-500 text-center">
-                      Chuyển sang VNPay sandbox để thanh toán
-                    </p>
-                  </div>
+                {task.status === 'Approved' && task.paymentStatus?.toLowerCase() !== 'paid' && (task.price ?? 0) > 0 && (
+                  <p className="mt-3 pt-3 border-t border-[#3A3A3A] text-[10px] text-amber-400/90 text-center">
+                    Thù lao {formatVnd(task.price)} — chờ kỳ chi (ngày 5 tháng sau)
+                  </p>
+                )}
+                {task.status === 'Approved' && task.paymentStatus?.toLowerCase() === 'paid' && (
+                  <p className="mt-3 pt-3 border-t border-[#3A3A3A] text-[10px] text-green-400/90 text-center">
+                    Đã chi trả {formatVnd(task.price)}
+                  </p>
                 )}
               </div>
             )}

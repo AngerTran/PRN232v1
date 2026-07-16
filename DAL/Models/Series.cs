@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using DAL.Common;
 
@@ -47,4 +47,8 @@ public partial class Series
     public virtual ICollection<PublishingSchedule> PublishingSchedules { get; set; } = new List<PublishingSchedule>();
 
     public virtual ICollection<Ranking> Rankings { get; set; } = new List<Ranking>();
+
+    public virtual ICollection<SeriesTaskPrice> SeriesTaskPrices { get; set; } = new List<SeriesTaskPrice>();
+
+    public virtual ICollection<SeriesTaskPriceProposal> TaskPriceProposals { get; set; } = new List<SeriesTaskPriceProposal>();
 }

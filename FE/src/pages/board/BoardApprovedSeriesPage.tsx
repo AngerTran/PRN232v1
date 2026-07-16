@@ -61,9 +61,9 @@ const BUCKETS: BucketSection[] = [
   },
   {
     id: 'closed',
-    title: 'Đóng sản xuất (nhãn)',
-    description: 'Nhãn kết thúc — vẫn dời lịch / làm thêm chương khi cần',
-    emptyHint: 'Không có series gắn nhãn đóng sản xuất',
+    title: 'Sẵn sàng XB',
+    description: 'Editor đã báo Lead — vẫn dời lịch / làm thêm chương khi cần',
+    emptyHint: 'Chưa có series được báo sẵn sàng xuất bản',
   },
 ];
 
@@ -115,7 +115,9 @@ export default function BoardApprovedSeriesPage() {
             const latest = schedules.sort(
               (a, b) => new Date(b.publishDate).getTime() - new Date(a.publishDate).getTime()
             )[0];
-            const productionChapterCount = chapters.filter(c => c.number > 0).length;
+            const productionChapterCount = chapters.filter(
+              c => c.number > 0 && (c.status === 'Approved' || c.status === 'Published')
+            ).length;
             return {
               ...series,
               chaptersCount: productionChapterCount,

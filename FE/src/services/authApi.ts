@@ -28,6 +28,10 @@ interface ApiProfile {
   bio?: string | null;
   emailConfirmed: boolean;
   isActive?: boolean | null;
+  createdAt?: string;
+  payoutBankName?: string | null;
+  payoutBankAccountNumber?: string | null;
+  payoutBankAccountHolder?: string | null;
 }
 
 export interface RegisterInput {
@@ -52,7 +56,10 @@ function mapProfileToUser(profile: ApiProfile): User {
     role: normalizeRole(profile.role),
     avatar: profile.avatarUrl ?? '',
     bio: profile.bio ?? '',
-    joinDate: (profile as { createdAt?: string }).createdAt?.slice(0, 10) ?? new Date().toISOString().slice(0, 10),
+    joinDate: profile.createdAt?.slice(0, 10) ?? new Date().toISOString().slice(0, 10),
+    payoutBankName: profile.payoutBankName ?? undefined,
+    payoutBankAccountNumber: profile.payoutBankAccountNumber ?? undefined,
+    payoutBankAccountHolder: profile.payoutBankAccountHolder ?? undefined,
   };
 }
 
@@ -153,12 +160,22 @@ export interface UpdateProfileInput {
   fullName?: string;
   bio?: string;
   avatarUrl?: string;
+  payoutBankName?: string;
+  payoutBankAccountNumber?: string;
+  payoutBankAccountHolder?: string;
 }
 
 export async function updateMyProfile(input: UpdateProfileInput): Promise<User> {
   const profile = await apiRequest<ApiProfile>('/api/profiles/update', {
     method: 'PUT',
-    body: JSON.stringify(input),
+    body: JSON.stringify({
+      fullName: input.fullName,
+      bio: input.bio,
+      avatarUrl: input.avatarUrl,
+      payoutBankName: input.payoutBankName,
+      payoutBankAccountNumber: input.payoutBankAccountNumber,
+      payoutBankAccountHolder: input.payoutBankAccountHolder,
+    }),
   });
   const user = mapProfileToUser(profile);
   localStorage.setItem('inkflow_user', JSON.stringify(user));

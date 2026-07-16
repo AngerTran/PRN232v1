@@ -1,27 +1,14 @@
-import { useEffect, useState, type FormEvent } from 'react';
+import { useEffect, useMemo, useState, type FormEvent } from 'react';
 import { User, Calendar, Banknote, FileText, Plus } from 'lucide-react';
-import type { TaskType, WorkspaceAssistant } from '../../services/workspaceApi';
-import { formatVndInput } from '../../utils/formatCurrency';
+import type { WorkspaceAssistant } from '../../services/workspaceApi';
+import { formatVnd } from '../../utils/formatCurrency';
+import { getTaskTypeColor, getTaskTypeLabel, normalizeTaskType } from '../../utils/taskTypes';
 
-const TASK_TYPES: TaskType[] = ['Background', 'Shading', 'Effect', 'Screentone', 'Clean Line', 'Dialogue Edit'];
-
-const TYPE_LABELS: Record<TaskType, string> = {
-  'Background': 'Nền',
-  'Shading': 'Bóng đổ',
-  'Effect': 'Hiệu ứng',
-  'Screentone': 'Screentone',
-  'Clean Line': 'Nét sạch',
-  'Dialogue Edit': 'Sửa hội thoại',
-};
-
-const TYPE_COLORS: Record<TaskType, string> = {
-  'Background': 'bg-blue-100 text-blue-700 border-blue-300',
-  'Shading': 'bg-purple-100 text-purple-700 border-purple-300',
-  'Effect': 'bg-orange-100 text-orange-700 border-orange-300',
-  'Screentone': 'bg-teal-100 text-teal-700 border-teal-300',
-  'Clean Line': 'bg-gray-100 text-gray-700 border-gray-300',
-  'Dialogue Edit': 'bg-pink-100 text-pink-700 border-pink-300',
-};
+export interface TaskTypeOption {
+  taskType: string;
+  price: number;
+  displayName?: string;
+}
 
 interface TaskPanelProps {
   hasRegion: boolean;
@@ -32,17 +19,18 @@ interface TaskPanelProps {
   onAssignTask?: (data: TaskFormData & { region: string; files: File[] }) => void | Promise<void>;
   assistants: WorkspaceAssistant[];
   isSubmitting?: boolean;
-  /** Nếu trang đang có task mở — chỉ được giao thêm cho cùng trợ lí này. */
   lockedAssistantId?: string;
   openTaskHint?: string;
+  /** Loại task từ bảng giá series — đồng bộ với tab Giá thù lao. */
+  taskOptions?: TaskTypeOption[];
 }
 
 export interface TaskFormData {
-  type: TaskType;
+  type: string;
   assistantId: string;
   description: string;
   deadline: string;
-  price: string;
+  price: number;
 }
 
 export default function TaskPanel({
@@ -53,16 +41,33 @@ export default function TaskPanel({
   isSubmitting = false,
   lockedAssistantId,
   openTaskHint,
+  taskOptions = [],
 }: TaskPanelProps) {
+  const options = useMemo(
+    () => taskOptions.map(o => ({ ...o, taskType: normalizeTaskType(o.taskType) })),
+    [taskOptions]
+  );
+
   const [form, setForm] = useState<TaskFormData>({
-    type: 'Background',
+    type: options[0]?.taskType ?? 'background',
     assistantId: lockedAssistantId ?? assistants[0]?.id ?? '',
     description: '',
     deadline: '',
-    price: '',
+    price: options[0]?.price ?? 0,
   });
   const [submitted, setSubmitted] = useState(false);
   const [files, setFiles] = useState<File[]>([]);
+
+  useEffect(() => {
+    if (options.length === 0) return;
+    setForm(prev => {
+      const stillValid = options.some(o => o.taskType === prev.type);
+      const nextType = stillValid ? prev.type : options[0].taskType;
+      const nextPrice = options.find(o => o.taskType === nextType)?.price ?? 0;
+      if (prev.type === nextType && prev.price === nextPrice) return prev;
+      return { ...prev, type: nextType, price: nextPrice };
+    });
+  }, [options]);
 
   useEffect(() => {
     if (lockedAssistantId) {
@@ -80,7 +85,7 @@ export default function TaskPanel({
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
-    if (!hasRegion || !region || blockedByDifferentAssignee) return;
+    if (!hasRegion || !region || blockedByDifferentAssignee || options.length === 0) return;
     try {
       await onAssignTask?.({ ...form, region: JSON.stringify(region), files });
     } catch {
@@ -116,30 +121,34 @@ export default function TaskPanel({
           </ol>
         </div>
 
-        {/* Task type */}
         <div>
           <label className="block text-xs font-semibold text-gray-300 uppercase tracking-wide mb-2">
             Loại nhiệm vụ
           </label>
-          <div className="grid grid-cols-2 gap-1.5">
-            {TASK_TYPES.map(type => (
-              <button
-                type="button"
-                key={type}
-                onClick={() => setForm(f => ({ ...f, type }))}
-                className={`px-2.5 py-2 text-xs font-semibold rounded-lg border transition-all duration-150 text-left ${
-                  form.type === type
-                    ? TYPE_COLORS[type]
-                    : 'border-[#4A4A4A] bg-[#3A3A3A] text-gray-400 hover:border-gray-500'
-                }`}
-              >
-                {TYPE_LABELS[type]}
-              </button>
-            ))}
-          </div>
+          {options.length === 0 ? (
+            <p className="text-xs text-amber-300/90 rounded-lg border border-amber-700/40 bg-amber-950/30 px-3 py-2">
+              Chưa có bảng giá task cho series này. Vào tab Giá thù lao hoặc nhờ Admin seed giá.
+            </p>
+          ) : (
+            <div className="grid grid-cols-2 gap-1.5">
+              {options.map(opt => (
+                <button
+                  type="button"
+                  key={opt.taskType}
+                  onClick={() => setForm(f => ({ ...f, type: opt.taskType, price: opt.price }))}
+                  className={`px-2.5 py-2 text-xs font-semibold rounded-lg border transition-all duration-150 text-left ${
+                    form.type === opt.taskType
+                      ? getTaskTypeColor(opt.taskType)
+                      : 'border-[#4A4A4A] bg-[#3A3A3A] text-gray-400 hover:border-gray-500'
+                  }`}
+                >
+                  {opt.displayName?.trim() || getTaskTypeLabel(opt.taskType)}
+                </button>
+              ))}
+            </div>
+          )}
         </div>
 
-        {/* Assistant */}
         <div>
           <label className="block text-xs font-semibold text-gray-300 uppercase tracking-wide mb-2">
             <span className="flex items-center gap-1.5"><User size={12} /> Giao cho</span>
@@ -153,9 +162,6 @@ export default function TaskPanel({
             {assistants.map(a => (
               <option key={a.id} value={a.id}>{a.name}</option>
             ))}
-            {assistants.length === 0 && (
-              <option value="">Chưa có trợ lý trong studio</option>
-            )}
           </select>
           {lockedAssistantId && (
             <p className="text-xs text-amber-400/90 mt-2">
@@ -169,7 +175,6 @@ export default function TaskPanel({
           )}
         </div>
 
-        {/* Description */}
         <div>
           <label className="block text-xs font-semibold text-gray-300 uppercase tracking-wide mb-2">
             <span className="flex items-center gap-1.5"><FileText size={12} /> Hướng dẫn</span>
@@ -183,7 +188,6 @@ export default function TaskPanel({
           />
         </div>
 
-        {/* Deadline + Price row */}
         <div className="grid grid-cols-2 gap-3">
           <div>
             <label className="block text-xs font-semibold text-gray-300 uppercase tracking-wide mb-2">
@@ -200,18 +204,13 @@ export default function TaskPanel({
             <label className="block text-xs font-semibold text-gray-300 uppercase tracking-wide mb-2">
               <span className="flex items-center gap-1"><Banknote size={12} /> Thù lao (VNĐ)</span>
             </label>
-            <input
-              type="text"
-              inputMode="numeric"
-              value={form.price}
-              onChange={e => setForm(f => ({ ...f, price: formatVndInput(e.target.value) }))}
-              placeholder="50.000"
-              className="w-full px-3 py-2 text-sm bg-[#3A3A3A] border border-[#4A4A4A] rounded-lg text-white placeholder:text-gray-500 focus:outline-none focus:border-gray-500 tabular-nums"
-            />
+            <div className="px-3 py-2 text-sm bg-[#2A2A2A] border border-[#4A4A4A] rounded-lg text-gray-200 tabular-nums">
+              {formatVnd(form.price)}
+            </div>
+            <p className="text-[10px] text-gray-500 mt-1">Theo bảng giá series</p>
           </div>
         </div>
 
-        {/* Resource upload */}
         <div>
           <label className="block text-xs font-semibold text-gray-300 uppercase tracking-wide mb-2">File tham khảo</label>
           <label className="block border-2 border-dashed border-[#4A4A4A] rounded-lg p-3 text-center hover:border-gray-500 transition-colors cursor-pointer">
@@ -245,7 +244,6 @@ export default function TaskPanel({
         </div>
       </div>
 
-      {/* Submit */}
       <div className="p-4 border-t border-[#3A3A3A]">
         {submitted ? (
           <div className="flex items-center justify-center gap-2 py-2.5 text-green-400 text-sm font-semibold">
@@ -260,6 +258,7 @@ export default function TaskPanel({
               || !form.description
               || !form.deadline
               || !form.assistantId
+              || options.length === 0
               || isSubmitting
             }
             className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-primary text-white text-sm font-semibold rounded-xl hover:bg-[#B81E2E] disabled:opacity-40 disabled:cursor-not-allowed transition-all duration-150"

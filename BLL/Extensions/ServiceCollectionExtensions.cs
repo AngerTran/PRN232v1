@@ -14,6 +14,7 @@ using BLL.Services.Rankings;
 using BLL.Services.Schedules;
 using BLL.Services.Series;
 using BLL.Services.Submissions;
+using BLL.Services.Payroll;
 using BLL.Services.Tasks;
 using BLL.Services.Storage;
 using BLL.Services.Workflow;
@@ -33,7 +34,9 @@ public static class ServiceCollectionExtensions
         services.AddScoped<PageService>();
         services.AddScoped<PageAccessService>();
         services.AddScoped<TaskService>();
+        services.AddScoped<TaskPricePolicyService>();
         services.AddScoped<SubmissionService>();
+        services.AddScoped<PayrollService>();
         services.AddScoped<AnnotationService>();
         services.AddScoped<BoardService>();
         services.AddScoped<RankingService>();

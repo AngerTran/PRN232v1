@@ -152,9 +152,25 @@ public class RankingService
 
         var selectedIssue = issueNumber ?? suggestedIssue;
 
+        // Hiện tất cả series đang trong vòng xuất bản; kỳ chỉ dùng để gắn data vote + phân loại lịch.
+        var publishingStatuses = new[]
+        {
+            SeriesStatus.Approved,
+            SeriesStatus.Publishing,
+            SeriesStatus.Completed,
+            SeriesStatus.Hiatus,
+        };
+
+        var seriesWithAnySchedule = await _unitOfWork.Context.PublishingSchedules
+            .AsNoTracking()
+            .Where(s => s.SeriesId != null)
+            .Select(s => s.SeriesId!.Value)
+            .Distinct()
+            .ToListAsync(cancellationToken);
+
         var eligibleSeries = await _unitOfWork.Context.Series
             .AsNoTracking()
-            .Where(s => s.Status == SeriesStatus.Publishing)
+            .Where(s => publishingStatuses.Contains(s.Status) || seriesWithAnySchedule.Contains(s.Id))
             .OrderBy(s => s.Title)
             .ToListAsync(cancellationToken);
 
@@ -170,20 +186,25 @@ public class RankingService
             .Select(g => new { SeriesId = g.Key, Count = g.Count() })
             .ToDictionaryAsync(x => x.SeriesId, x => x.Count, cancellationToken);
 
-        var rows = eligibleSeries.Select(series =>
-        {
-            var existing = issueRankings.FirstOrDefault(r => r.SeriesId == series.Id);
-            scheduleCounts.TryGetValue(series.Id, out var scheduleCount);
-            return new VoteInputSeriesRowResponse(
-                series.Id,
-                series.Title,
-                SeriesStatuses.ToDbValue(series.Status),
-                existing?.RankPosition,
-                existing?.VoteCount,
-                existing?.PopularityScore,
-                existing?.Notes,
-                scheduleCount);
-        }).ToList();
+        var rows = eligibleSeries
+            .Select(series =>
+            {
+                var existing = issueRankings.FirstOrDefault(r => r.SeriesId == series.Id);
+                scheduleCounts.TryGetValue(series.Id, out var scheduleCount);
+                return new VoteInputSeriesRowResponse(
+                    series.Id,
+                    series.Title,
+                    SeriesStatuses.ToDbValue(series.Status),
+                    existing?.RankPosition,
+                    existing?.VoteCount,
+                    existing?.PopularityScore,
+                    existing?.Notes,
+                    scheduleCount);
+            })
+            // Có lịch đúng kỳ lên trước, rồi mới tới series chưa gắn lịch kỳ này.
+            .OrderByDescending(r => r.ScheduleCountForIssue > 0)
+            .ThenBy(r => r.Title)
+            .ToList();
 
         return new VoteInputContextResponse(
             suggestedIssue,

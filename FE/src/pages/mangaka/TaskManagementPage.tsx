@@ -1,7 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router';
-import { ClipboardList, CreditCard } from 'lucide-react';
-import { toast } from 'sonner';
+import { ClipboardList } from 'lucide-react';
 import Badge from '../../components/ui/Badge';
 import { TypeBadge } from '../../components/ui/Badge';
 import Button from '../../components/ui/Button';
@@ -12,7 +11,6 @@ import EmptyState from '../../components/ui/EmptyState';
 import { usePageMeta } from '../../hooks/usePageMeta';
 import type { Task, TaskType } from '../../types/domain';
 import { getMangakaTasks } from '../../services/tasksApi';
-import { createTaskPayment } from '../../services/paymentApi';
 import { getAssistants, type ProfileSummary } from '../../services/profilesApi';
 import { TASK_STATUS_FILTER_OPTIONS, formatTaskStatusLabel } from '../../utils/statusLabels';
 import { format } from 'date-fns';
@@ -30,7 +28,6 @@ export default function TaskManagementPage() {
   const [tasks, setTasks] = useState<Task[]>([]);
   const [assistants, setAssistants] = useState<Record<string, ProfileSummary>>({});
   const [loading, setLoading] = useState(true);
-  const [payingTaskId, setPayingTaskId] = useState<string | null>(null);
 
   useEffect(() => { setPageMeta({ title: 'Nhiệm vụ' }); }, []);
 
@@ -64,19 +61,6 @@ export default function TaskManagementPage() {
     return matchSearch && matchStatus && matchType;
   });
 
-  const handlePayTask = async (taskId: string) => {
-    setPayingTaskId(taskId);
-    try {
-      const payment = await createTaskPayment(taskId);
-      window.location.href = payment.paymentUrl;
-    } catch (error) {
-      console.error('Failed to create task payment:', error);
-      toast.error('Không thể tạo thanh toán. Vui lòng thử lại.');
-    } finally {
-      setPayingTaskId(null);
-    }
-  };
-
   return (
     <div className="p-6 space-y-5">
       <div className="flex items-center justify-between flex-wrap gap-3">
@@ -84,6 +68,10 @@ export default function TaskManagementPage() {
           <h1 className="text-xl font-bold">Quản lý Nhiệm vụ</h1>
           <p className="text-sm text-muted-foreground">{loading ? 'Đang tải…' : `${tasks.length} nhiệm vụ đã giao`}</p>
         </div>
+      </div>
+
+      <div className="rounded-xl border border-sky-200 bg-sky-50 px-4 py-3 text-sm text-sky-950">
+        Thù lao được tính sau khi bạn <strong>duyệt</strong> task. Kế toán chuyển khoản ngoài hệ thống rồi cập nhật trên Admin — trợ lý theo dõi tại mục Thu nhập.
       </div>
 
       <div className="flex items-center gap-3 flex-wrap">
@@ -141,16 +129,10 @@ export default function TaskManagementPage() {
                             {task.status === 'Submitted' ? 'Xét duyệt' : 'Xem'}
                           </Button>
                         )}
-                        {task.status === 'Approved' && task.paymentStatus?.toLowerCase() !== 'paid' && (
-                          <Button
-                            size="sm"
-                            variant="accent"
-                            loading={payingTaskId === task.id}
-                            onClick={() => handlePayTask(task.id)}
-                          >
-                            <CreditCard size={14} />
-                            {payingTaskId === task.id ? 'Đang tạo...' : 'Thanh toán'}
-                          </Button>
+                        {task.status === 'Approved' && (
+                          <span className="text-xs text-muted-foreground">
+                            {task.paymentStatus?.toLowerCase() === 'paid' ? 'Đã chi trả' : 'Chờ kế toán'}
+                          </span>
                         )}
                       </td>
                     </tr>

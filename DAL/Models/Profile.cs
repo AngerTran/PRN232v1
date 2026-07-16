@@ -25,6 +25,15 @@ public partial class Profile
     /// <summary>Lead hội đồng toàn cục — tối đa một profile true.</summary>
     public bool IsBoardLead { get; set; }
 
+    /// <summary>Tên ngân hàng nhận thù lao (trợ lý).</summary>
+    public string? PayoutBankName { get; set; }
+
+    /// <summary>Số tài khoản nhận thù lao.</summary>
+    public string? PayoutBankAccountNumber { get; set; }
+
+    /// <summary>Tên chủ tài khoản (viết hoa, không dấu theo ngân hàng).</summary>
+    public string? PayoutBankAccountHolder { get; set; }
+
     public DateTime? CreatedAt { get; set; }
 
     public DateTime? UpdatedAt { get; set; }
@@ -52,4 +61,10 @@ public partial class Profile
     public virtual ICollection<EditorTask> TaskAssignedByNavigations { get; set; } = new List<EditorTask>();
 
     public virtual ICollection<EditorTask> TaskAssignedToNavigations { get; set; } = new List<EditorTask>();
+
+    public virtual ICollection<SeriesTaskPrice> SeriesTaskPricesApproved { get; set; } = new List<SeriesTaskPrice>();
+
+    public virtual ICollection<SeriesTaskPriceProposal> SeriesTaskPriceProposalsCreated { get; set; } = new List<SeriesTaskPriceProposal>();
+
+    public virtual ICollection<SeriesTaskPriceProposal> SeriesTaskPriceProposalsReviewed { get; set; } = new List<SeriesTaskPriceProposal>();
 }

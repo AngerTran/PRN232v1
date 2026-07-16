@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { CheckCircle, History, Save, Vote } from 'lucide-react';
+import { CheckCircle, History, Save, Vote, CalendarDays, CircleDashed } from 'lucide-react';
 import { usePageMeta } from '../../hooks/usePageMeta';
 import { Card, CardContent, CardHeader, CardTitle } from '../../app/components/ui/card';
 import { Button } from '../../app/components/ui/button';
@@ -12,6 +12,8 @@ import {
   type RecentRankingInput,
   type VoteInputSeriesRow,
 } from '../../services/boardApi';
+import { SERIES_STATUS_LABELS } from '../../utils/statusLabels';
+import type { SeriesStatus } from '../../types/domain';
 
 type RowDraft = {
   rankPosition: string;
@@ -37,6 +39,100 @@ function formatInputDate(value?: string) {
   if (!value) return '—';
   const d = new Date(value);
   return Number.isNaN(d.getTime()) ? value.slice(0, 10) : d.toLocaleString('vi-VN');
+}
+
+function mapApiStatusToLabel(status: string): string {
+  const key = status.trim().toLowerCase();
+  const mapped: Record<string, SeriesStatus> = {
+    approved: 'Approved',
+    publishing: 'In Progress',
+    completed: 'Completed',
+    hiatus: 'At Risk',
+    pending_review: 'Submitted',
+    draft: 'Draft',
+    cancelled: 'Cancelled',
+  };
+  const feStatus = mapped[key];
+  return feStatus ? (SERIES_STATUS_LABELS[feStatus] ?? status) : status;
+}
+
+function SeriesVoteTable({
+  rows,
+  drafts,
+  updateDraft,
+}: {
+  rows: VoteInputSeriesRow[];
+  drafts: Record<string, RowDraft>;
+  updateDraft: (seriesId: string, patch: Partial<RowDraft>) => void;
+}) {
+  return (
+    <div className="overflow-x-auto">
+      <table className="w-full text-sm">
+        <thead>
+          <tr className="border-b text-left text-muted-foreground">
+            <th className="py-2 pr-3 font-medium">Series</th>
+            <th className="py-2 px-2 font-medium w-28">Trạng thái</th>
+            <th className="py-2 px-2 font-medium w-24">Hạng</th>
+            <th className="py-2 px-2 font-medium w-28">Vote</th>
+            <th className="py-2 px-2 font-medium w-28">Phổ biến</th>
+            <th className="py-2 px-2 font-medium min-w-[160px]">Ghi chú</th>
+            <th className="py-2 pl-2 font-medium w-20 text-right">Lịch kỳ</th>
+          </tr>
+        </thead>
+        <tbody className="divide-y">
+          {rows.map(row => {
+            const draft = drafts[rowKey(row.seriesId)] ?? initDraft(row);
+            return (
+              <tr key={row.seriesId}>
+                <td className="py-2 pr-3 font-medium">{row.title}</td>
+                <td className="py-2 px-2 text-muted-foreground whitespace-nowrap">
+                  {mapApiStatusToLabel(row.status)}
+                </td>
+                <td className="py-2 px-2">
+                  <Input
+                    type="number"
+                    min={1}
+                    placeholder="#"
+                    value={draft.rankPosition}
+                    onChange={e => updateDraft(row.seriesId, { rankPosition: e.target.value })}
+                  />
+                </td>
+                <td className="py-2 px-2">
+                  <Input
+                    type="number"
+                    min={0}
+                    placeholder="0"
+                    value={draft.voteCount}
+                    onChange={e => updateDraft(row.seriesId, { voteCount: e.target.value })}
+                  />
+                </td>
+                <td className="py-2 px-2">
+                  <Input
+                    type="number"
+                    min={0}
+                    step={0.1}
+                    placeholder="0"
+                    value={draft.popularityScore}
+                    onChange={e => updateDraft(row.seriesId, { popularityScore: e.target.value })}
+                  />
+                </td>
+                <td className="py-2 px-2">
+                  <Input
+                    placeholder="Nhận xét kỳ này…"
+                    value={draft.notes}
+                    onChange={e => updateDraft(row.seriesId, { notes: e.target.value })}
+                  />
+                </td>
+                <td className="py-2 pl-2 text-right text-muted-foreground">
+                  {row.scheduleCountForIssue > 0 ? `${row.scheduleCountForIssue} lịch` : '—'}
+                </td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+    </div>
+  );
 }
 
 export default function VoteInputPage() {
@@ -91,6 +187,15 @@ export default function VoteInputPage() {
     if (issueNumber != null) set.add(issueNumber);
     return [...set].sort((a, b) => b - a);
   }, [availableIssues, issueNumber]);
+
+  const scheduledForIssue = useMemo(
+    () => rows.filter(row => row.scheduleCountForIssue > 0),
+    [rows]
+  );
+  const withoutScheduleForIssue = useMemo(
+    () => rows.filter(row => row.scheduleCountForIssue <= 0),
+    [rows]
+  );
 
   const filledCount = useMemo(
     () => Object.values(drafts).filter(d => d.rankPosition.trim()).length,
@@ -150,7 +255,9 @@ export default function VoteInputPage() {
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold">Nhập Dữ Liệu Vote Độc Giả</h1>
-          <p className="text-muted-foreground mt-1 text-sm">Nhập theo kỳ phát hành — liên kết với lịch in khi có số kỳ trùng khớp</p>
+          <p className="text-muted-foreground mt-1 text-sm">
+            Hiện tất cả series đang xuất bản — chọn kỳ để nhập vote, nhóm theo lịch kỳ bên dưới
+          </p>
         </div>
         <div className="flex items-center gap-3">
           <label className="text-sm font-medium">Kỳ phát hành</label>
@@ -189,84 +296,68 @@ export default function VoteInputPage() {
       )}
 
       <Card>
-        <CardHeader className="flex flex-row items-center justify-between">
-          <CardTitle className="flex items-center gap-2 text-base">
-            <Vote className="h-4 w-4" />
-            Series đang xuất bản — Kỳ {issueNumber ?? '—'}
-          </CardTitle>
+        <CardHeader className="flex flex-row items-center justify-between gap-3">
+          <div>
+            <CardTitle className="flex items-center gap-2 text-base">
+              <Vote className="h-4 w-4" />
+              Series đang xuất bản
+            </CardTitle>
+            <p className="text-xs text-muted-foreground mt-1">
+              {loading
+                ? 'Đang tải...'
+                : `${rows.length} series · Kỳ ${issueNumber ?? '—'} · ${scheduledForIssue.length} có lịch kỳ này`}
+            </p>
+          </div>
           <Button type="button" onClick={submit} disabled={saving || loading || filledCount === 0}>
             <Save className="h-4 w-4 mr-1" />
             {saving ? 'Đang lưu...' : `Lưu ${filledCount} dòng`}
           </Button>
         </CardHeader>
-        <CardContent>
+        <CardContent className="space-y-6">
           {loading ? (
             <p className="text-sm text-muted-foreground py-8 text-center">Đang tải...</p>
           ) : rows.length === 0 ? (
-            <p className="text-sm text-muted-foreground py-8 text-center">Chưa có series đang xuất bản.</p>
+            <p className="text-sm text-muted-foreground py-8 text-center">
+              Chưa có series đang xuất bản. Duyệt series và lên lịch XB trước.
+            </p>
           ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b text-left text-muted-foreground">
-                    <th className="py-2 pr-3 font-medium">Series</th>
-                    <th className="py-2 px-2 font-medium w-24">Hạng</th>
-                    <th className="py-2 px-2 font-medium w-28">Vote</th>
-                    <th className="py-2 px-2 font-medium w-28">Phổ biến</th>
-                    <th className="py-2 px-2 font-medium min-w-[160px]">Ghi chú</th>
-                    <th className="py-2 pl-2 font-medium w-20 text-right">Lịch</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y">
-                  {rows.map(row => {
-                    const draft = drafts[rowKey(row.seriesId)] ?? initDraft(row);
-                    return (
-                      <tr key={row.seriesId}>
-                        <td className="py-2 pr-3 font-medium">{row.title}</td>
-                        <td className="py-2 px-2">
-                          <Input
-                            type="number"
-                            min={1}
-                            placeholder="#"
-                            value={draft.rankPosition}
-                            onChange={e => updateDraft(row.seriesId, { rankPosition: e.target.value })}
-                          />
-                        </td>
-                        <td className="py-2 px-2">
-                          <Input
-                            type="number"
-                            min={0}
-                            placeholder="0"
-                            value={draft.voteCount}
-                            onChange={e => updateDraft(row.seriesId, { voteCount: e.target.value })}
-                          />
-                        </td>
-                        <td className="py-2 px-2">
-                          <Input
-                            type="number"
-                            min={0}
-                            step={0.1}
-                            placeholder="0"
-                            value={draft.popularityScore}
-                            onChange={e => updateDraft(row.seriesId, { popularityScore: e.target.value })}
-                          />
-                        </td>
-                        <td className="py-2 px-2">
-                          <Input
-                            placeholder="Nhận xét kỳ này…"
-                            value={draft.notes}
-                            onChange={e => updateDraft(row.seriesId, { notes: e.target.value })}
-                          />
-                        </td>
-                        <td className="py-2 pl-2 text-right text-muted-foreground">
-                          {row.scheduleCountForIssue > 0 ? `${row.scheduleCountForIssue} lịch` : '—'}
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
+            <>
+              <section className="space-y-3">
+                <div className="flex items-center gap-2">
+                  <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-emerald-50 text-emerald-700">
+                    <CalendarDays className="h-3.5 w-3.5" />
+                  </span>
+                  <div>
+                    <p className="text-sm font-semibold">Có lịch Kỳ {issueNumber ?? '—'}</p>
+                    <p className="text-xs text-muted-foreground">{scheduledForIssue.length} series khớp lịch in</p>
+                  </div>
+                </div>
+                {scheduledForIssue.length === 0 ? (
+                  <p className="text-sm text-muted-foreground rounded-xl border border-dashed border-border px-4 py-6 text-center">
+                    Chưa series nào có lịch đúng kỳ này.
+                  </p>
+                ) : (
+                  <SeriesVoteTable rows={scheduledForIssue} drafts={drafts} updateDraft={updateDraft} />
+                )}
+              </section>
+
+              {withoutScheduleForIssue.length > 0 && (
+                <section className="space-y-3">
+                  <div className="flex items-center gap-2">
+                    <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-amber-50 text-amber-800">
+                      <CircleDashed className="h-3.5 w-3.5" />
+                    </span>
+                    <div>
+                      <p className="text-sm font-semibold">Chưa gắn lịch Kỳ {issueNumber ?? '—'}</p>
+                      <p className="text-xs text-muted-foreground">
+                        Vẫn nhập vote được — {withoutScheduleForIssue.length} series
+                      </p>
+                    </div>
+                  </div>
+                  <SeriesVoteTable rows={withoutScheduleForIssue} drafts={drafts} updateDraft={updateDraft} />
+                </section>
+              )}
+            </>
           )}
         </CardContent>
       </Card>

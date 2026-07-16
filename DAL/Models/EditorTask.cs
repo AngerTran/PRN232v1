@@ -46,6 +46,8 @@ public partial class EditorTask
 
     public DateTime? PaidAt { get; set; }
 
+    public string? PaymentReference { get; set; }
+
     public string? VnPayTxnRef { get; set; }
 
     public string? VnPayTransactionNo { get; set; }

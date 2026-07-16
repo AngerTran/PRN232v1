@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using DAL.Common;
 
@@ -9,6 +9,8 @@ public partial class PublishingSchedule
     public Guid Id { get; set; }
 
     public Guid? SeriesId { get; set; }
+
+    public Guid? ChapterId { get; set; }
 
     public DateOnly PublishDate { get; set; }
 
@@ -21,4 +23,6 @@ public partial class PublishingSchedule
     public DateTime? CreatedAt { get; set; }
 
     public virtual Series? Series { get; set; }
+
+    public virtual Chapter? Chapter { get; set; }
 }

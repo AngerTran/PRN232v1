@@ -15,7 +15,8 @@ import {
   type WorkspacePayload,
 } from '../../services/workspaceApi';
 import { useConfirm } from '../../components/ui/ConfirmDialog';
-import { parseVndInput } from '../../utils/formatCurrency';
+import { getSeriesTaskPriceTable, type TaskPriceItem } from '../../services/taskPricingApi';
+import { normalizeTaskType, setTaskTypeLabelsFromCatalog, sortTaskTypeItems } from '../../utils/taskTypes';
 
 export default function WorkspacePage() {
   const { pageId } = useParams<{ pageId: string }>();
@@ -35,6 +36,7 @@ export default function WorkspacePage() {
   const [deletingTaskId, setDeletingTaskId] = useState<string | null>(null);
   const [showComposite, setShowComposite] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [priceItems, setPriceItems] = useState<TaskPriceItem[]>([]);
   const canvasRef = useRef<HTMLDivElement>(null);
 
   const reloadWorkspace = useCallback(async () => {
@@ -85,6 +87,26 @@ export default function WorkspacePage() {
         const payload = await getWorkspace(selectedPageId);
         if (isActive) {
           setWorkspace(payload);
+          if (payload.chapter?.seriesId) {
+            getSeriesTaskPriceTable(payload.chapter.seriesId)
+              .then(table => {
+                if (!isActive) return;
+                setPriceItems(sortTaskTypeItems(
+                  (table.items ?? []).map(item => ({
+                    taskType: normalizeTaskType(item.taskType),
+                    price: item.price,
+                    displayName: item.displayName,
+                    sortOrder: item.sortOrder,
+                  }))
+                ));
+                setTaskTypeLabelsFromCatalog(table.items ?? []);
+              })
+              .catch(() => {
+                if (isActive) setPriceItems([]);
+              });
+          } else {
+            setPriceItems([]);
+          }
         }
       } catch (err) {
         if (isActive) {
@@ -176,7 +198,7 @@ export default function WorkspacePage() {
         assistantId: data.assistantId,
         description: data.description,
         deadline: data.deadline,
-        price: parseVndInput(data.price),
+        price: data.price,
         region,
       });
 
@@ -463,6 +485,7 @@ export default function WorkspacePage() {
             isSubmitting={isSubmitting}
             lockedAssistantId={lockedAssistantId}
             openTaskHint={openTaskHint}
+            taskOptions={priceItems}
           />
         </div>
 

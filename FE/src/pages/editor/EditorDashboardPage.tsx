@@ -62,11 +62,11 @@ export default function EditorDashboardPage() {
   }, []);
 
   const atRiskSeries = assignedSeries.filter(series => series.isAtRisk);
-  const chaptersToReview = chapters.filter(chapter => chapter.status === 'Review' || chapter.status === 'In Progress');
+  const chaptersToReview = chapters.filter(chapter => chapter.status === 'Review');
 
   // Summary stats
   const pendingReviews = chaptersToReview.length;
-  const revisionRequests = chapters.filter(chapter => chapter.status === 'Review').length;
+  const approvedChapters = chapters.filter(chapter => chapter.status === 'Approved' || chapter.status === 'Published').length;
   const upcomingDeadlines = chapters.filter(chapter => {
     const days = Math.ceil((new Date(chapter.deadline).getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24));
     return days >= 0 && days <= 7;
@@ -144,12 +144,12 @@ export default function EditorDashboardPage() {
 
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Yêu Cầu Sửa</CardTitle>
+            <CardTitle className="text-sm font-medium">Đã Duyệt</CardTitle>
             <AlertTriangle className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{revisionRequests}</div>
-            <p className="text-xs text-muted-foreground">Chapters cần revision</p>
+            <div className="text-2xl font-bold">{approvedChapters}</div>
+            <p className="text-xs text-muted-foreground">Chapters Editor đã duyệt</p>
           </CardContent>
         </Card>
 

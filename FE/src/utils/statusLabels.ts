@@ -14,7 +14,7 @@ export const SERIES_STATUS_LABELS: Record<SeriesStatus, string> = {
   'In Progress': 'Đang xuất bản',
   'Revision Required': 'Cần sửa đổi',
   'At Risk': 'Nguy cơ',
-  Completed: 'Đã hoàn thành',
+  Completed: 'Sẵn sàng XB',
   Published: 'Đã xuất bản',
   Cancelled: 'Đã từ chối',
 };
@@ -67,7 +67,7 @@ export const TASK_STATUS_FILTER_OPTIONS: TaskStatus[] = [
 export const PAGE_STATUS_LABELS: Record<PageStatus, string> = {
   Draft: 'Bản nháp',
   'In Progress': 'Đang vẽ',
-  Completed: 'Đã hoàn thành',
+  Completed: 'Sẵn sàng XB',
   Approved: 'Đã duyệt',
 };
 

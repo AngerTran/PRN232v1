@@ -66,6 +66,8 @@ import RoleManagementPage from '../pages/admin/RoleManagementPage';
 import SystemActivityPage from '../pages/admin/SystemActivityPage';
 import AdminSettingsPage from '../pages/admin/AdminSettingsPage';
 import AdminSeriesPage from '../pages/admin/AdminSeriesPage';
+import AdminPayrollPage from '../pages/admin/AdminPayrollPage';
+import AdminTaskPricingPage from '../pages/admin/AdminTaskPricingPage';
 
 // Board pages
 import BoardDashboardPage from '../pages/board/BoardDashboardPage';
@@ -190,6 +192,8 @@ export const router = createBrowserRouter([
       { path: '/admin/series', element: <AdminSeriesPage /> },
       { path: '/admin/roles', element: <RoleManagementPage /> },
       { path: '/admin/activity', element: <SystemActivityPage /> },
+      { path: '/admin/payroll', element: <AdminPayrollPage /> },
+      { path: '/admin/task-pricing', element: <AdminTaskPricingPage /> },
       { path: '/admin/settings', element: <AdminSettingsPage /> },
 
       // Board

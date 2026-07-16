@@ -83,13 +83,13 @@ export default function SeriesReaderPage() {
             { label: 'Series Đã Nhận', href: '/board/approved-series' },
             { label: series.title, href: `/board/approved-series/${series.id}` },
             { label: 'Chương', href: `/board/approved-series/${series.id}/chapters` },
-            { label: 'Đọc liên tục' },
+            { label: 'Đọc truyện' },
           ]
         : [
             { label: 'Series của tôi', href: '/mangaka/series' },
             { label: series.title, href: `/mangaka/series/${series.id}` },
             { label: 'Chương', href: `/mangaka/series/${series.id}/chapters` },
-            { label: 'Đọc manga' },
+            { label: 'Đọc truyện' },
           ],
     });
   }, [series, isBoardReader, setPageMeta]);
@@ -153,8 +153,8 @@ export default function SeriesReaderPage() {
             <p className="truncate font-semibold">{series.title}</p>
             <p className="text-xs text-white/50">
               {currentPage
-                ? `Chương ${currentPage.chapter.number} · Trang ${currentPage.page.pageNumber}`
-                : 'Chưa có trang'}
+                ? `Chương ${currentPage.chapter.number}${currentPage.chapter.title ? `: ${currentPage.chapter.title}` : ''}`
+                : 'Chưa có nội dung'}
             </p>
           </div>
           <select
@@ -235,7 +235,6 @@ export default function SeriesReaderPage() {
                 Trang sau <ChevronRight size={18} />
               </Button>
             </div>
-            <p className="mt-2 text-center text-[11px] text-white/35">Đọc từ trái sang phải · dùng phím ← → để lật trang</p>
           </footer>
         </>
       )}
@@ -262,15 +261,12 @@ function VerticalReader({ pages, zoom }: { pages: BookPage[]; zoom: number }) {
               )}
               <figure className="overflow-hidden rounded-sm bg-white/5 shadow-2xl">
                 {source ? (
-                  <img src={source} alt={`Trang ${item.page.pageNumber}`} loading="lazy" className="block h-auto w-full" />
+                  <img src={source} alt="" loading="lazy" className="block h-auto w-full" />
                 ) : (
                   <div className="flex aspect-[3/4] items-center justify-center text-white/35">
                     <ImageOff size={28} />
                   </div>
                 )}
-                <figcaption className="bg-black/40 py-1.5 text-center text-[11px] text-white/40">
-                  Chương {item.chapter.number} · Trang {item.page.pageNumber}
-                </figcaption>
               </figure>
             </section>
           );
@@ -287,14 +283,11 @@ function BookLeaf({ item, side }: { item?: BookPage; side: 'left' | 'right' }) {
     <figure className={`${side === 'right' ? 'hidden md:flex' : 'flex'} aspect-[3/4] h-[68vh] max-h-[820px] min-h-[420px] flex-col overflow-hidden bg-[#f7f3e9]`}>
       <div className="flex min-h-0 flex-1 items-center justify-center">
         {source ? (
-          <img src={source} alt={`Trang ${item?.page.pageNumber}`} className="h-full w-full object-contain" />
+          <img src={source} alt="" className="h-full w-full object-contain" />
         ) : (
           <ImageOff size={28} className="text-black/25" />
         )}
       </div>
-      <figcaption className="border-t border-black/10 bg-[#eee8da] py-1 text-center text-[10px] text-black/45">
-        {item ? `Chương ${item.chapter.number} · Trang ${item.page.pageNumber}` : 'Trang trống'}
-      </figcaption>
     </figure>
   );
 }

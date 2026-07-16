@@ -23,6 +23,7 @@ public class TaskService
     private readonly SupabaseOptions _supabaseOptions;
     private readonly VnPayService _vnPayService;
     private readonly VnPayOptions _vnPayOptions; // Thêm dòng này
+    private readonly TaskPricePolicyService _taskPricePolicyService;
     private Repository<EditorTask> TaskRepository => _unitOfWork.Repository<EditorTask>();
     private Repository<Profile> ProfileRepository => _unitOfWork.Repository<Profile>();
 
@@ -33,6 +34,7 @@ public class TaskService
         SupabaseStorageService storage,
         IOptions<SupabaseOptions> supabaseOptions,
         VnPayService vnPayService,
+        TaskPricePolicyService taskPricePolicyService,
         IOptions<VnPayOptions> vnPayOptions) // Thêm tham số này
     {
         _unitOfWork = unitOfWork;
@@ -41,6 +43,7 @@ public class TaskService
         _storage = storage;
         _supabaseOptions = supabaseOptions.Value;
         _vnPayService = vnPayService;
+        _taskPricePolicyService = taskPricePolicyService;
         _vnPayOptions = vnPayOptions.Value; // Lưu giá trị options
     }
 
@@ -208,9 +211,14 @@ public class TaskService
         CreateTaskRequest request,
         CancellationToken cancellationToken = default)
     {
-        if (!TaskTypes.IsValid(request.TaskType))
+        var normalizedType = TaskTypes.NormalizeSlug(request.TaskType);
+        if (!TaskTypes.IsValid(normalizedType)
+            && !await _unitOfWork.Context.TaskPriceTemplates.AnyAsync(
+                t => t.IsActive && t.TaskType == normalizedType,
+                cancellationToken))
         {
-            throw new ArgumentException($"Invalid task type. Allowed: {string.Join(", ", TaskTypes.All)}.");
+            throw new ArgumentException(
+                $"Invalid task type '{request.TaskType}'. Loại này chưa có trong catalog giá task.");
         }
 
         var region = NormalizeRegionJson(request.Region);
@@ -250,11 +258,15 @@ public class TaskService
             cancellationToken);
 
         var now = DateTime.UtcNow;
+        var officialPrice = await _taskPricePolicyService.GetOfficialPriceAsync(
+            ctx.Series.Id,
+            normalizedType,
+            cancellationToken);
         var task = new EditorTask
         {
             Id = Guid.NewGuid(),
             PageId = pageId,
-            TaskType = request.TaskType.Trim(),
+            TaskType = normalizedType,
             Region = region,
             Title = request.Title?.Trim(),
             Description = request.Description,
@@ -263,7 +275,7 @@ public class TaskService
             Priority = request.Priority ?? 1,
             Status = TaskStatuses.Todo,
             Deadline = ToUtc(request.Deadline),
-            Price = request.Price ?? 0m,
+            Price = officialPrice ?? request.Price ?? 0m,
             CreatedAt = now,
             UpdatedAt = now
         };
@@ -352,6 +364,10 @@ public class TaskService
 
         if (request.Price is not null)
         {
+            if (string.Equals(task.PaymentStatus, PaymentStatuses.Paid, StringComparison.OrdinalIgnoreCase))
+            {
+                throw new ArgumentException("Không thể sửa giá task đã được đánh dấu chi trả.");
+            }
             task.Price = request.Price.Value;
         }
 
@@ -665,7 +681,9 @@ public class TaskService
             latestSubmission?.Note,
             latestSubmission?.ReviewNote,
             latestSubmission?.ReviewedAt,
-            latestSubmission?.SubmittedAt);
+            latestSubmission?.SubmittedAt,
+            t.PaidAt,
+            t.PaymentReference);
 
     private async Task<Dictionary<Guid, Submission>> LoadLatestSubmissionsAsync(
         IReadOnlyCollection<Guid> taskIds,

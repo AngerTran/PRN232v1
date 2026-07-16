@@ -87,6 +87,98 @@ try
     ensureCmd.CommandText = @"
         alter table public.tasks add column if not exists resource_urls text[] not null default '{}'::text[];
         alter table public.tasks add column if not exists price numeric(12,2) not null default 0;
+        alter table public.tasks add column if not exists payment_reference varchar(100) null;
+
+        create table if not exists public.task_price_templates (
+            id uuid primary key default uuid_generate_v4(),
+            task_type varchar(40) not null unique,
+            display_name varchar(100) not null default '',
+            default_price numeric(12,2) not null,
+            sort_order integer not null default 0,
+            is_active boolean not null default true,
+            created_at timestamptz not null default now(),
+            updated_at timestamptz not null default now()
+        );
+        alter table public.task_price_templates add column if not exists display_name varchar(100) not null default '';
+        alter table public.task_price_templates add column if not exists sort_order integer not null default 0;
+
+        create table if not exists public.series_task_prices (
+            id uuid primary key default uuid_generate_v4(),
+            series_id uuid not null references public.series(id) on delete cascade,
+            task_type varchar(40) not null,
+            official_price numeric(12,2) not null,
+            approved_at timestamptz null,
+            approved_by uuid null references public.profiles(id),
+            created_at timestamptz not null default now(),
+            updated_at timestamptz not null default now(),
+            constraint uq_series_task_price_type unique(series_id, task_type)
+        );
+
+        create table if not exists public.series_task_price_proposals (
+            id uuid primary key default uuid_generate_v4(),
+            series_id uuid not null references public.series(id) on delete cascade,
+            proposed_by uuid not null references public.profiles(id) on delete cascade,
+            status varchar(20) not null default 'pending',
+            note text null,
+            admin_reason text null,
+            reviewed_by uuid null references public.profiles(id),
+            reviewed_at timestamptz null,
+            created_at timestamptz not null default now(),
+            updated_at timestamptz not null default now()
+        );
+
+        create table if not exists public.series_task_price_proposal_items (
+            id uuid primary key default uuid_generate_v4(),
+            proposal_id uuid not null references public.series_task_price_proposals(id) on delete cascade,
+            task_type varchar(40) not null,
+            proposed_price numeric(12,2) not null,
+            constraint uq_series_task_price_proposal_item_type unique(proposal_id, task_type)
+        );
+
+        create index if not exists idx_series_task_price_proposals_series_status
+            on public.series_task_price_proposals(series_id, status);
+
+        insert into public.task_price_templates(task_type, display_name, default_price, sort_order)
+        values
+            ('background', 'Nền', 150000, 10),
+            ('shading', 'Bóng đổ', 100000, 20),
+            ('effects', 'Hiệu ứng', 90000, 30),
+            ('other', 'Screentone', 80000, 40),
+            ('cleanup', 'Nét sạch', 120000, 50),
+            ('lineart', 'Lineart', 120000, 60),
+            ('speech_bubble', 'Sửa hội thoại', 70000, 70)
+        on conflict (task_type) do nothing;
+
+        update public.task_price_templates set display_name = case task_type
+            when 'background' then 'Nền'
+            when 'shading' then 'Bóng đổ'
+            when 'effects' then 'Hiệu ứng'
+            when 'other' then 'Screentone'
+            when 'cleanup' then 'Nét sạch'
+            when 'lineart' then 'Lineart'
+            when 'speech_bubble' then 'Sửa hội thoại'
+            else initcap(replace(task_type, '_', ' '))
+        end
+        where coalesce(trim(display_name), '') = '';
+
+        update public.task_price_templates set sort_order = case task_type
+            when 'background' then 10
+            when 'shading' then 20
+            when 'effects' then 30
+            when 'other' then 40
+            when 'cleanup' then 50
+            when 'lineart' then 60
+            when 'speech_bubble' then 70
+            else sort_order
+        end
+        where sort_order = 0;
+
+        insert into public.series_task_prices(series_id, task_type, official_price)
+        select s.id, t.task_type, t.default_price
+        from public.series s
+        cross join public.task_price_templates t
+        where t.is_active = true
+        on conflict (series_id, task_type) do nothing;
 
         create table if not exists public.mangaka_assistants (
             mangaka_id uuid not null references public.profiles(id) on delete cascade,
@@ -105,7 +197,11 @@ try
 
         -- Cho phép nhiều Board Lead (bỏ unique partial index cũ).
         alter table public.profiles add column if not exists is_board_lead boolean not null default false;
-        drop index if exists public.idx_profiles_one_board_lead;";
+        drop index if exists public.idx_profiles_one_board_lead;
+
+        alter table public.profiles add column if not exists payout_bank_name varchar(100) null;
+        alter table public.profiles add column if not exists payout_bank_account_number varchar(30) null;
+        alter table public.profiles add column if not exists payout_bank_account_holder varchar(255) null;";
     await ensureCmd.ExecuteNonQueryAsync();
 }
 catch (Exception ex)

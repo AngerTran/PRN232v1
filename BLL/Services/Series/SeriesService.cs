@@ -182,8 +182,50 @@ public class SeriesService
 
     await SeriesRepository.AddAsync(series, cancellationToken);
     await _unitOfWork.SaveChangesAsync(cancellationToken);
+    await EnsureSeriesTaskPriceRowsAsync(series.Id, cancellationToken);
 
     return (await GetByIdAsync(callerId, series.Id, cancellationToken))!;
+  }
+
+  private async Task EnsureSeriesTaskPriceRowsAsync(Guid seriesId, CancellationToken cancellationToken)
+  {
+    var templates = await _unitOfWork.Context.TaskPriceTemplates
+      .AsNoTracking()
+      .Where(t => t.IsActive)
+      .ToListAsync(cancellationToken);
+
+    if (templates.Count == 0)
+    {
+      return;
+    }
+
+    var existing = await _unitOfWork.Context.SeriesTaskPrices
+      .Where(x => x.SeriesId == seriesId)
+      .Select(x => x.TaskType)
+      .ToListAsync(cancellationToken);
+
+    var existingTypes = existing.ToHashSet(StringComparer.OrdinalIgnoreCase);
+    var now = DateTime.UtcNow;
+
+    foreach (var template in templates)
+    {
+      if (existingTypes.Contains(template.TaskType))
+      {
+        continue;
+      }
+
+      await _unitOfWork.Context.SeriesTaskPrices.AddAsync(new SeriesTaskPrice
+      {
+        Id = Guid.NewGuid(),
+        SeriesId = seriesId,
+        TaskType = template.TaskType,
+        OfficialPrice = template.DefaultPrice,
+        CreatedAt = now,
+        UpdatedAt = now
+      }, cancellationToken);
+    }
+
+    await _unitOfWork.SaveChangesAsync(cancellationToken);
   }
 
   public async Task<SeriesResponse?> UpdateAsync(
@@ -719,8 +761,8 @@ public class SeriesService
 
     await _notificationService.CreateAsync(
       lead.BoardMemberId,
-      "Series đóng sản xuất (nhãn)",
-      $"Editor gắn nhãn đóng sản xuất cho \"{series.Title}\". Vẫn có thể dời lịch XB hoặc làm thêm chương nếu cần.",
+      "Series sẵn sàng xuất bản",
+      $"Editor báo \"{series.Title}\" đã sẵn sàng để lên lịch xuất bản. Vẫn có thể dời lịch XB hoặc làm thêm chương nếu cần.",
       WorkflowNotificationPaths.BoardSchedule(series.Id),
       WorkflowNotificationPaths.CategorySubmission,
       cancellationToken: cancellationToken);
@@ -849,6 +891,16 @@ public class SeriesService
       .Where(c => c.SeriesId == seriesId && c.ChapterNumber > 0)
       .OrderBy(c => c.ChapterNumber)
       .ToListAsync(cancellationToken);
+
+    // Editor chỉ theo dõi chương đã gửi xét duyệt trở đi (không thấy draft/in_progress khi mangaka còn đang làm).
+    if (IsEditor(caller.Role))
+    {
+      chapters = chapters
+        .Where(c => c.Status is ChapterStatus.Reviewing
+          or ChapterStatus.Completed
+          or ChapterStatus.Published)
+        .ToList();
+    }
 
     var chapterIds = chapters.Select(c => c.Id).ToList();
     var pages = chapterIds.Count == 0
@@ -1071,6 +1123,10 @@ public class SeriesService
         throw new SeriesForbiddenException("You do not have permission to view this chapter.");
       }
     }
+    else if (!CanViewerSeeChapter(caller, chapter.Series, chapter.Status, chapter.ChapterNumber))
+    {
+      throw new SeriesForbiddenException("Chương này chưa nằm trong phạm vi xem của bạn.");
+    }
 
     return MapChapterToDto(chapter);
   }
@@ -1250,7 +1306,10 @@ public class SeriesService
       .OrderBy(c => c.ChapterNumber)
       .ToListAsync(cancellationToken);
 
-    return chapters.Select(MapChapterToDto).ToList();
+    return chapters
+      .Where(c => CanViewerSeeChapter(caller, series, c.Status, c.ChapterNumber))
+      .Select(MapChapterToDto)
+      .ToList();
   }
 
   public async Task<ChapterResponse?> CreateChapterAsync(
@@ -1431,6 +1490,50 @@ public class SeriesService
       s.CreatedAt,
       s.UpdatedAt,
       s.SubmittedForReviewAt);
+
+  private static bool CanViewerSeeChapter(
+    Profile caller,
+    SeriesEntity series,
+    ChapterStatus status,
+    int chapterNumber)
+  {
+    if (IsAdmin(caller.Role))
+    {
+      return true;
+    }
+
+    if (IsMangaka(caller.Role) && series.AuthorId == caller.Id)
+    {
+      return true;
+    }
+
+    // Bản thảo đề xuất (chương 0) — board cần xem khi xét duyệt series.
+    if (IsBoard(caller.Role) && chapterNumber == 0)
+    {
+      return true;
+    }
+
+    // Board chỉ thấy chương Editor đã duyệt (hoặc đã XB).
+    if (IsBoard(caller.Role))
+    {
+      return status is ChapterStatus.Completed or ChapterStatus.Published;
+    }
+
+    // Editor: chỉ thấy sau khi mangaka bấm gửi xét duyệt; sau yêu cầu sửa (in_progress) ẩn đến khi gửi lại.
+    if (IsEditor(caller.Role))
+    {
+      if (series.EditorId != caller.Id)
+      {
+        return false;
+      }
+
+      return status is ChapterStatus.Reviewing
+        or ChapterStatus.Completed
+        or ChapterStatus.Published;
+    }
+
+    return true;
+  }
 
   private static bool CanViewSeries(Profile caller, SeriesEntity series) =>
     IsStaff(caller.Role)

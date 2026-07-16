@@ -129,7 +129,7 @@ export default function ChapterListPage() {
         <div className="flex items-center gap-2">
           {readOnly && paths.reader && chapters.length > 0 && (
             <Button variant="outline" onClick={() => navigate(paths.reader!)}>
-              <BookOpen size={16} /> Đọc liên tục
+              <BookOpen size={16} /> Đọc truyện
             </Button>
           )}
           {!readOnly && (

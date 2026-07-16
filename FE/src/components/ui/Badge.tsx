@@ -1,6 +1,7 @@
 import { clsx } from 'clsx';
 import type { SeriesStatus, TaskStatus, ChapterStatus, SubmissionStatus } from '../../types/domain';
 import { getStatusLabel, type StatusEntityKind } from '../../utils/statusLabels';
+import { getTaskTypeColor, getTaskTypeLabel } from '../../utils/taskTypes';
 
 type AnyStatus = SeriesStatus | TaskStatus | ChapterStatus | SubmissionStatus | string;
 
@@ -69,15 +70,6 @@ const STATUS_DOTS: Record<string, string> = {
   'Rejected': 'bg-[#374151]',
 };
 
-const TYPE_LABELS: Record<string, string> = {
-  'Background': 'Nền',
-  'Shading': 'Bóng đổ',
-  'Effect': 'Hiệu ứng',
-  'Screentone': 'Screentone',
-  'Clean Line': 'Nét sạch',
-  'Dialogue Edit': 'Sửa hội thoại',
-};
-
 interface BadgeProps {
   status: AnyStatus;
   showDot?: boolean;
@@ -113,21 +105,13 @@ export default function Badge({ status, showDot = true, size = 'sm', variant = '
 }
 
 export function TypeBadge({ type, className }: { type: string; className?: string }) {
-  const TYPE_STYLES: Record<string, string> = {
-    'Background': 'bg-blue-50 text-blue-700 border-blue-200',
-    'Shading': 'bg-purple-50 text-purple-700 border-purple-200',
-    'Effect': 'bg-orange-50 text-orange-700 border-orange-200',
-    'Screentone': 'bg-teal-50 text-teal-700 border-teal-200',
-    'Clean Line': 'bg-gray-50 text-gray-700 border-gray-200',
-    'Dialogue Edit': 'bg-pink-50 text-pink-700 border-pink-200',
-  };
   return (
     <span className={clsx(
       'inline-flex items-center px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide border rounded-full',
-      TYPE_STYLES[type] ?? 'bg-muted text-muted-foreground border-border',
+      getTaskTypeColor(type),
       className
     )}>
-      {TYPE_LABELS[type] ?? type}
+      {getTaskTypeLabel(type)}
     </span>
   );
 }

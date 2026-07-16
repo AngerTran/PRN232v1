@@ -32,10 +32,13 @@ public class ProfileService
         return profile is null ? null : MapToUserInfo(profile, email);
     }
 
-    public async Task<ProfileResponse?> GetDtoByIdAsync(Guid id, CancellationToken cancellationToken = default)
+    public async Task<ProfileResponse?> GetDtoByIdAsync(
+        Guid id,
+        bool includePayoutBank = false,
+        CancellationToken cancellationToken = default)
     {
         var profile = await Repository.GetByIdAsync(id, cancellationToken: cancellationToken);
-        return profile is null ? null : MapToDto(profile);
+        return profile is null ? null : MapToDto(profile, includePayoutBank);
     }
 
     public async Task<IReadOnlyList<ProfileResponse>> ListAllAsync(
@@ -44,7 +47,7 @@ public class ProfileService
     {
         await EnsureRoleAsync(callerId, ProfileRoles.Admin, cancellationToken);
         var profiles = await Repository.FindListAsync(cancellationToken: cancellationToken);
-        return profiles.Select(MapToDto).ToList();
+        return profiles.Select(p => MapToDto(p)).ToList();
     }
 
     public async Task<IReadOnlyList<ProfileResponse>> ListByRoleAsync(
@@ -57,7 +60,7 @@ public class ProfileService
         var profiles = await Repository.FindListAsync(
             p => p.Role == ParseRoleOrThrow(targetRole) && p.IsActive != false,
             cancellationToken: cancellationToken);
-        return profiles.Select(MapToDto).ToList();
+        return profiles.Select(p => MapToDto(p)).ToList();
     }
 
     public async Task<IReadOnlyList<ProfileResponse>> ListEditorsForAssignmentAsync(
@@ -75,7 +78,7 @@ public class ProfileService
         var profiles = await Repository.FindListAsync(
             p => p.Role == ProfileRole.Editor && p.IsActive != false,
             cancellationToken: cancellationToken);
-        return profiles.Select(MapToDto).ToList();
+        return profiles.Select(p => MapToDto(p)).ToList();
     }
 
     public async Task<IReadOnlyList<ProfileResponse>> ListBoardMembersForAssignmentAsync(
@@ -93,7 +96,7 @@ public class ProfileService
         var profiles = await Repository.FindListAsync(
             p => p.Role == ProfileRole.Board && p.IsActive != false,
             cancellationToken: cancellationToken);
-        return profiles.Select(MapToDto).ToList();
+        return profiles.Select(p => MapToDto(p)).ToList();
     }
 
     public async Task<IReadOnlyList<ProfileResponse>> ListMyAssistantsAsync(
@@ -112,7 +115,7 @@ public class ProfileService
             .Select(link => link.Assistant)
             .ToListAsync(cancellationToken);
 
-        return profiles.Select(MapToDto).ToList();
+        return profiles.Select(p => MapToDto(p)).ToList();
     }
 
     /// <summary>Danh sách mọi assistant đang active — để mangaka chọn khi mời.</summary>
@@ -129,7 +132,7 @@ public class ProfileService
             .ThenBy(p => p.Email)
             .ToListAsync(cancellationToken);
 
-        return profiles.Select(MapToDto).ToList();
+        return profiles.Select(p => MapToDto(p)).ToList();
     }
 
     public async Task<AssistantInvitationResponse> InviteAssistantAsync(
@@ -311,11 +314,18 @@ public class ProfileService
         Guid id,
         CancellationToken cancellationToken = default)
     {
-        _ = await Repository.GetByIdAsync(callerId, cancellationToken: cancellationToken)
+        var caller = await Repository.GetByIdAsync(callerId, cancellationToken: cancellationToken)
             ?? throw new ProfileForbiddenException("Caller profile not found.");
 
         var profile = await Repository.GetByIdAsync(id, cancellationToken: cancellationToken);
-        return profile is null ? null : MapToDto(profile);
+        if (profile is null)
+        {
+            return null;
+        }
+
+        var includePayoutBank = callerId == id
+            || (IsAdmin(caller.Role) && profile.Role == ProfileRole.Assistant);
+        return MapToDto(profile, includePayoutBank);
     }
 
     public async Task EnsureExistsForAuthAsync(
@@ -403,7 +413,7 @@ public class ProfileService
         }
 
         await _unitOfWork.SaveChangesAsync(cancellationToken);
-        return MapToDto(profile);
+        return MapToDto(profile, includePayoutBank: true);
     }
 
     public async Task<ProfileResponse?> ConfirmEmailAsync(
@@ -420,7 +430,7 @@ public class ProfileService
         profile.UpdatedAt = DateTime.UtcNow;
         Repository.Update(profile);
         await _unitOfWork.SaveChangesAsync(cancellationToken);
-        return MapToDto(profile);
+        return MapToDto(profile, includePayoutBank: true);
     }
 
     public async Task<ProfileResponse?> UpdateByIdAsync(
@@ -447,7 +457,9 @@ public class ProfileService
         profile.UpdatedAt = DateTime.UtcNow;
         Repository.Update(profile);
         await _unitOfWork.SaveChangesAsync(cancellationToken);
-        return MapToDto(profile);
+        var includePayoutBank = callerId == id
+            || (IsAdmin(caller.Role) && profile.Role == ProfileRole.Assistant);
+        return MapToDto(profile, includePayoutBank);
     }
 
     public async Task<bool> DeleteByIdAsync(
@@ -502,7 +514,44 @@ public class ProfileService
         {
             profile.IsActive = request.IsActive.Value;
         }
+
+        if (request.PayoutBankName is not null
+            || request.PayoutBankAccountNumber is not null
+            || request.PayoutBankAccountHolder is not null)
+        {
+            if (profile.Role != ProfileRole.Assistant)
+            {
+                throw new ArgumentException("Chỉ trợ lý mới cập nhật thông tin nhận thù lao.");
+            }
+
+            ValidatePayoutBankFields(request);
+
+            profile.PayoutBankName = NormalizeOptional(request.PayoutBankName);
+            profile.PayoutBankAccountNumber = NormalizeOptional(request.PayoutBankAccountNumber);
+            profile.PayoutBankAccountHolder = NormalizeOptional(request.PayoutBankAccountHolder);
+        }
     }
+
+    private static void ValidatePayoutBankFields(UpdateProfileRequest request)
+    {
+        var hasAny = !string.IsNullOrWhiteSpace(request.PayoutBankName)
+            || !string.IsNullOrWhiteSpace(request.PayoutBankAccountNumber)
+            || !string.IsNullOrWhiteSpace(request.PayoutBankAccountHolder);
+        if (!hasAny)
+        {
+            return;
+        }
+
+        if (string.IsNullOrWhiteSpace(request.PayoutBankName)
+            || string.IsNullOrWhiteSpace(request.PayoutBankAccountNumber)
+            || string.IsNullOrWhiteSpace(request.PayoutBankAccountHolder))
+        {
+            throw new ArgumentException("Vui lòng nhập đầy đủ ngân hàng, số tài khoản và tên chủ tài khoản.");
+        }
+    }
+
+    private static string? NormalizeOptional(string? value) =>
+        string.IsNullOrWhiteSpace(value) ? null : value.Trim();
 
     private async Task EnsureRoleAsync(Guid callerId, string requiredRole, CancellationToken cancellationToken)
     {
@@ -530,7 +579,7 @@ public class ProfileService
             profile.EmailConfirmed,
             profile.IsActive);
 
-    private static ProfileResponse MapToDto(Profile profile) =>
+    private static ProfileResponse MapToDto(Profile profile, bool includePayoutBank = false) =>
         new(
             profile.Id,
             profile.Email,
@@ -542,7 +591,10 @@ public class ProfileService
             profile.IsActive,
             profile.CreatedAt,
             profile.UpdatedAt,
-            profile.IsBoardLead);
+            profile.IsBoardLead,
+            includePayoutBank ? profile.PayoutBankName : null,
+            includePayoutBank ? profile.PayoutBankAccountNumber : null,
+            includePayoutBank ? profile.PayoutBankAccountHolder : null);
 
     private IQueryable<MangakaAssistant> InvitationQuery(bool asNoTracking = true)
     {

@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using Microsoft.EntityFrameworkCore;
 using DAL.Common;
@@ -43,7 +43,15 @@ public partial class AppDbContext : DbContext
 
     public virtual DbSet<Series> Series { get; set; }
 
+    public virtual DbSet<SeriesTaskPrice> SeriesTaskPrices { get; set; }
+
+    public virtual DbSet<SeriesTaskPriceProposal> SeriesTaskPriceProposals { get; set; }
+
+    public virtual DbSet<SeriesTaskPriceProposalItem> SeriesTaskPriceProposalItems { get; set; }
+
     public virtual DbSet<Submission> Submissions { get; set; }
+
+    public virtual DbSet<TaskPriceTemplate> TaskPriceTemplates { get; set; }
 
     public virtual DbSet<EditorTask> Tasks { get; set; }
 
@@ -496,6 +504,15 @@ public partial class AppDbContext : DbContext
             entity.Property(e => e.IsBoardLead)
                 .HasDefaultValue(false)
                 .HasColumnName("is_board_lead");
+            entity.Property(e => e.PayoutBankName)
+                .HasMaxLength(100)
+                .HasColumnName("payout_bank_name");
+            entity.Property(e => e.PayoutBankAccountNumber)
+                .HasMaxLength(30)
+                .HasColumnName("payout_bank_account_number");
+            entity.Property(e => e.PayoutBankAccountHolder)
+                .HasMaxLength(255)
+                .HasColumnName("payout_bank_account_holder");
             entity.Property(e => e.UpdatedAt)
                 .HasDefaultValueSql("now()")
                 .HasColumnName("updated_at");
@@ -520,11 +537,22 @@ public partial class AppDbContext : DbContext
                 .HasColumnType("publishing_frequency")
                 .HasColumnName("frequency");
             entity.Property(e => e.SeriesId).HasColumnName("series_id");
+            entity.Property(e => e.ChapterId).HasColumnName("chapter_id");
 
             entity.HasOne(d => d.Series).WithMany(p => p.PublishingSchedules)
                 .HasForeignKey(d => d.SeriesId)
                 .OnDelete(DeleteBehavior.Cascade)
                 .HasConstraintName("publishing_schedules_series_id_fkey");
+
+            entity.HasOne(d => d.Chapter).WithMany()
+                .HasForeignKey(d => d.ChapterId)
+                .OnDelete(DeleteBehavior.SetNull)
+                .HasConstraintName("publishing_schedules_chapter_id_fkey");
+
+            entity.HasIndex(e => e.ChapterId)
+                .IsUnique()
+                .HasDatabaseName("publishing_schedules_chapter_id_key")
+                .HasFilter("chapter_id IS NOT NULL");
         });
 
         modelBuilder.Entity<Ranking>(entity =>
@@ -611,6 +639,113 @@ public partial class AppDbContext : DbContext
             entity.HasOne(d => d.Editor).WithMany(p => p.SeriesEditors)
                 .HasForeignKey(d => d.EditorId)
                 .HasConstraintName("series_editor_id_fkey");
+        });
+
+        modelBuilder.Entity<SeriesTaskPrice>(entity =>
+        {
+            entity.HasKey(e => e.Id).HasName("series_task_prices_pkey");
+
+            entity.ToTable("series_task_prices");
+
+            entity.HasIndex(e => new { e.SeriesId, e.TaskType }, "uq_series_task_price_type")
+                .IsUnique();
+
+            entity.Property(e => e.Id)
+                .HasDefaultValueSql("uuid_generate_v4()")
+                .HasColumnName("id");
+            entity.Property(e => e.SeriesId).HasColumnName("series_id");
+            entity.Property(e => e.TaskType)
+                .HasMaxLength(40)
+                .HasColumnName("task_type");
+            entity.Property(e => e.OfficialPrice)
+                .HasColumnType("numeric(12,2)")
+                .HasColumnName("official_price");
+            entity.Property(e => e.ApprovedAt).HasColumnName("approved_at");
+            entity.Property(e => e.ApprovedBy).HasColumnName("approved_by");
+            entity.Property(e => e.CreatedAt)
+                .HasDefaultValueSql("now()")
+                .HasColumnName("created_at");
+            entity.Property(e => e.UpdatedAt)
+                .HasDefaultValueSql("now()")
+                .HasColumnName("updated_at");
+
+            entity.HasOne(d => d.Series).WithMany(p => p.SeriesTaskPrices)
+                .HasForeignKey(d => d.SeriesId)
+                .OnDelete(DeleteBehavior.Cascade)
+                .HasConstraintName("series_task_prices_series_id_fkey");
+
+            entity.HasOne(d => d.ApprovedByNavigation).WithMany(p => p.SeriesTaskPricesApproved)
+                .HasForeignKey(d => d.ApprovedBy)
+                .HasConstraintName("series_task_prices_approved_by_fkey");
+        });
+
+        modelBuilder.Entity<SeriesTaskPriceProposal>(entity =>
+        {
+            entity.HasKey(e => e.Id).HasName("series_task_price_proposals_pkey");
+
+            entity.ToTable("series_task_price_proposals");
+
+            entity.HasIndex(e => new { e.SeriesId, e.Status }, "idx_series_task_price_proposals_series_status");
+
+            entity.Property(e => e.Id)
+                .HasDefaultValueSql("uuid_generate_v4()")
+                .HasColumnName("id");
+            entity.Property(e => e.SeriesId).HasColumnName("series_id");
+            entity.Property(e => e.ProposedBy).HasColumnName("proposed_by");
+            entity.Property(e => e.Status)
+                .HasMaxLength(20)
+                .HasDefaultValue(TaskPriceProposalStatuses.Pending)
+                .HasColumnName("status");
+            entity.Property(e => e.Note).HasColumnName("note");
+            entity.Property(e => e.AdminReason).HasColumnName("admin_reason");
+            entity.Property(e => e.ReviewedBy).HasColumnName("reviewed_by");
+            entity.Property(e => e.ReviewedAt).HasColumnName("reviewed_at");
+            entity.Property(e => e.CreatedAt)
+                .HasDefaultValueSql("now()")
+                .HasColumnName("created_at");
+            entity.Property(e => e.UpdatedAt)
+                .HasDefaultValueSql("now()")
+                .HasColumnName("updated_at");
+
+            entity.HasOne(d => d.Series).WithMany(p => p.TaskPriceProposals)
+                .HasForeignKey(d => d.SeriesId)
+                .OnDelete(DeleteBehavior.Cascade)
+                .HasConstraintName("series_task_price_proposals_series_id_fkey");
+
+            entity.HasOne(d => d.ProposedByNavigation).WithMany(p => p.SeriesTaskPriceProposalsCreated)
+                .HasForeignKey(d => d.ProposedBy)
+                .OnDelete(DeleteBehavior.Cascade)
+                .HasConstraintName("series_task_price_proposals_proposed_by_fkey");
+
+            entity.HasOne(d => d.ReviewedByNavigation).WithMany(p => p.SeriesTaskPriceProposalsReviewed)
+                .HasForeignKey(d => d.ReviewedBy)
+                .HasConstraintName("series_task_price_proposals_reviewed_by_fkey");
+        });
+
+        modelBuilder.Entity<SeriesTaskPriceProposalItem>(entity =>
+        {
+            entity.HasKey(e => e.Id).HasName("series_task_price_proposal_items_pkey");
+
+            entity.ToTable("series_task_price_proposal_items");
+
+            entity.HasIndex(e => new { e.ProposalId, e.TaskType }, "uq_series_task_price_proposal_item_type")
+                .IsUnique();
+
+            entity.Property(e => e.Id)
+                .HasDefaultValueSql("uuid_generate_v4()")
+                .HasColumnName("id");
+            entity.Property(e => e.ProposalId).HasColumnName("proposal_id");
+            entity.Property(e => e.TaskType)
+                .HasMaxLength(40)
+                .HasColumnName("task_type");
+            entity.Property(e => e.ProposedPrice)
+                .HasColumnType("numeric(12,2)")
+                .HasColumnName("proposed_price");
+
+            entity.HasOne(d => d.Proposal).WithMany(p => p.Items)
+                .HasForeignKey(d => d.ProposalId)
+                .OnDelete(DeleteBehavior.Cascade)
+                .HasConstraintName("series_task_price_proposal_items_proposal_id_fkey");
         });
 
         modelBuilder.Entity<Submission>(entity =>
@@ -719,6 +854,9 @@ public partial class AppDbContext : DbContext
                 .HasDefaultValue(PaymentStatuses.Unpaid)
                 .HasColumnName("payment_status");
             entity.Property(e => e.PaidAt).HasColumnName("paid_at");
+            entity.Property(e => e.PaymentReference)
+                .HasMaxLength(100)
+                .HasColumnName("payment_reference");
             entity.Property(e => e.VnPayTxnRef)
                 .HasMaxLength(50)
                 .HasColumnName("vnpay_txn_ref");
@@ -743,6 +881,41 @@ public partial class AppDbContext : DbContext
             entity.HasOne(d => d.Page).WithMany(p => p.Tasks)
                 .HasForeignKey(d => d.PageId)
                 .HasConstraintName("tasks_page_id_fkey");
+        });
+
+        modelBuilder.Entity<TaskPriceTemplate>(entity =>
+        {
+            entity.HasKey(e => e.Id).HasName("task_price_templates_pkey");
+
+            entity.ToTable("task_price_templates");
+
+            entity.HasIndex(e => e.TaskType, "uq_task_price_templates_type")
+                .IsUnique();
+
+            entity.Property(e => e.Id)
+                .HasDefaultValueSql("uuid_generate_v4()")
+                .HasColumnName("id");
+            entity.Property(e => e.TaskType)
+                .HasMaxLength(40)
+                .HasColumnName("task_type");
+            entity.Property(e => e.DisplayName)
+                .HasMaxLength(100)
+                .HasColumnName("display_name");
+            entity.Property(e => e.DefaultPrice)
+                .HasColumnType("numeric(12,2)")
+                .HasColumnName("default_price");
+            entity.Property(e => e.SortOrder)
+                .HasDefaultValue(0)
+                .HasColumnName("sort_order");
+            entity.Property(e => e.IsActive)
+                .HasDefaultValue(true)
+                .HasColumnName("is_active");
+            entity.Property(e => e.CreatedAt)
+                .HasDefaultValueSql("now()")
+                .HasColumnName("created_at");
+            entity.Property(e => e.UpdatedAt)
+                .HasDefaultValueSql("now()")
+                .HasColumnName("updated_at");
         });
 
         OnModelCreatingPartial(modelBuilder);

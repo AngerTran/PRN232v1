@@ -26,6 +26,9 @@ export interface User {
   bio: string;
   joinDate: string;
   specialties?: string[];
+  payoutBankName?: string;
+  payoutBankAccountNumber?: string;
+  payoutBankAccountHolder?: string;
 }
 
 export interface Series {
@@ -106,6 +109,8 @@ export interface Task {
   assignedByName?: string;
   pageImageUrl?: string;
   paymentStatus?: string | null;
+  paidAt?: string;
+  paymentReference?: string;
 }
 
 export interface Submission {

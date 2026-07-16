@@ -64,7 +64,7 @@ export default function ChapterReviewsPage() {
   );
 
   const chaptersToReview = useMemo(
-    () => chapters.filter(chapter => chapter.status === 'Review' || chapter.status === 'In Progress'),
+    () => chapters.filter(chapter => chapter.status === 'Review'),
     [chapters]
   );
 

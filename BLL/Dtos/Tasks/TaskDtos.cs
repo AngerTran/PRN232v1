@@ -27,7 +27,9 @@ public record TaskItemResponse(
     string? AssistantSubmissionNote = null,
     string? ReviewNote = null,
     DateTime? ReviewedAt = null,
-    DateTime? LatestSubmittedAt = null);
+    DateTime? LatestSubmittedAt = null,
+    DateTime? PaidAt = null,
+    string? PaymentReference = null);
 
 public record KanbanColumnItemResponse(
     Guid Id,

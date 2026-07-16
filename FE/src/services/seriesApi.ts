@@ -229,19 +229,29 @@ async function enrichChapter(chapter: Chapter): Promise<Chapter> {
     const stats = await getChapterTaskStats(chapter.id);
     const progress = stats.progress > 0
       ? stats.progress
-      : (chapter.status === 'Published' ? 100 : 0);
+      : (chapter.status === 'Published' || chapter.status === 'Approved' ? 100 : 0);
 
-    // Suy ra trạng thái hiển thị theo tiến độ task (workflow backend vẫn giữ nguyên).
-    let status = chapter.status;
-    if (chapter.status === 'Draft' || chapter.status === 'In Progress') {
-      if (stats.totalTasks > 0 && progress === 100) status = 'Approved';
-      else if (stats.totalTasks > 0 && progress > 0) status = 'In Progress';
-    }
-
-    return { ...chapter, pagesCount: stats.pagesCount, progress, status };
+    // Không ghi đè status workflow (Draft/Review/Approved) bằng tiến độ task —
+    // status quyết định Editor/Board có thấy chương hay không.
+    return { ...chapter, pagesCount: stats.pagesCount, progress };
   } catch {
     return chapter;
   }
+}
+
+/** Editor thấy khi mangaka đã gửi xét duyệt, hoặc chương đã duyệt / đã XB. */
+export function isChapterVisibleToEditor(status: ChapterStatus): boolean {
+  return status === 'Review' || status === 'Approved' || status === 'Published';
+}
+
+/** Board chỉ thấy chương Editor đã duyệt (hoặc đã xuất bản). */
+export function isChapterVisibleToBoard(status: ChapterStatus): boolean {
+  return status === 'Approved' || status === 'Published';
+}
+
+/** Mangaka có thể gửi xét duyệt khi đang nháp / đang sửa sau yêu cầu Editor. */
+export function canMangakaSubmitChapterForReview(status: ChapterStatus): boolean {
+  return status === 'Draft' || status === 'In Progress';
 }
 
 export async function getMySeries(): Promise<Series[]> {
@@ -270,7 +280,7 @@ export function isSeriesSubmitted(status: SeriesStatus): boolean {
 /** Gợi ý mềm: nên có đủ chương buffer trước kỳ XB đầu (không chặn cứng). */
 export const SUGGESTED_READY_CHAPTERS_BEFORE_PUBLISH = 5;
 
-/** Mangaka sản xuất sau khi hội đồng duyệt (kể cả sau khi editor gắn nhãn đóng SX). */
+/** Mangaka sản xuất sau khi hội đồng duyệt (kể cả sau khi editor báo sẵn sàng XB). */
 export function canMangakaProduceOnSeries(status: SeriesStatus): boolean {
   return (
     status === 'Approved' ||
@@ -280,7 +290,7 @@ export function canMangakaProduceOnSeries(status: SeriesStatus): boolean {
   );
 }
 
-/** Hội đồng lên lịch XB khi series đã duyệt (không cần đợi editor đóng sản xuất). */
+/** Hội đồng lên lịch XB khi series đã duyệt (không cần đợi editor báo sẵn sàng). */
 export function canSchedulePublishing(status: SeriesStatus): boolean {
   return (
     status === 'Approved' ||
@@ -303,7 +313,7 @@ export const SERIES_SUBMISSION_STATUS_HINT: Record<SeriesStatus, string> = {
   'In Progress': 'Series đang trong quá trình xuất bản.',
   'Revision Required': 'Hội đồng yêu cầu chỉnh sửa trước khi duyệt.',
   'At Risk': 'Series đang có nguy cơ bị tạm dừng do xếp hạng thấp.',
-  Completed: 'Editor gắn nhãn đóng sản xuất — vẫn có thể làm thêm chương và dời lịch XB khi cần.',
+  Completed: 'Editor đã báo sẵn sàng xuất bản — vẫn làm thêm chương và Board vẫn dời lịch XB được.',
   Published: 'Series đã xuất bản.',
   Cancelled: 'Hội đồng đã từ chối hoặc hết hạn 48 giờ xét duyệt — bạn có thể chỉnh sửa và gửi lại.',
 };
@@ -346,7 +356,7 @@ export async function getApprovedSeries(): Promise<Series[]> {
     .map(item => mapSeries(item));
 }
 
-/** Series editor đã đóng sản xuất (không còn tạo chương mới). */
+/** Series editor đã báo sẵn sàng xuất bản (nhãn Completed). */
 export async function getCompletedSeries(): Promise<Series[]> {
   const items = unwrap(await apiRequest<ApiEnvelope<ApiSeries[]>>('/api/series'));
   return items
@@ -534,7 +544,7 @@ export async function updateSeriesStatus(id: string, status: string): Promise<Se
   return mapSeries(updated);
 }
 
-/** Editor đóng sản xuất series (khóa tạo chương mới). */
+/** Editor báo Board Lead: series sẵn sàng lên lịch xuất bản (nhãn Completed, một lần). */
 export async function markSeriesCompleted(id: string): Promise<Series> {
   return updateSeriesStatus(id, 'completed');
 }
@@ -803,6 +813,9 @@ export async function createRanking(input: {
 export interface PublishingScheduleItem {
   id: string;
   seriesId?: string;
+  chapterId?: string;
+  chapterNumber?: number;
+  chapterTitle?: string;
   publishDate: string;
   frequency: string;
   issueNumber?: number;
@@ -810,9 +823,20 @@ export interface PublishingScheduleItem {
   createdAt?: string;
 }
 
+export interface ScheduleChapterOption {
+  chapterId: string;
+  chapterNumber: number;
+  title?: string;
+  status: string;
+  alreadyScheduled: boolean;
+}
+
 interface ApiSchedule {
   id: string;
   seriesId?: string | null;
+  chapterId?: string | null;
+  chapterNumber?: number | null;
+  chapterTitle?: string | null;
   publishDate: string;
   frequency: string;
   issueNumber?: number | null;
@@ -820,10 +844,21 @@ interface ApiSchedule {
   createdAt?: string | null;
 }
 
+interface ApiScheduleChapterOption {
+  chapterId: string;
+  chapterNumber: number;
+  title?: string | null;
+  status: string;
+  alreadyScheduled: boolean;
+}
+
 function mapSchedule(item: ApiSchedule): PublishingScheduleItem {
   return {
     id: item.id,
     seriesId: item.seriesId ?? undefined,
+    chapterId: item.chapterId ?? undefined,
+    chapterNumber: item.chapterNumber ?? undefined,
+    chapterTitle: item.chapterTitle ?? undefined,
     publishDate: item.publishDate,
     frequency: item.frequency,
     issueNumber: item.issueNumber ?? undefined,
@@ -837,10 +872,24 @@ export async function getSeriesSchedules(seriesId: string): Promise<PublishingSc
   return items.map(mapSchedule);
 }
 
+export async function getScheduleChapterOptions(seriesId: string): Promise<ScheduleChapterOption[]> {
+  const items = unwrap(
+    await apiRequest<ApiEnvelope<ApiScheduleChapterOption[]>>(`/api/series/${seriesId}/schedules/chapter-options`)
+  );
+  return items.map(item => ({
+    chapterId: item.chapterId,
+    chapterNumber: item.chapterNumber,
+    title: item.title ?? undefined,
+    status: item.status,
+    alreadyScheduled: item.alreadyScheduled,
+  }));
+}
+
 export interface CreateScheduleInput {
   publishDate: string;
   frequency: string;
   issueNumber?: number;
+  chapterId?: string;
   notes?: string;
 }
 
@@ -852,6 +901,7 @@ export async function createSchedule(seriesId: string, input: CreateScheduleInpu
         publishDate: input.publishDate,
         frequency: input.frequency,
         issueNumber: input.issueNumber,
+        chapterId: input.chapterId,
         notes: input.notes,
       }),
     })
@@ -867,6 +917,8 @@ export interface UpdateScheduleInput {
   publishDate?: string;
   frequency?: string;
   issueNumber?: number;
+  chapterId?: string;
+  clearChapter?: boolean;
   notes?: string;
 }
 
@@ -878,6 +930,8 @@ export async function updateSchedule(id: string, input: UpdateScheduleInput): Pr
         publishDate: input.publishDate,
         frequency: input.frequency,
         issueNumber: input.issueNumber,
+        chapterId: input.chapterId,
+        clearChapter: input.clearChapter ?? false,
         notes: input.notes,
       }),
     })

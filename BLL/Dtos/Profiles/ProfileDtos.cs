@@ -13,14 +13,20 @@ public record ProfileResponse(
     bool? IsActive,
     DateTime? CreatedAt,
     DateTime? UpdatedAt,
-    bool IsBoardLead = false);
+    bool IsBoardLead = false,
+    string? PayoutBankName = null,
+    string? PayoutBankAccountNumber = null,
+    string? PayoutBankAccountHolder = null);
 
 public record UpdateProfileRequest(
     [MaxLength(255)] string? FullName,
     string? AvatarUrl,
     string? Bio,
     [MaxLength(50)] string? Role,
-    bool? IsActive);
+    bool? IsActive,
+    [MaxLength(100)] string? PayoutBankName = null,
+    [MaxLength(30)] string? PayoutBankAccountNumber = null,
+    [MaxLength(255)] string? PayoutBankAccountHolder = null);
 
 public record AddAssistantRequest(
     [EmailAddress, MaxLength(255)] string? Email,

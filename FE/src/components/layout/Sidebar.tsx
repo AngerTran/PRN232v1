@@ -7,7 +7,7 @@ import {
   CheckCircle, AlertTriangle, Wallet, Calendar as CalendarIcon,
   Shield, Gavel, Star, CalendarDays, Vote, TrendingUp, BarChart3,
   ChevronLeft, ChevronRight,
-  Users, UserPlus, ShieldCheck, Activity, SlidersHorizontal, Mail,
+  Users, UserPlus, ShieldCheck, Activity, SlidersHorizontal, Mail, Tags,
 } from 'lucide-react';
 import { clsx } from 'clsx';
 import { getStoredUser } from '../../services/authApi';
@@ -113,6 +113,8 @@ const ADMIN_GROUPS: NavGroup[] = [
       { label: 'Dashboard', icon: <LayoutDashboard size={18} />, href: '/admin/dashboard', exact: true },
       { label: 'Người dùng', icon: <Users size={18} />, href: '/admin/users' },
       { label: 'Series', icon: <BookOpen size={18} />, href: '/admin/series' },
+      { label: 'Chi trả thù lao', icon: <Wallet size={18} />, href: '/admin/payroll' },
+      { label: 'Giá task', icon: <Tags size={18} />, href: '/admin/task-pricing' },
       { label: 'Vai trò', icon: <ShieldCheck size={18} />, href: '/admin/roles' },
     ],
   },

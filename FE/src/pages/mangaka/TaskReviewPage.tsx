@@ -8,10 +8,8 @@ import {
   User,
   Calendar,
   ExternalLink,
-  CreditCard,
   Banknote,
 } from 'lucide-react';
-import { toast } from 'sonner';
 import Button from '../../components/ui/Button';
 import Badge from '../../components/ui/Badge';
 import { TypeBadge } from '../../components/ui/Badge';
@@ -21,7 +19,6 @@ import MangaPanelPreview from '../../components/workspace/MangaPanelPreview';
 import { usePageMeta } from '../../hooks/usePageMeta';
 import type { Task } from '../../types/domain';
 import { getTask } from '../../services/tasksApi';
-import { createTaskPayment } from '../../services/paymentApi';
 import { getTaskSubmissions, reviewSubmission, type SubmissionItem } from '../../services/submissionsApi';
 import { formatVnd } from '../../utils/formatCurrency';
 import { format } from 'date-fns';
@@ -36,7 +33,6 @@ export default function TaskReviewPage() {
   const [loading, setLoading] = useState(true);
   const [status, setStatus] = useState<'idle' | 'approving' | 'revising' | 'approved' | 'revised'>('idle');
   const [revisionComment, setRevisionComment] = useState('');
-  const [paying, setPaying] = useState(false);
 
   useEffect(() => {
     setPageMeta({
@@ -100,26 +96,8 @@ export default function TaskReviewPage() {
     }
   };
 
-  const handlePay = async () => {
-    if (!task) return;
-    setPaying(true);
-    try {
-      const payment = await createTaskPayment(task.id);
-      if (payment.paymentUrl) {
-        window.location.href = payment.paymentUrl;
-      } else {
-        toast.error('Không tạo được đường dẫn thanh toán.');
-      }
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Không thể tạo thanh toán.');
-    } finally {
-      setPaying(false);
-    }
-  };
-
   const isApproved = task.status === 'Approved' || status === 'approved';
   const isPaid = task.paymentStatus?.toLowerCase() === 'paid';
-  const canPay = isApproved && !isPaid && (task.price ?? 0) > 0;
   const canReviewActions =
     status === 'idle'
     && latest
@@ -147,15 +125,14 @@ export default function TaskReviewPage() {
           </div>
         </div>
 
-        {canPay && (
-          <Button variant="primary" loading={paying} onClick={handlePay} className="shrink-0">
-            <CreditCard size={15} />
-            Thanh toán {formatVnd(task.price ?? 0)}
-          </Button>
-        )}
-        {isPaid && (
+        {isApproved && isPaid && (
           <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-100 border border-emerald-200 px-3 py-1.5 text-xs font-semibold text-emerald-800 shrink-0">
-            <Banknote size={13} /> Đã thanh toán {formatVnd(task.price ?? 0)}
+            <Banknote size={13} /> Kế toán đã chi {formatVnd(task.price ?? 0)}
+          </span>
+        )}
+        {isApproved && !isPaid && (task.price ?? 0) > 0 && (
+          <span className="inline-flex items-center gap-1.5 rounded-full bg-amber-50 border border-amber-200 px-3 py-1.5 text-xs font-semibold text-amber-800 shrink-0">
+            Chờ kế toán chi trả
           </span>
         )}
       </div>
@@ -166,7 +143,7 @@ export default function TaskReviewPage() {
           <p className="text-sm text-emerald-900">
             <span className="font-semibold">Đã phê duyệt.</span>
             {' '}Trợ lý đã được thông báo
-            {isPaid ? ' · Đã thanh toán thù lao.' : canPay ? ' · Thanh toán bằng nút góc trên.' : '.'}
+            {isPaid ? ' · Kế toán đã ghi nhận chi trả.' : (task.price ?? 0) > 0 ? ' · Thù lao chờ kế toán chuyển khoản.' : '.'}
           </p>
         </div>
       )}
@@ -208,7 +185,7 @@ export default function TaskReviewPage() {
           <p className={`mt-1 text-sm font-semibold ${
             !isApproved ? 'text-muted-foreground' : isPaid ? 'text-emerald-700' : 'text-amber-700'
           }`}>
-            {!isApproved ? '—' : isPaid ? 'Đã trả' : 'Chưa trả'}
+            {!isApproved ? '—' : isPaid ? 'Đã chi' : 'Chờ kế toán'}
           </p>
         </div>
         <div className="rounded-xl border bg-card px-3 py-2.5 col-span-2 sm:col-span-3 lg:col-span-1">
@@ -353,10 +330,10 @@ export default function TaskReviewPage() {
             <p className="text-sm text-muted-foreground leading-relaxed">
               {isApproved
                 ? isPaid
-                  ? 'Task đã duyệt và đã thanh toán thù lao.'
-                  : canPay
-                    ? 'Task đã duyệt. Dùng nút Thanh toán góc trên để trả qua VNPay.'
-                    : 'Task đã duyệt. Không có thù lao cần thanh toán.'
+                  ? 'Task đã duyệt. Kế toán đã ghi nhận chi trả thù lao.'
+                  : (task.price ?? 0) > 0
+                    ? 'Task đã duyệt. Thù lao chờ kế toán chuyển khoản và xác nhận trên hệ thống.'
+                    : 'Task đã duyệt. Không có thù lao.'
                 : status === 'revised'
                   ? 'Đang chờ trợ lí nộp bản chỉnh sửa.'
                   : 'Chờ kết quả nộp để xét duyệt.'}

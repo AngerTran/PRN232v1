@@ -32,7 +32,7 @@ public class ProfilesController : ControllerBase
             return Unauthorized();
         }
 
-        var profile = await _profileService.GetDtoByIdAsync(userId, cancellationToken);
+        var profile = await _profileService.GetDtoByIdAsync(userId, includePayoutBank: true, cancellationToken);
         return profile is null ? NotFound() : Ok(profile);
     }
 

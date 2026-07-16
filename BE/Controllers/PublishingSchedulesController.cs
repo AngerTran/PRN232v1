@@ -34,6 +34,21 @@ public class PublishingSchedulesController : ControllerBase
         return Ok(await _scheduleService.ListBySeriesAsync(userId, seriesId, cancellationToken));
     }
 
+    [HttpGet("/api/series/{seriesId:guid}/schedules/chapter-options")]
+    [SwaggerOperation(Summary = "List chapters for scheduling", Description = "Lists production chapters that board lead can attach to a publishing schedule.")]
+    [ProducesResponseType(typeof(IReadOnlyList<ScheduleChapterOptionResponse>), StatusCodes.Status200OK)]
+    public async Task<ActionResult<IReadOnlyList<ScheduleChapterOptionResponse>>> ListChapterOptions(
+        Guid seriesId,
+        CancellationToken cancellationToken)
+    {
+        if (!this.TryGetUserId(out var userId))
+        {
+            return Unauthorized();
+        }
+
+        return Ok(await _scheduleService.ListChapterOptionsAsync(userId, seriesId, cancellationToken));
+    }
+
     [HttpPost("/api/series/{seriesId:guid}/schedules")]
     [SwaggerOperation(Summary = "Create series schedule", Description = "Creates a publishing schedule for a series. Requires board, assigned editor, or admin role.")]
     [ProducesResponseType(typeof(PublishingScheduleResponse), StatusCodes.Status201Created)]

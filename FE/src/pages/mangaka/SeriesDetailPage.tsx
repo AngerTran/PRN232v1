@@ -1,11 +1,12 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate, useLocation } from 'react-router';
-import { ArrowLeft, BookOpen, FileText, BarChart2, Send, Plus, CheckCircle2, Pencil, FileDown } from 'lucide-react';
+import { ArrowLeft, BookOpen, FileText, BarChart2, Send, Plus, CheckCircle2, Pencil, FileDown, Tags } from 'lucide-react';
 import { getStoredUser } from '../../services/authApi';
 import { Tabs, TabsList, Tab, TabPanel } from '../../components/ui/Tabs';
 import Badge from '../../components/ui/Badge';
 import Button from '../../components/ui/Button';
 import Card, { CardHeader, CardTitle } from '../../components/ui/Card';
+import Modal from '../../components/ui/Modal';
 import ChapterCard from '../../components/ui/ChapterCard';
 import RankingTrend from '../../components/ui/RankingTrend';
 import EmptyState from '../../components/ui/EmptyState';
@@ -29,6 +30,13 @@ import {
   type SeriesStats,
   type SeriesTeam,
 } from '../../services/seriesApi';
+import {
+  createSeriesTaskPriceProposal,
+  getSeriesTaskPriceTable,
+  type TaskPriceItem,
+} from '../../services/taskPricingApi';
+import { formatVnd, formatVndInput, parseVndInput } from '../../utils/formatCurrency';
+import { getTaskTypeLabel, setTaskTypeLabelsFromCatalog } from '../../utils/taskTypes';
 
 export default function SeriesDetailPage() {
   const { seriesId } = useParams<{ seriesId: string }>();
@@ -53,6 +61,12 @@ export default function SeriesDetailPage() {
   const [rankingLoading, setRankingLoading] = useState(false);
   const [team, setTeam] = useState<SeriesTeam | null>(null);
   const [teamLoading, setTeamLoading] = useState(false);
+  const [priceTable, setPriceTable] = useState<TaskPriceItem[]>([]);
+  const [priceLoading, setPriceLoading] = useState(false);
+  const [proposalOpen, setProposalOpen] = useState(false);
+  const [proposalNote, setProposalNote] = useState('');
+  const [proposalDraft, setProposalDraft] = useState<Record<string, string>>({});
+  const [submittingProposal, setSubmittingProposal] = useState(false);
 
   const showRankingTab = series
     ? !['Draft', 'Submitted', 'Cancelled'].includes(series.status)
@@ -60,7 +74,9 @@ export default function SeriesDetailPage() {
   const canProduce = series ? canMangakaProduceOnSeries(series.status) : false;
   const productionLockHint = series ? SERIES_PRODUCTION_LOCK_HINT[series.status] : undefined;
   const isAssignedEditor = Boolean(isEditorView && series && user && series.editorId === user.id);
-  const canMarkComplete = isAssignedEditor && canProduce;
+  const canMarkReadyForPublish =
+    isAssignedEditor && canProduce && series?.status !== 'Completed';
+  const alreadyReportedReady = isAssignedEditor && series?.status === 'Completed';
   const canEditProfile = isMangakaView && series && (series.status === 'Draft' || series.status === 'Cancelled');
   const waitingForBoardEditor = isMangakaView && series && canProduce && !series.editorId;
   const proposalChapter = chapters.find(c => c.number === 0) ?? chapters.find(c => Boolean(c.description?.trim()));
@@ -186,22 +202,77 @@ export default function SeriesDetailPage() {
     };
   }, [seriesId, series?.status, tab, showRankingTab]);
 
-  const handleMarkComplete = async () => {
+  useEffect(() => {
+    if (!seriesId) return;
+    let active = true;
+    setPriceLoading(true);
+    getSeriesTaskPriceTable(seriesId)
+      .then(table => {
+        if (!active) return;
+        setPriceTable(table.items);
+        setTaskTypeLabelsFromCatalog(table.items);
+        setProposalDraft(
+          Object.fromEntries(table.items.map(i => [i.taskType, formatVndInput(String(i.price))]))
+        );
+      })
+      .catch(() => {
+        if (active) {
+          setPriceTable([]);
+          setProposalDraft({});
+        }
+      })
+      .finally(() => {
+        if (active) setPriceLoading(false);
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [seriesId]);
+
+  const handleSubmitPriceProposal = async () => {
+    if (!seriesId || priceTable.length === 0) return;
+    setSubmittingProposal(true);
+    try {
+      await createSeriesTaskPriceProposal(seriesId, {
+        note: proposalNote.trim() || undefined,
+        items: priceTable.map(item => ({
+          taskType: item.taskType,
+          price: parseVndInput(proposalDraft[item.taskType] ?? String(item.price)),
+        })),
+      });
+      setProposalOpen(false);
+      setProposalNote('');
+      const table = await getSeriesTaskPriceTable(seriesId);
+      setPriceTable(table.items);
+      setProposalDraft(
+        Object.fromEntries(table.items.map(i => [i.taskType, formatVndInput(String(i.price))]))
+      );
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Không thể gửi đề xuất giá.');
+    } finally {
+      setSubmittingProposal(false);
+    }
+  };
+
+  const handleMarkReadyForPublish = async () => {
     if (!series) return;
     const confirmed = await confirm({
-      title: 'Gắn nhãn đóng sản xuất',
+      title: 'Báo sẵn sàng xuất bản',
       variant: 'success',
       message: (
         <>
-          Gắn nhãn đóng sản xuất cho{' '}
-          <span className="font-semibold text-foreground">{series.title}</span>?
+          Báo Board Lead rằng{' '}
+          <span className="font-semibold text-foreground">{series.title}</span>{' '}
+          đã sẵn sàng để lên lịch xuất bản?
           <br />
-          <span className="text-xs">
-            Đây chỉ là nhãn trạng thái — vẫn tạo thêm chương và board vẫn dời lịch XB được khi có sự cố.
+          <span className="text-xs mt-1 inline-block">
+            Chỉ báo <strong className="font-medium text-foreground">một lần</strong>. Sau đó vẫn làm thêm chương;
+            Board vẫn xem và dời lịch XB được. Không cần bấm lại khi có chương mới.
           </span>
         </>
       ),
-      confirmText: 'Gắn nhãn',
+      confirmText: 'Báo sẵn sàng XB',
     });
     if (!confirmed) return;
 
@@ -211,7 +282,7 @@ export default function SeriesDetailPage() {
       const updated = await markSeriesCompleted(series.id);
       setSeries(prev => prev ? { ...prev, status: updated.status } : prev);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Không thể cập nhật trạng thái series.');
+      setError(err instanceof Error ? err.message : 'Không thể báo sẵn sàng xuất bản.');
     } finally {
       setCompleting(false);
     }
@@ -347,9 +418,19 @@ export default function SeriesDetailPage() {
                   <Send size={14} /> Gửi xét duyệt
                 </Button>
               )}
-              {canMarkComplete && (
-                <Button variant="primary" size="sm" loading={completing} onClick={handleMarkComplete}>
-                  <CheckCircle2 size={14} /> Đóng sản xuất
+              {canMarkReadyForPublish && (
+                <Button variant="primary" size="sm" loading={completing} onClick={handleMarkReadyForPublish}>
+                  <CheckCircle2 size={14} /> Báo sẵn sàng XB
+                </Button>
+              )}
+              {alreadyReportedReady && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled
+                  title="Đã báo Board Lead — không cần bấm lại khi có chương mới"
+                >
+                  <CheckCircle2 size={14} /> Đã báo sẵn sàng XB
                 </Button>
               )}
               {isMangakaView && (
@@ -380,6 +461,7 @@ export default function SeriesDetailPage() {
         <TabsList>
           <Tab value="overview"><BookOpen size={14} className="inline mr-1.5" />Tổng quan</Tab>
           <Tab value="chapters"><FileText size={14} className="inline mr-1.5" />Chương ({productionChapters.length})</Tab>
+          <Tab value="pricing"><Tags size={14} className="inline mr-1.5" />Giá thù lao</Tab>
           {showRankingTab && <Tab value="ranking"><BarChart2 size={14} className="inline mr-1.5" />Xếp hạng</Tab>}
           <Tab value="submissions"><Send size={14} className="inline mr-1.5" />Nộp series</Tab>
         </TabsList>
@@ -492,6 +574,38 @@ export default function SeriesDetailPage() {
               </div>
             </Card>
           </div>
+        </TabPanel>
+
+        <TabPanel value="pricing" className="mt-5">
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between">
+              <CardTitle>Bảng giá task theo series</CardTitle>
+              {isMangakaView && (
+                <Button variant="primary" size="sm" onClick={() => setProposalOpen(true)}>
+                  Đề xuất chỉnh giá
+                </Button>
+              )}
+            </CardHeader>
+            <div className="px-6 pb-6">
+              {priceLoading ? (
+                <p className="text-sm text-muted-foreground">Đang tải bảng giá…</p>
+              ) : priceTable.length === 0 ? (
+                <p className="text-sm text-muted-foreground">Chưa có dữ liệu bảng giá cho series này.</p>
+              ) : (
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  {priceTable.map(item => (
+                    <div key={item.taskType} className="rounded-lg border border-border px-3 py-2">
+                      <p className="text-xs text-muted-foreground">{item.displayName ?? getTaskTypeLabel(item.taskType)}</p>
+                      <p className="font-semibold mt-1">{formatVnd(item.price)}</p>
+                    </div>
+                  ))}
+                </div>
+              )}
+              <p className="text-xs text-muted-foreground mt-3">
+                Trợ lý trao đổi trực tiếp với bạn. Khi bạn đề xuất chỉnh giá, Admin sẽ duyệt hoặc từ chối kèm lý do.
+              </p>
+            </div>
+          </Card>
         </TabPanel>
 
         <TabPanel value="chapters" className="mt-5">
@@ -616,6 +730,49 @@ export default function SeriesDetailPage() {
           )}
         </TabPanel>
       </Tabs>
+
+      <Modal open={proposalOpen} onClose={() => setProposalOpen(false)} size="lg" title="Đề xuất chỉnh giá task">
+        <div className="space-y-4">
+          <p className="text-sm text-muted-foreground">
+            Nhập mức giá đề xuất cho từng loại task. Admin sẽ duyệt trước khi trở thành bảng giá chính thức.
+          </p>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            {priceTable.map(item => (
+              <label key={item.taskType} className="text-sm">
+                <p className="mb-1 text-muted-foreground">{item.displayName ?? getTaskTypeLabel(item.taskType)}</p>
+                <input
+                  type="text"
+                  inputMode="numeric"
+                  className="w-full rounded-lg border border-border px-3 py-2"
+                  value={proposalDraft[item.taskType] ?? ''}
+                  onChange={e =>
+                    setProposalDraft(prev => ({
+                      ...prev,
+                      [item.taskType]: formatVndInput(e.target.value),
+                    }))
+                  }
+                />
+              </label>
+            ))}
+          </div>
+          <div>
+            <p className="text-sm mb-1 text-muted-foreground">Ghi chú cho Admin (tuỳ chọn)</p>
+            <textarea
+              rows={3}
+              value={proposalNote}
+              onChange={e => setProposalNote(e.target.value)}
+              className="w-full rounded-lg border border-border px-3 py-2 text-sm"
+              placeholder="Lý do chỉnh giá, phạm vi áp dụng..."
+            />
+          </div>
+          <div className="flex justify-end gap-2">
+            <Button variant="outline" onClick={() => setProposalOpen(false)}>Hủy</Button>
+            <Button variant="primary" loading={submittingProposal} onClick={() => void handleSubmitPriceProposal()}>
+              Gửi đề xuất
+            </Button>
+          </div>
+        </div>
+      </Modal>
     </div>
   );
 }

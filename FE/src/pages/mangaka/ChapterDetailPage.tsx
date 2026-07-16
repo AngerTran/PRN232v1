@@ -10,6 +10,7 @@ import {
   Upload,
   Sparkles,
   CheckCircle2,
+  Send,
 } from 'lucide-react';
 import Button from '../../components/ui/Button';
 import Badge from '../../components/ui/Badge';
@@ -25,8 +26,10 @@ import {
   getChapter,
   getSeries,
   canMangakaProduceOnSeries,
+  canMangakaSubmitChapterForReview,
   SERIES_PRODUCTION_LOCK_HINT,
   uploadChapterManuscript,
+  updateChapterStatus,
 } from '../../services/seriesApi';
 import { getChapterPages, uploadChapterPage, deleteChapterPage, type WorkspacePageItem } from '../../services/workspaceApi';
 import { format } from 'date-fns';
@@ -83,6 +86,7 @@ export default function ChapterDetailPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [uploadingManuscript, setUploadingManuscript] = useState(false);
+  const [submittingReview, setSubmittingReview] = useState(false);
   const manuscriptInputRef = useRef<HTMLInputElement>(null);
 
   const paths = useSeriesContentPaths(chapter?.seriesId);
@@ -251,8 +255,44 @@ export default function ChapterDetailPage() {
   const canProduce = !readOnly && series ? canMangakaProduceOnSeries(series.status) : false;
   const productionLockHint = !readOnly && series ? SERIES_PRODUCTION_LOCK_HINT[series.status] : undefined;
   const canOpenWorkspace = canProduce && pages.length > 0;
+  const canSubmitForReview =
+    !readOnly
+    && canProduce
+    && chapter
+    && canMangakaSubmitChapterForReview(chapter.status)
+    && pages.length > 0;
   const manuscriptUrl = isManuscriptUrl(chapter.description) ? chapter.description.trim() : null;
   const hasDeadline = Boolean(chapter.deadline) && !Number.isNaN(new Date(chapter.deadline).getTime());
+
+  const handleSubmitForReview = async () => {
+    if (!chapter) return;
+    const confirmed = await confirm({
+      title: 'Gửi xét duyệt chương',
+      variant: 'submit',
+      message: (
+        <>
+          Gửi <span className="font-semibold text-foreground">Ch.{chapter.number} · {chapter.title}</span> cho Editor xét duyệt?
+          <br />
+          <span className="text-xs mt-1 inline-block">
+            Editor mới thấy chương sau bước này. Board chỉ thấy sau khi Editor duyệt xong.
+          </span>
+        </>
+      ),
+      confirmText: 'Gửi Editor',
+    });
+    if (!confirmed) return;
+
+    setSubmittingReview(true);
+    try {
+      const updated = await updateChapterStatus(chapter.id, 'reviewing');
+      setChapter(updated);
+      toast.success('Đã gửi chương cho Editor xét duyệt.');
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Không gửi được xét duyệt.');
+    } finally {
+      setSubmittingReview(false);
+    }
+  };
 
   const openWorkspace = () => {
     const firstPage = pages[0];
@@ -298,22 +338,47 @@ export default function ChapterDetailPage() {
               </div>
 
               {!readOnly && (
-                <Button
-                  variant="primary"
-                  className="shrink-0 w-full sm:w-auto"
-                  disabled={!canOpenWorkspace}
-                  title={
-                    !canProduce
-                      ? (productionLockHint ?? 'Series không còn trong giai đoạn sản xuất.')
-                      : pages.length === 0
-                        ? 'Thêm ít nhất một trang manga trước khi mở workspace.'
-                        : 'Mở studio sản xuất — giao task cho trợ lý trên trang truyện.'
-                  }
-                  onClick={openWorkspace}
-                >
-                  <Sparkles size={15} />
-                  Mở Workspace
-                </Button>
+                <div className="flex flex-col sm:flex-row gap-2 shrink-0 w-full sm:w-auto">
+                  <Button
+                    variant="primary"
+                    className="w-full sm:w-auto"
+                    disabled={!canOpenWorkspace}
+                    title={
+                      !canProduce
+                        ? (productionLockHint ?? 'Series không còn trong giai đoạn sản xuất.')
+                        : pages.length === 0
+                          ? 'Thêm ít nhất một trang manga trước khi mở workspace.'
+                          : 'Mở studio sản xuất — giao task cho trợ lý trên trang truyện.'
+                    }
+                    onClick={openWorkspace}
+                  >
+                    <Sparkles size={15} />
+                    Mở Workspace
+                  </Button>
+                  {canSubmitForReview && (
+                    <Button
+                      variant="outline"
+                      className="w-full sm:w-auto"
+                      loading={submittingReview}
+                      onClick={() => void handleSubmitForReview()}
+                    >
+                      <Send size={15} />
+                      Gửi xét duyệt
+                    </Button>
+                  )}
+                  {chapter.status === 'Review' && (
+                    <Button variant="outline" className="w-full sm:w-auto" disabled>
+                      <Send size={15} />
+                      Đã gửi Editor
+                    </Button>
+                  )}
+                  {(chapter.status === 'Approved' || chapter.status === 'Published') && (
+                    <Button variant="outline" className="w-full sm:w-auto" disabled>
+                      <CheckCircle2 size={15} />
+                      Editor đã duyệt
+                    </Button>
+                  )}
+                </div>
               )}
             </div>
 
@@ -477,7 +542,10 @@ export default function ChapterDetailPage() {
               <p>• <span className="text-foreground/80">Bản thảo</span> = file gốc (PDF/ZIP).</p>
               <p>• <span className="text-foreground/80">Trang manga</span> = ảnh từng trang để giao task.</p>
               {!readOnly && (
-                <p>• Bấm thẻ trang hoặc <span className="text-foreground/80">Mở Workspace</span> để sản xuất.</p>
+                <>
+                  <p>• Bấm thẻ trang hoặc <span className="text-foreground/80">Mở Workspace</span> để sản xuất.</p>
+                  <p>• Làm xong thì bấm <span className="text-foreground/80">Gửi xét duyệt</span> — Editor mới thấy chương. Board chỉ thấy sau khi Editor duyệt.</p>
+                </>
               )}
             </div>
           </div>

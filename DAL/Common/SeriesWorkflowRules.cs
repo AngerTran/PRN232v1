@@ -4,7 +4,7 @@ namespace DAL.Common;
 /// Quy tắc luồng nghiệp vụ linh hoạt:
 /// - Mangaka sản xuất sau khi hội đồng duyệt.
 /// - Lead lên lịch XB khi đã duyệt; có thể dời lịch bất cứ lúc nào (không khóa cứng).
-/// - "Completed" chỉ là nhãn kết thúc dự kiến — không khóa sản xuất/dời lịch.
+/// - "Completed" = Editor báo sẵn sàng XB (một lần) — không khóa sản xuất/dời lịch.
 /// </summary>
 public static class SeriesWorkflowRules
 {

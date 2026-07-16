@@ -1,9 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using DAL.Common;
-using BLL.Dtos.Tasks;
 using DAL.Models;
 using DAL.Repositories;
-using BLL.Services.Workflow;
 using BLL.Services.Workflow;
 using BLL.Dtos.Schedules;
 using BLL.Services.Notifications;
@@ -32,11 +30,39 @@ public class PublishingScheduleService
 
         var items = await _unitOfWork.Context.PublishingSchedules
             .AsNoTracking()
+            .Include(s => s.Chapter)
             .Where(s => s.SeriesId == seriesId)
             .OrderBy(s => s.PublishDate)
             .ToListAsync(cancellationToken);
 
         return items.Select(Map).ToList();
+    }
+
+    public async Task<IReadOnlyList<ScheduleChapterOptionResponse>> ListChapterOptionsAsync(
+        Guid callerId,
+        Guid seriesId,
+        CancellationToken cancellationToken = default)
+    {
+        await RequireScheduleManagerAsync(callerId, seriesId, cancellationToken);
+
+        var scheduledChapterIds = await _unitOfWork.Context.PublishingSchedules
+            .AsNoTracking()
+            .Where(s => s.SeriesId == seriesId && s.ChapterId != null)
+            .Select(s => s.ChapterId!.Value)
+            .ToListAsync(cancellationToken);
+
+        var chapters = await _unitOfWork.Context.Chapters
+            .AsNoTracking()
+            .Where(c => c.SeriesId == seriesId && c.ChapterNumber > 0)
+            .OrderBy(c => c.ChapterNumber)
+            .ToListAsync(cancellationToken);
+
+        return chapters.Select(c => new ScheduleChapterOptionResponse(
+            c.Id,
+            c.ChapterNumber,
+            c.Title,
+            ChapterStatuses.ToDbValue(c.Status),
+            scheduledChapterIds.Contains(c.Id))).ToList();
     }
 
     public async Task<PublishingScheduleResponse> CreateAsync(
@@ -62,13 +88,22 @@ public class PublishingScheduleService
             throw new WorkflowForbiddenException(ex.Message);
         }
 
+        Chapter? chapter = null;
+        if (request.ChapterId is Guid chapterId)
+        {
+            chapter = await RequireChapterForSeriesAsync(seriesId, chapterId, excludeScheduleId: null, cancellationToken);
+        }
+
+        var issueNumber = request.IssueNumber ?? chapter?.ChapterNumber;
+
         var schedule = new PublishingSchedule
         {
             Id = Guid.NewGuid(),
             SeriesId = seriesId,
+            ChapterId = chapter?.Id,
             PublishDate = request.PublishDate,
             Frequency = PublishingFrequencies.ParseOrDefault(request.Frequency),
-            IssueNumber = request.IssueNumber,
+            IssueNumber = issueNumber,
             Notes = request.Notes,
             CreatedAt = DateTime.UtcNow
         };
@@ -76,9 +111,12 @@ public class PublishingScheduleService
         await Repository.AddAsync(schedule, cancellationToken);
         await _unitOfWork.SaveChangesAsync(cancellationToken);
 
+        var chapterLabel = chapter is null
+            ? ""
+            : $" · Ch.{chapter.ChapterNumber}{(string.IsNullOrWhiteSpace(chapter.Title) ? "" : $" «{chapter.Title}»")}";
         var dateLabel = request.PublishDate.ToString("dd/MM/yyyy");
         var scheduleMessage =
-            $"Lịch xuất bản mới cho \"{series.Title}\" — ngày {dateLabel} (số {request.IssueNumber}).";
+            $"Lịch xuất bản mới cho \"{series.Title}\" — ngày {dateLabel} (kỳ {issueNumber}){chapterLabel}.";
 
         await _notificationService.CreateAsync(
             series.AuthorId,
@@ -99,6 +137,7 @@ public class PublishingScheduleService
                 cancellationToken: cancellationToken);
         }
 
+        schedule.Chapter = chapter;
         return Map(schedule);
     }
 
@@ -113,7 +152,9 @@ public class PublishingScheduleService
             throw new ArgumentException($"Invalid frequency. Allowed: {string.Join(", ", PublishingFrequencies.All)}.");
         }
 
-        var schedule = await Repository.GetByIdAsync(scheduleId, asNoTracking: false, cancellationToken);
+        var schedule = await _unitOfWork.Context.PublishingSchedules
+            .Include(s => s.Chapter)
+            .FirstOrDefaultAsync(s => s.Id == scheduleId, cancellationToken);
         if (schedule is null || schedule.SeriesId is null)
         {
             return null;
@@ -138,6 +179,23 @@ public class PublishingScheduleService
         if (request.IssueNumber is not null)
         {
             schedule.IssueNumber = request.IssueNumber;
+        }
+
+        if (request.ClearChapter)
+        {
+            schedule.ChapterId = null;
+            schedule.Chapter = null;
+        }
+        else if (request.ChapterId is Guid chapterId)
+        {
+            var chapter = await RequireChapterForSeriesAsync(
+                schedule.SeriesId.Value,
+                chapterId,
+                excludeScheduleId: schedule.Id,
+                cancellationToken);
+            schedule.ChapterId = chapter.Id;
+            schedule.Chapter = chapter;
+            schedule.IssueNumber ??= chapter.ChapterNumber;
         }
 
         if (request.Notes is not null)
@@ -198,6 +256,40 @@ public class PublishingScheduleService
         Repository.Remove(schedule);
         await _unitOfWork.SaveChangesAsync(cancellationToken);
         return true;
+    }
+
+    private async Task<Chapter> RequireChapterForSeriesAsync(
+        Guid seriesId,
+        Guid chapterId,
+        Guid? excludeScheduleId,
+        CancellationToken cancellationToken)
+    {
+        var chapter = await _unitOfWork.Context.Chapters
+            .FirstOrDefaultAsync(c => c.Id == chapterId, cancellationToken)
+            ?? throw new ArgumentException("Chapter not found.");
+
+        if (chapter.SeriesId != seriesId)
+        {
+            throw new ArgumentException("Chapter does not belong to this series.");
+        }
+
+        if (chapter.ChapterNumber <= 0)
+        {
+            throw new ArgumentException("Chỉ được gắn chương sản xuất (số chương > 0).");
+        }
+
+        var alreadyUsed = await _unitOfWork.Context.PublishingSchedules
+            .AnyAsync(
+                s => s.ChapterId == chapterId
+                    && s.SeriesId == seriesId
+                    && (excludeScheduleId == null || s.Id != excludeScheduleId),
+                cancellationToken);
+        if (alreadyUsed)
+        {
+            throw new ArgumentException($"Chương {chapter.ChapterNumber} đã được gắn vào lịch khác.");
+        }
+
+        return chapter;
     }
 
     private async Task<DAL.Models.Series> RequireSeriesAccessAsync(
@@ -263,6 +355,9 @@ public class PublishingScheduleService
         new(
             s.Id,
             s.SeriesId,
+            s.ChapterId,
+            s.Chapter?.ChapterNumber,
+            s.Chapter?.Title,
             s.PublishDate,
             PublishingFrequencies.ToDbValue(s.Frequency),
             s.IssueNumber,

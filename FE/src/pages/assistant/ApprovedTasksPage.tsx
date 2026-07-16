@@ -147,6 +147,9 @@ export default function ApprovedTasksPage() {
                           <Badge variant={paid ? 'default' : 'secondary'}>
                             {paid ? 'Đã thanh toán' : 'Chờ thanh toán'}
                           </Badge>
+                          {paid && task.paymentReference && (
+                            <p className="text-[10px] text-muted-foreground mt-1">Mã CK: {task.paymentReference}</p>
+                          )}
                         </TableCell>
                         <TableCell className="text-right">
                           <Button

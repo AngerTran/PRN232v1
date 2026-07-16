@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Camera, BookOpen, FileText, Star, Award } from 'lucide-react';
+import { Camera, BookOpen, FileText, Star, Award, Banknote } from 'lucide-react';
 import Card, { CardHeader, CardTitle } from '../../components/ui/Card';
 import Button from '../../components/ui/Button';
 import Badge from '../../components/ui/Badge';
@@ -24,6 +24,12 @@ export default function ProfilePage() {
   const [editMode, setEditMode] = useState(false);
   const [name, setName] = useState(user?.name ?? '');
   const [bio, setBio] = useState(user?.bio ?? '');
+  const [payoutBankName, setPayoutBankName] = useState(user?.payoutBankName ?? '');
+  const [payoutAccountNumber, setPayoutAccountNumber] = useState(user?.payoutBankAccountNumber ?? '');
+  const [payoutAccountHolder, setPayoutAccountHolder] = useState(user?.payoutBankAccountHolder ?? '');
+  const [payoutEditMode, setPayoutEditMode] = useState(false);
+  const [payoutSaving, setPayoutSaving] = useState(false);
+  const [payoutSaved, setPayoutSaved] = useState(false);
   const [saved, setSaved] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
@@ -38,6 +44,9 @@ export default function ProfilePage() {
         setUser(me);
         setName(me.name);
         setBio(me.bio);
+        setPayoutBankName(me.payoutBankName ?? '');
+        setPayoutAccountNumber(me.payoutBankAccountNumber ?? '');
+        setPayoutAccountHolder(me.payoutBankAccountHolder ?? '');
         if (me.role === 'mangaka') {
           getMySeries()
             .then(list => {
@@ -80,7 +89,39 @@ export default function ProfilePage() {
     }
   };
 
+  const handleSavePayout = async () => {
+    if (!payoutBankName.trim() || !payoutAccountNumber.trim() || !payoutAccountHolder.trim()) {
+      setError('Vui lòng nhập đầy đủ ngân hàng, số tài khoản và tên chủ tài khoản.');
+      return;
+    }
+
+    setPayoutSaving(true);
+    setError('');
+    try {
+      const updated = await updateMyProfile({
+        payoutBankName: payoutBankName.trim(),
+        payoutBankAccountNumber: payoutAccountNumber.trim(),
+        payoutBankAccountHolder: payoutAccountHolder.trim().toUpperCase(),
+      });
+      setUser(updated);
+      setPayoutBankName(updated.payoutBankName ?? '');
+      setPayoutAccountNumber(updated.payoutBankAccountNumber ?? '');
+      setPayoutAccountHolder(updated.payoutBankAccountHolder ?? '');
+      setPayoutEditMode(false);
+      setPayoutSaved(true);
+      setTimeout(() => setPayoutSaved(false), 2000);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Không thể lưu thông tin ngân hàng.');
+    } finally {
+      setPayoutSaving(false);
+    }
+  };
+
   const isMangaka = user?.role === 'mangaka';
+  const isAssistant = user?.role === 'assistant';
+  const hasPayoutInfo = Boolean(
+    user?.payoutBankName && user?.payoutBankAccountNumber && user?.payoutBankAccountHolder
+  );
 
   return (
     <div className="p-6 space-y-5">
@@ -158,6 +199,92 @@ export default function ProfilePage() {
           )}
         </div>
       </Card>
+
+      {isAssistant && (
+        <Card>
+          <div className="flex items-start justify-between gap-3 mb-4">
+            <div className="flex items-center gap-2">
+              <Banknote className="h-5 w-5 text-primary" />
+              <div>
+                <h2 className="text-lg font-semibold">Thông tin nhận thù lao</h2>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  Kế toán dùng thông tin này để chuyển khoản vào kỳ chi (ngày 5 hàng tháng).
+                </p>
+              </div>
+            </div>
+            <Button
+              variant={payoutEditMode ? 'primary' : 'outline'}
+              size="sm"
+              disabled={payoutSaving}
+              onClick={payoutEditMode ? () => void handleSavePayout() : () => setPayoutEditMode(true)}
+            >
+              {payoutSaved ? '✓ Đã lưu' : payoutSaving ? 'Đang lưu…' : payoutEditMode ? 'Lưu STK' : hasPayoutInfo ? 'Cập nhật STK' : 'Thêm STK'}
+            </Button>
+          </div>
+
+          {!hasPayoutInfo && !payoutEditMode && (
+            <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900 mb-4">
+              Bạn chưa khai báo tài khoản ngân hàng. Hãy thêm để kế toán chuyển thù lao đúng kỳ.
+            </div>
+          )}
+
+          {payoutEditMode ? (
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div className="sm:col-span-2">
+                <label className="block text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-1">
+                  Ngân hàng
+                </label>
+                <input
+                  value={payoutBankName}
+                  onChange={e => setPayoutBankName(e.target.value)}
+                  placeholder="VD: Vietcombank, Techcombank, MB Bank…"
+                  className="w-full px-3 py-2 text-sm bg-input-background border border-border rounded-xl focus:outline-none focus:ring-2 focus:ring-ring/30"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-1">
+                  Số tài khoản
+                </label>
+                <input
+                  value={payoutAccountNumber}
+                  onChange={e => setPayoutAccountNumber(e.target.value.replace(/\s/g, ''))}
+                  placeholder="Chỉ nhập số, không khoảng trắng"
+                  className="w-full px-3 py-2 text-sm bg-input-background border border-border rounded-xl focus:outline-none focus:ring-2 focus:ring-ring/30"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-1">
+                  Tên chủ tài khoản
+                </label>
+                <input
+                  value={payoutAccountHolder}
+                  onChange={e => setPayoutAccountHolder(e.target.value.toUpperCase())}
+                  placeholder="VIET HOA, KHONG DAU"
+                  className="w-full px-3 py-2 text-sm bg-input-background border border-border rounded-xl focus:outline-none focus:ring-2 focus:ring-ring/30"
+                />
+              </div>
+              <p className="sm:col-span-2 text-xs text-muted-foreground">
+                Tên chủ TK phải trùng với tài khoản ngân hàng (thường viết hoa, không dấu). Chỉ Admin/kế toán mới xem được khi chi trả.
+              </p>
+            </div>
+          ) : hasPayoutInfo ? (
+            <dl className="grid gap-3 sm:grid-cols-2 text-sm">
+              <div>
+                <dt className="text-xs text-muted-foreground">Ngân hàng</dt>
+                <dd className="font-medium">{user?.payoutBankName}</dd>
+              </div>
+              <div>
+                <dt className="text-xs text-muted-foreground">Số tài khoản</dt>
+                <dd className="font-medium font-mono">{user?.payoutBankAccountNumber}</dd>
+              </div>
+              <div className="sm:col-span-2">
+                <dt className="text-xs text-muted-foreground">Tên chủ tài khoản</dt>
+                <dd className="font-medium">{user?.payoutBankAccountHolder}</dd>
+              </div>
+            </dl>
+          ) : null}
+        </Card>
+      )}
 
       {/* Mangaka stats + series */}
       {isMangaka && (
