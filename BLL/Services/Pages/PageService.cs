@@ -50,6 +50,8 @@ public class PageService
             throw new WorkflowForbiddenException("You do not have permission to view pages for this chapter.");
         }
 
+        await SyncPagesToChapterLifecycleAsync(chapter, cancellationToken);
+
         var pages = await _unitOfWork.Context.Pages
             .AsNoTracking()
             .Where(p => p.ChapterId == chapterId)
@@ -286,6 +288,8 @@ public class PageService
             throw new WorkflowForbiddenException("Only mangaka author or admin can delete pages.");
         }
 
+        EnsurePageProductionAllowed(caller, page.Chapter);
+
         PageRepository.Remove(page);
         await _unitOfWork.SaveChangesAsync(cancellationToken);
         return true;
@@ -344,6 +348,13 @@ public class PageService
             return;
         }
 
+        if (PageAccessService.IsMangaka(caller.Role)
+            && chapter.Status is not (ChapterStatus.Draft or ChapterStatus.InProgress))
+        {
+            throw new WorkflowForbiddenException(
+                "Chương đã duyệt / đang xét duyệt / đã xuất bản bị khóa. Chỉ mở lại khi Editor hoặc Board yêu cầu chỉnh sửa.");
+        }
+
         if (chapter.ChapterNumber == 0 && SeriesWorkflowRules.AllowsProposalChapter(chapter.Series.Status))
         {
             return;
@@ -357,6 +368,45 @@ public class PageService
         {
             throw new WorkflowForbiddenException(ex.Message);
         }
+    }
+
+    private async Task SyncPagesToChapterLifecycleAsync(Chapter chapter, CancellationToken cancellationToken)
+    {
+        PageStatus? target = chapter.Status switch
+        {
+            ChapterStatus.Published => PageStatus.Published,
+            ChapterStatus.Completed => PageStatus.Approved,
+            ChapterStatus.Reviewing => PageStatus.Reviewing,
+            _ => null
+        };
+
+        if (target is null)
+        {
+            return;
+        }
+
+        var pages = await _unitOfWork.Context.Pages
+            .Where(p => p.ChapterId == chapter.Id && p.Status != target.Value)
+            .ToListAsync(cancellationToken);
+
+        if (pages.Count == 0)
+        {
+            return;
+        }
+
+        var now = DateTime.UtcNow;
+        foreach (var page in pages)
+        {
+            if (target == PageStatus.Approved && page.Status == PageStatus.Published)
+            {
+                continue;
+            }
+
+            page.Status = target.Value;
+            page.UpdatedAt = now;
+        }
+
+        await _unitOfWork.SaveChangesAsync(cancellationToken);
     }
 
     private static PageResponse MapToDto(Page page) =>

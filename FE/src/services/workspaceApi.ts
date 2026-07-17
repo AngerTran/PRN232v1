@@ -1,7 +1,7 @@
 import { API_BASE_URL, apiRequest } from './apiClient';
 import { getTaskTypeLabel, normalizeTaskType } from '../utils/taskTypes';
 
-export type PageStatus = 'Draft' | 'In Progress' | 'Completed' | 'Approved' | string;
+export type PageStatus = 'Draft' | 'In Progress' | 'Review' | 'Completed' | 'Approved' | 'Published' | string;
 /** Mã loại task API (background, lineart, …) — đồng bộ với bảng giá. */
 export type TaskType = string;
 export type TaskStatus = 'Pending' | 'In Progress' | 'Submitted' | 'Approved' | 'Revision Required' | string;
@@ -228,8 +228,9 @@ function mapPageStatus(status: string): PageStatus {
     case 'reviewing':
       return 'Review';
     case 'completed':
-    case 'approved':
       return 'Completed';
+    case 'approved':
+      return 'Approved';
     case 'published':
       return 'Published';
     case 'draft':

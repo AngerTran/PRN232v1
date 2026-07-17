@@ -76,6 +76,7 @@ public class SeriesService
     CancellationToken cancellationToken = default)
   {
     var caller = await RequireCallerAsync(callerId, cancellationToken);
+    await PromoteScheduledSeriesToPublishingAsync(cancellationToken);
     var query = BuildSeriesQuery();
 
     if (IsStaff(caller.Role))
@@ -98,6 +99,7 @@ public class SeriesService
     CancellationToken cancellationToken = default)
   {
     await EnsureRoleAsync(callerId, ProfileRoles.Mangaka, cancellationToken);
+    await PromoteScheduledSeriesToPublishingAsync(cancellationToken);
 
     return await BuildSeriesQuery()
       .Where(s => s.AuthorId == callerId)
@@ -112,6 +114,8 @@ public class SeriesService
     CancellationToken cancellationToken = default)
   {
     var caller = await RequireCallerAsync(callerId, cancellationToken);
+    await PromoteScheduledSeriesToPublishingAsync(cancellationToken, id);
+
     var series = await BuildSeriesQuery()
       .FirstOrDefaultAsync(s => s.Id == id, cancellationToken);
 
@@ -1152,6 +1156,8 @@ public class SeriesService
       throw new SeriesForbiddenException("You do not have permission to update this chapter.");
     }
 
+    EnsureMangakaCanEditChapterContent(caller, chapter);
+
     if (request.Title is not null)
     {
       chapter.Title = request.Title.Trim();
@@ -1200,6 +1206,8 @@ public class SeriesService
       throw new SeriesForbiddenException("Only the series author (mangaka) or admin can upload a chapter manuscript.");
     }
 
+    EnsureMangakaCanEditChapterContent(caller, chapter);
+
     var extension = Path.GetExtension(file.FileName);
     if (string.IsNullOrWhiteSpace(extension))
     {
@@ -1247,9 +1255,19 @@ public class SeriesService
       throw new SeriesForbiddenException($"Role '{caller.Role}' cannot set chapter status to '{ChapterStatuses.ToDbValue(newStatus)}'.");
     }
 
+    // Mangaka không tự mở khóa chương đã khóa — chỉ Editor/Board đặt lại InProgress.
+    if (IsMangaka(caller.Role)
+        && !IsAdmin(caller.Role)
+        && chapter.Status is ChapterStatus.Reviewing or ChapterStatus.Completed or ChapterStatus.Published)
+    {
+      throw new SeriesForbiddenException(
+        "Chương đang khóa. Chỉ Editor hoặc Board có thể yêu cầu chỉnh sửa lại.");
+    }
+
     chapter.Status = newStatus;
     chapter.UpdatedAt = DateTime.UtcNow;
     ChapterRepository.Update(chapter);
+    await SyncPagesWithChapterStatusAsync(chapter.Id, newStatus, cancellationToken);
     await _unitOfWork.SaveChangesAsync(cancellationToken);
 
     return MapChapterToDto(chapter);
@@ -1299,6 +1317,8 @@ public class SeriesService
     {
       throw new SeriesForbiddenException("You do not have permission to view chapters for this series.");
     }
+
+    await PromoteScheduledChaptersToPublishedAsync(seriesId, cancellationToken);
 
     var chapters = await _unitOfWork.Context.Chapters
       .AsNoTracking()
@@ -1440,6 +1460,39 @@ public class SeriesService
       .Include(s => s.Author)
       .Include(s => s.Editor);
 
+  /// <summary>
+  /// Series đã có lịch XB nhưng còn nhãn approved/completed → chuyển sang publishing.
+  /// </summary>
+  private async Task PromoteScheduledSeriesToPublishingAsync(
+    CancellationToken cancellationToken,
+    Guid? seriesId = null)
+  {
+    var query = _unitOfWork.Context.Series
+      .Where(s =>
+        (s.Status == SeriesStatus.Approved || s.Status == SeriesStatus.Completed)
+        && _unitOfWork.Context.PublishingSchedules.Any(ps => ps.SeriesId == s.Id));
+
+    if (seriesId is Guid id)
+    {
+      query = query.Where(s => s.Id == id);
+    }
+
+    var toPromote = await query.ToListAsync(cancellationToken);
+    if (toPromote.Count == 0)
+    {
+      return;
+    }
+
+    var now = DateTime.UtcNow;
+    foreach (var series in toPromote)
+    {
+      series.Status = SeriesStatus.Publishing;
+      series.UpdatedAt = now;
+    }
+
+    await _unitOfWork.SaveChangesAsync(cancellationToken);
+  }
+
   private static System.Linq.Expressions.Expression<Func<SeriesEntity, SeriesResponse>> MapProjection() =>
     s => new SeriesResponse(
       s.Id,
@@ -1547,6 +1600,99 @@ public class SeriesService
     || (IsEditor(caller.Role) && series.EditorId == caller.Id);
 
   private static bool CanModifyChapter(Profile caller, SeriesEntity series) => CanModifySeries(caller, series);
+
+  /// <summary>
+  /// Mangaka chỉ sửa nội dung khi chương còn Draft / InProgress (sau khi Editor yêu cầu sửa).
+  /// </summary>
+  private static void EnsureMangakaCanEditChapterContent(Profile caller, Chapter chapter)
+  {
+    if (!IsMangaka(caller.Role) || IsAdmin(caller.Role))
+    {
+      return;
+    }
+
+    if (chapter.Status is ChapterStatus.Draft or ChapterStatus.InProgress)
+    {
+      return;
+    }
+
+    throw new SeriesForbiddenException(
+      "Chương đã duyệt / đang xét duyệt / đã xuất bản bị khóa. Chỉ mở lại khi Editor hoặc Board yêu cầu chỉnh sửa.");
+  }
+
+  /// <summary>
+  /// Chương đã gắn lịch XB nhưng còn completed → chuyển published (+ trang theo chương).
+  /// </summary>
+  private async Task PromoteScheduledChaptersToPublishedAsync(
+    Guid seriesId,
+    CancellationToken cancellationToken)
+  {
+    var toPromote = await _unitOfWork.Context.Chapters
+      .Where(c =>
+        c.SeriesId == seriesId
+        && c.Status == ChapterStatus.Completed
+        && _unitOfWork.Context.PublishingSchedules.Any(ps => ps.ChapterId == c.Id))
+      .ToListAsync(cancellationToken);
+
+    if (toPromote.Count == 0)
+    {
+      return;
+    }
+
+    var now = DateTime.UtcNow;
+    foreach (var chapter in toPromote)
+    {
+      chapter.Status = ChapterStatus.Published;
+      chapter.UpdatedAt = now;
+      await SyncPagesWithChapterStatusAsync(chapter.Id, ChapterStatus.Published, cancellationToken);
+    }
+
+    await _unitOfWork.SaveChangesAsync(cancellationToken);
+  }
+
+  /// <summary>
+  /// Đồng bộ status trang theo chương: duyệt → approved, xuất bản → published.
+  /// </summary>
+  private async Task SyncPagesWithChapterStatusAsync(
+    Guid chapterId,
+    ChapterStatus chapterStatus,
+    CancellationToken cancellationToken)
+  {
+    PageStatus? target = chapterStatus switch
+    {
+      ChapterStatus.Published => PageStatus.Published,
+      ChapterStatus.Completed => PageStatus.Approved,
+      ChapterStatus.Reviewing => PageStatus.Reviewing,
+      _ => null
+    };
+
+    if (target is null)
+    {
+      return;
+    }
+
+    var pages = await _unitOfWork.Context.Pages
+      .Where(p => p.ChapterId == chapterId && p.Status != target.Value)
+      .ToListAsync(cancellationToken);
+
+    if (pages.Count == 0)
+    {
+      return;
+    }
+
+    var now = DateTime.UtcNow;
+    foreach (var page in pages)
+    {
+      // Không hạ cấp trang đã published khi chương chỉ ở completed.
+      if (target == PageStatus.Approved && page.Status == PageStatus.Published)
+      {
+        continue;
+      }
+
+      page.Status = target.Value;
+      page.UpdatedAt = now;
+    }
+  }
 
   private static bool CanChangeChapterStatus(Profile caller, SeriesEntity series, ChapterStatus newStatus)
   {

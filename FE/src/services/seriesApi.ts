@@ -255,6 +255,17 @@ export function canMangakaSubmitChapterForReview(status: ChapterStatus): boolean
   return status === 'Draft' || status === 'In Progress';
 }
 
+/** Mangaka chỉ sửa nội dung khi nháp / đang sửa theo yêu cầu. Chương duyệt / XB bị khóa. */
+export function canMangakaEditChapter(status: ChapterStatus): boolean {
+  return status === 'Draft' || status === 'In Progress';
+}
+
+export const CHAPTER_CONTENT_LOCK_HINT: Partial<Record<ChapterStatus, string>> = {
+  Review: 'Chương đang chờ Editor xét duyệt — tạm khóa chỉnh sửa.',
+  Approved: 'Chương đã được duyệt — bị khóa. Chỉ mở lại khi Editor hoặc Board yêu cầu chỉnh sửa.',
+  Published: 'Chương đã gắn lịch / xuất bản — bị khóa. Chỉ mở lại khi Editor hoặc Board yêu cầu chỉnh sửa.',
+};
+
 export async function getMySeries(): Promise<Series[]> {
   const [items, rankings] = await Promise.all([
     unwrap(await apiRequest<ApiEnvelope<ApiSeries[]>>('/api/series/my-series')),
@@ -308,15 +319,15 @@ export const SERIES_PRODUCTION_LOCK_HINT: Partial<Record<SeriesStatus, string>> 
 };
 
 export const SERIES_SUBMISSION_STATUS_HINT: Record<SeriesStatus, string> = {
-  Draft: 'Series chưa được gửi xét duyệt.',
-  Submitted: 'Đang chờ 3 board cố định xét duyệt (hạn 48 giờ).',
-  Approved: 'Hội đồng đã phê duyệt series.',
+  Draft: 'Series chưa gửi xét duyệt.',
+  Submitted: 'Đang chờ hội đồng (3 board) xét duyệt — hạn phản hồi 48 giờ.',
+  Approved: 'Hội đồng đã duyệt series. Bạn có thể bắt đầu sản xuất.',
   'In Progress': 'Series đang trong quá trình xuất bản.',
-  'Revision Required': 'Hội đồng yêu cầu chỉnh sửa trước khi duyệt.',
-  'At Risk': 'Series đang có nguy cơ bị tạm dừng do xếp hạng thấp.',
-  Completed: 'Editor đã báo sẵn sàng xuất bản — vẫn làm thêm chương và Board vẫn dời lịch XB được.',
+  'Revision Required': 'Hội đồng yêu cầu chỉnh sửa trước khi duyệt lại.',
+  'At Risk': 'Series đang có nguy cơ tạm dừng vì xếp hạng thấp.',
+  Completed: 'Editor đã báo series sẵn sàng xuất bản. Bạn vẫn có thể thêm chương; hội đồng vẫn có thể dời lịch XB.',
   Published: 'Series đã xuất bản.',
-  Cancelled: 'Hội đồng đã từ chối hoặc hết hạn 48 giờ xét duyệt — bạn có thể chỉnh sửa và gửi lại.',
+  Cancelled: 'Series bị từ chối hoặc hết hạn xét duyệt. Bạn có thể chỉnh sửa rồi gửi lại.',
 };
 
 export const REVIEW_EXPIRY_HOURS = 48;

@@ -1,6 +1,14 @@
-import { useState, useRef, useCallback, useEffect, type PointerEvent } from 'react';
+import { useState, useRef, useCallback, useEffect, useMemo, type PointerEvent } from 'react';
 import { useParams, useNavigate } from 'react-router';
-import { ChevronLeft, ZoomIn, ZoomOut, RotateCcw, Target, X, Layers } from 'lucide-react';
+import {
+  ChevronLeft,
+  ZoomIn,
+  ZoomOut,
+  RotateCw,
+  Target,
+  X,
+  Layers,
+} from 'lucide-react';
 import { clsx } from 'clsx';
 import TaskPanel, { type TaskFormData } from '../../components/workspace/TaskPanel';
 import TaskList from '../../components/workspace/TaskList';
@@ -18,6 +26,18 @@ import { useConfirm } from '../../components/ui/ConfirmDialog';
 import { getSeriesTaskPriceTable, type TaskPriceItem } from '../../services/taskPricingApi';
 import { normalizeTaskType, setTaskTypeLabelsFromCatalog, sortTaskTypeItems } from '../../utils/taskTypes';
 
+type ImageRotation = 0 | 90 | 180 | 270;
+
+const DEFAULT_ASPECT = 3 / 4;
+
+function clampPct(n: number) {
+  return Math.max(0, Math.min(100, n));
+}
+
+function nextRotation(current: ImageRotation): ImageRotation {
+  return ((current + 90) % 360) as ImageRotation;
+}
+
 export default function WorkspacePage() {
   const { pageId } = useParams<{ pageId: string }>();
   const navigate = useNavigate();
@@ -30,6 +50,8 @@ export default function WorkspacePage() {
   const [dragStart, setDragStart] = useState<{ x: number; y: number } | null>(null);
   const [currentDrag, setCurrentDrag] = useState<Region | null>(null);
   const [zoom, setZoom] = useState(100);
+  const [imageAspect, setImageAspect] = useState<number | null>(null);
+  const [rotation, setRotation] = useState<ImageRotation>(0);
   const [workspace, setWorkspace] = useState<WorkspacePayload | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -74,7 +96,30 @@ export default function WorkspacePage() {
     setHoverRegion(null);
     setDragStart(null);
     setCurrentDrag(null);
+    setImageAspect(null);
+    setRotation(0);
   }, [selectedPageId]);
+
+  // Tỉ lệ ảnh gốc (chưa xoay) — tự theo ảnh tải lên.
+  const nativeAspect = useMemo(
+    () => (imageAspect && imageAspect > 0 ? imageAspect : DEFAULT_ASPECT),
+    [imageAspect],
+  );
+
+  // Khung hiển thị sau khi xoay (90/270 thì đảo tỉ lệ).
+  const displayAspect = useMemo(
+    () => (rotation === 90 || rotation === 270 ? 1 / nativeAspect : nativeAspect),
+    [nativeAspect, rotation],
+  );
+
+  const displayBaseWidth = displayAspect >= 1 ? 560 : 420;
+  const displayWidthPx = (zoom / 100) * displayBaseWidth;
+  const displayHeightPx = displayWidthPx / displayAspect;
+  const nativeWidthPx = rotation === 90 || rotation === 270 ? displayHeightPx : displayWidthPx;
+  const nativeHeightPx = rotation === 90 || rotation === 270 ? displayWidthPx : displayHeightPx;
+
+  const canvasMetricsRef = useRef({ rotation, nativeWidthPx, nativeHeightPx });
+  canvasMetricsRef.current = { rotation, nativeWidthPx, nativeHeightPx };
 
   useEffect(() => {
     let isActive = true;
@@ -131,9 +176,19 @@ export default function WorkspacePage() {
 
   const getRelativePos = useCallback((e: PointerEvent<HTMLDivElement>): { x: number; y: number } => {
     const rect = canvasRef.current!.getBoundingClientRect();
+    const { rotation: rot, nativeWidthPx: nw, nativeHeightPx: nh } = canvasMetricsRef.current;
+    const px = e.clientX - rect.left;
+    const py = e.clientY - rect.top;
+    const cx = rect.width / 2;
+    const cy = rect.height / 2;
+    const dx = px - cx;
+    const dy = py - cy;
+    const rad = (-rot * Math.PI) / 180;
+    const rx = dx * Math.cos(rad) - dy * Math.sin(rad);
+    const ry = dx * Math.sin(rad) + dy * Math.cos(rad);
     return {
-      x: Math.max(0, Math.min(100, ((e.clientX - rect.left) / rect.width) * 100)),
-      y: Math.max(0, Math.min(100, ((e.clientY - rect.top) / rect.height) * 100)),
+      x: clampPct(((rx + nw / 2) / nw) * 100),
+      y: clampPct(((ry + nh / 2) / nh) * 100),
     };
   }, []);
 
@@ -328,9 +383,18 @@ export default function WorkspacePage() {
               className="w-7 h-7 flex items-center justify-center rounded-lg text-gray-400 hover:text-white hover:bg-[#333] transition-colors">
               <ZoomIn size={14} />
             </button>
-            <button onClick={() => setZoom(100)}
-              className="w-7 h-7 flex items-center justify-center rounded-lg text-gray-400 hover:text-white hover:bg-[#333] transition-colors">
-              <RotateCcw size={14} />
+            <button
+              type="button"
+              title="Xoay ảnh 90°"
+              onClick={() => setRotation(r => nextRotation(r))}
+              className={clsx(
+                'w-7 h-7 flex items-center justify-center rounded-lg transition-colors',
+                rotation !== 0
+                  ? 'bg-primary text-white'
+                  : 'text-gray-400 hover:text-white hover:bg-[#333]',
+              )}
+            >
+              <RotateCw size={14} />
             </button>
           </div>
           <button
@@ -373,26 +437,48 @@ export default function WorkspacePage() {
             onPointerMove={handlePointerMove}
             onPointerUp={handlePointerUp}
             onPointerCancel={handlePointerCancel}
-            className="relative shadow-2xl"
+            className="relative shadow-2xl overflow-hidden"
             style={{
-              width: `${(zoom / 100) * 420}px`,
-              aspectRatio: '3/4',
+              width: `${displayWidthPx}px`,
+              height: `${displayHeightPx}px`,
               cursor: isSelecting ? 'crosshair' : 'default',
               userSelect: 'none',
               touchAction: isSelecting ? 'none' : 'auto',
             }}
           >
-            {/* Manga page */}
-            <div className="w-full h-full bg-[#F2EDE0] overflow-hidden">
+            {/* Nội dung theo tỉ lệ ảnh gốc; CSS rotate để xoay thật */}
+            <div
+              className="absolute bg-[#F2EDE0]"
+              style={{
+                width: `${nativeWidthPx}px`,
+                height: `${nativeHeightPx}px`,
+                left: '50%',
+                top: '50%',
+                marginLeft: `${-nativeWidthPx / 2}px`,
+                marginTop: `${-nativeHeightPx / 2}px`,
+                transform: `rotate(${rotation}deg)`,
+                transformOrigin: 'center center',
+              }}
+            >
               {page?.thumbnailUrl ? (
-                <img src={page.thumbnailUrl} alt={`Trang ${page.pageNumber}`} className="w-full h-full object-contain" />
+                <img
+                  src={page.thumbnailUrl}
+                  alt={`Trang ${page.pageNumber}`}
+                  className="w-full h-full object-contain pointer-events-none"
+                  draggable={false}
+                  onLoad={e => {
+                    const { naturalWidth, naturalHeight } = e.currentTarget;
+                    if (naturalWidth > 0 && naturalHeight > 0) {
+                      setImageAspect(naturalWidth / naturalHeight);
+                    }
+                  }}
+                />
               ) : (
                 page && <MangaPanelPreview layout={page.panelLayout ?? 0} />
               )}
-            </div>
 
-            {/* Composite overlay — approved task results */}
-            {showComposite && compositeTasks.map(task => (
+              {/* Composite overlay — approved task results */}
+              {showComposite && compositeTasks.map(task => (
                 <div
                   key={`composite-${task.id}`}
                   className="absolute overflow-hidden pointer-events-none border border-green-500/40 z-10"
@@ -411,56 +497,57 @@ export default function WorkspacePage() {
                 </div>
               ))}
 
-            {/* Existing task regions */}
-            {!showComposite && pageTasks.map(task => (
-              <div
-                key={task.id}
-                className="absolute border-2 border-primary/60 bg-primary/10 pointer-events-none transition-all duration-150"
-                style={{
-                  left: `${task.region.x}%`,
-                  top: `${task.region.y}%`,
-                  width: `${task.region.width}%`,
-                  height: `${task.region.height}%`,
-                }}
-              >
-                <span className="absolute top-0 left-0 text-[9px] font-bold bg-primary text-white px-1 leading-tight">
-                  {task.type.slice(0, 2).toUpperCase()}
-                </span>
-              </div>
-            ))}
+              {/* Existing task regions */}
+              {!showComposite && pageTasks.map(task => (
+                <div
+                  key={task.id}
+                  className="absolute border-2 border-primary/60 bg-primary/10 pointer-events-none transition-all duration-150"
+                  style={{
+                    left: `${task.region.x}%`,
+                    top: `${task.region.y}%`,
+                    width: `${task.region.width}%`,
+                    height: `${task.region.height}%`,
+                  }}
+                >
+                  <span className="absolute top-0 left-0 text-[9px] font-bold bg-primary text-white px-1 leading-tight">
+                    {task.type.slice(0, 2).toUpperCase()}
+                  </span>
+                </div>
+              ))}
 
-            {/* Hover region from task list */}
-            {hoverRegion && (
-              <div
-                className="absolute border-2 border-yellow-400 bg-yellow-400/20 pointer-events-none"
-                style={{
-                  left: `${hoverRegion.x}%`, top: `${hoverRegion.y}%`,
-                  width: `${hoverRegion.width}%`, height: `${hoverRegion.height}%`,
-                }}
-              />
-            )}
+              {/* Hover region from task list */}
+              {hoverRegion && (
+                <div
+                  className="absolute border-2 border-yellow-400 bg-yellow-400/20 pointer-events-none"
+                  style={{
+                    left: `${hoverRegion.x}%`, top: `${hoverRegion.y}%`,
+                    width: `${hoverRegion.width}%`, height: `${hoverRegion.height}%`,
+                  }}
+                />
+              )}
 
-            {/* Live drag region */}
-            {currentDrag && currentDrag.width > 1 && currentDrag.height > 1 && (
-              <div
-                className="absolute border-2 border-accent bg-accent/15 pointer-events-none"
-                style={{
-                  left: `${currentDrag.x}%`, top: `${currentDrag.y}%`,
-                  width: `${currentDrag.width}%`, height: `${currentDrag.height}%`,
-                }}
-              />
-            )}
+              {/* Live drag region */}
+              {currentDrag && currentDrag.width > 1 && currentDrag.height > 1 && (
+                <div
+                  className="absolute border-2 border-accent bg-accent/15 pointer-events-none"
+                  style={{
+                    left: `${currentDrag.x}%`, top: `${currentDrag.y}%`,
+                    width: `${currentDrag.width}%`, height: `${currentDrag.height}%`,
+                  }}
+                />
+              )}
 
-            {/* Confirmed region */}
-            {region && !currentDrag && (
-              <div
-                className="absolute border-2 border-dashed border-accent bg-accent/10 pointer-events-none"
-                style={{
-                  left: `${region.x}%`, top: `${region.y}%`,
-                  width: `${region.width}%`, height: `${region.height}%`,
-                }}
-              />
-            )}
+              {/* Confirmed region */}
+              {region && !currentDrag && (
+                <div
+                  className="absolute border-2 border-dashed border-accent bg-accent/10 pointer-events-none"
+                  style={{
+                    left: `${region.x}%`, top: `${region.y}%`,
+                    width: `${region.width}%`, height: `${region.height}%`,
+                  }}
+                />
+              )}
+            </div>
           </div>
         </div>
       </div>

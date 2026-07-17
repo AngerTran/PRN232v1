@@ -109,6 +109,23 @@ public class PublishingScheduleService
         };
 
         await Repository.AddAsync(schedule, cancellationToken);
+
+        // Đã lên lịch XB → series chuyển sang đang xuất bản (không còn dừng ở "sẵn sàng XB").
+        if (series.Status is SeriesStatus.Approved or SeriesStatus.Completed)
+        {
+            series.Status = SeriesStatus.Publishing;
+            series.UpdatedAt = DateTime.UtcNow;
+        }
+
+        // Chương gắn lịch → đánh dấu đã xuất bản / khóa chỉnh sửa phía mangaka.
+        if (chapter is not null
+            && chapter.Status is ChapterStatus.Completed or ChapterStatus.Reviewing or ChapterStatus.InProgress)
+        {
+            chapter.Status = ChapterStatus.Published;
+            chapter.UpdatedAt = DateTime.UtcNow;
+            await MarkChapterPagesAsync(chapter.Id, PageStatus.Published, cancellationToken);
+        }
+
         await _unitOfWork.SaveChangesAsync(cancellationToken);
 
         var chapterLabel = chapter is null
@@ -183,11 +200,24 @@ public class PublishingScheduleService
 
         if (request.ClearChapter)
         {
+            if (schedule.Chapter is { Status: ChapterStatus.Published } previous)
+            {
+                previous.Status = ChapterStatus.Completed;
+                previous.UpdatedAt = DateTime.UtcNow;
+            }
+
             schedule.ChapterId = null;
             schedule.Chapter = null;
         }
         else if (request.ChapterId is Guid chapterId)
         {
+            if (schedule.Chapter is { Status: ChapterStatus.Published } previous
+                && previous.Id != chapterId)
+            {
+                previous.Status = ChapterStatus.Completed;
+                previous.UpdatedAt = DateTime.UtcNow;
+            }
+
             var chapter = await RequireChapterForSeriesAsync(
                 schedule.SeriesId.Value,
                 chapterId,
@@ -196,6 +226,13 @@ public class PublishingScheduleService
             schedule.ChapterId = chapter.Id;
             schedule.Chapter = chapter;
             schedule.IssueNumber ??= chapter.ChapterNumber;
+
+            if (chapter.Status is ChapterStatus.Completed or ChapterStatus.Reviewing or ChapterStatus.InProgress)
+            {
+                chapter.Status = ChapterStatus.Published;
+                chapter.UpdatedAt = DateTime.UtcNow;
+                await MarkChapterPagesAsync(chapter.Id, PageStatus.Published, cancellationToken);
+            }
         }
 
         if (request.Notes is not null)
@@ -204,6 +241,13 @@ public class PublishingScheduleService
         }
 
         Repository.Update(schedule);
+
+        if (series.Status is SeriesStatus.Approved or SeriesStatus.Completed)
+        {
+            series.Status = SeriesStatus.Publishing;
+            series.UpdatedAt = DateTime.UtcNow;
+        }
+
         await _unitOfWork.SaveChangesAsync(cancellationToken);
 
         if (dateChanged)
@@ -239,7 +283,9 @@ public class PublishingScheduleService
 
     public async Task<bool> DeleteAsync(Guid callerId, Guid scheduleId, CancellationToken cancellationToken = default)
     {
-        var schedule = await Repository.GetByIdAsync(scheduleId, asNoTracking: false, cancellationToken);
+        var schedule = await _unitOfWork.Context.PublishingSchedules
+            .Include(s => s.Chapter)
+            .FirstOrDefaultAsync(s => s.Id == scheduleId, cancellationToken);
         if (schedule is null || schedule.SeriesId is null)
         {
             return false;
@@ -251,6 +297,12 @@ public class PublishingScheduleService
         if (!PageAccessService.IsAdmin(caller.Role))
         {
             await RequireScheduleManagerAsync(callerId, schedule.SeriesId.Value, cancellationToken);
+        }
+
+        if (schedule.Chapter is { Status: ChapterStatus.Published } chapter)
+        {
+            chapter.Status = ChapterStatus.Completed;
+            chapter.UpdatedAt = DateTime.UtcNow;
         }
 
         Repository.Remove(schedule);
@@ -290,6 +342,27 @@ public class PublishingScheduleService
         }
 
         return chapter;
+    }
+
+    private async Task MarkChapterPagesAsync(
+        Guid chapterId,
+        PageStatus status,
+        CancellationToken cancellationToken)
+    {
+        var pages = await _unitOfWork.Context.Pages
+            .Where(p => p.ChapterId == chapterId && p.Status != status)
+            .ToListAsync(cancellationToken);
+        if (pages.Count == 0)
+        {
+            return;
+        }
+
+        var now = DateTime.UtcNow;
+        foreach (var page in pages)
+        {
+            page.Status = status;
+            page.UpdatedAt = now;
+        }
     }
 
     private async Task<DAL.Models.Series> RequireSeriesAccessAsync(

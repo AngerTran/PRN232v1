@@ -5,7 +5,7 @@ export type SeriesStatus =
   | 'Revision Required' | 'At Risk' | 'Completed' | 'Published' | 'Cancelled';
 
 export type ChapterStatus = 'Draft' | 'In Progress' | 'Review' | 'Approved' | 'Published';
-export type PageStatus = 'Draft' | 'In Progress' | 'Completed' | 'Approved';
+export type PageStatus = 'Draft' | 'In Progress' | 'Review' | 'Completed' | 'Approved' | 'Published';
 export type TaskType = 'Background' | 'Shading' | 'Effect' | 'Screentone' | 'Clean Line' | 'Dialogue Edit';
 export type TaskStatus = 'Pending' | 'In Progress' | 'Submitted' | 'Approved' | 'Revision Required';
 export type SubmissionStatus = 'Pending' | 'Approved' | 'Revision Required' | 'Rejected';

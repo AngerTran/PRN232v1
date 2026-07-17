@@ -26,8 +26,10 @@ import {
   getChapter,
   getSeries,
   canMangakaProduceOnSeries,
+  canMangakaEditChapter,
   canMangakaSubmitChapterForReview,
   SERIES_PRODUCTION_LOCK_HINT,
+  CHAPTER_CONTENT_LOCK_HINT,
   uploadChapterManuscript,
   updateChapterStatus,
 } from '../../services/seriesApi';
@@ -245,6 +247,11 @@ export default function ChapterDetailPage() {
       : chapter.status;
 
   const displayPages = pages.map(p => {
+    // Chương đã khóa / XB → trang không còn hiện Bản nháp / sẵn sàng XB giả.
+    if (chapter.status === 'Published') return { ...p, status: 'Published' as const };
+    if (chapter.status === 'Approved') return { ...p, status: 'Approved' as const };
+    if (chapter.status === 'Review') return { ...p, status: 'Review' as const };
+
     const total = p.tasksCount ?? 0;
     const done = p.completedTasksCount ?? 0;
     if (total > 0 && done === total) return { ...p, status: 'Completed' as const };
@@ -253,11 +260,15 @@ export default function ChapterDetailPage() {
   });
 
   const canProduce = !readOnly && series ? canMangakaProduceOnSeries(series.status) : false;
+  const canEditChapter = !readOnly && chapter ? canMangakaEditChapter(chapter.status) : false;
+  const canEdit = canProduce && canEditChapter;
   const productionLockHint = !readOnly && series ? SERIES_PRODUCTION_LOCK_HINT[series.status] : undefined;
-  const canOpenWorkspace = canProduce && pages.length > 0;
+  const chapterLockHint =
+    !readOnly && chapter && !canEditChapter ? CHAPTER_CONTENT_LOCK_HINT[chapter.status] : undefined;
+  const canOpenWorkspace = canEdit && pages.length > 0;
   const canSubmitForReview =
     !readOnly
-    && canProduce
+    && canEdit
     && chapter
     && canMangakaSubmitChapterForReview(chapter.status)
     && pages.length > 0;
@@ -346,6 +357,8 @@ export default function ChapterDetailPage() {
                     title={
                       !canProduce
                         ? (productionLockHint ?? 'Series không còn trong giai đoạn sản xuất.')
+                        : !canEditChapter
+                          ? (chapterLockHint ?? 'Chương đang bị khóa chỉnh sửa.')
                         : pages.length === 0
                           ? 'Thêm ít nhất một trang manga trước khi mở workspace.'
                           : 'Mở studio sản xuất — giao task cho trợ lý trên trang truyện.'
@@ -420,6 +433,11 @@ export default function ChapterDetailPage() {
             {productionLockHint}
           </div>
         )}
+        {canProduce && chapterLockHint && (
+          <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+            {chapterLockHint}
+          </div>
+        )}
 
         <div className="grid grid-cols-1 xl:grid-cols-5 gap-5 items-start">
           {/* Pages — main column */}
@@ -435,7 +453,7 @@ export default function ChapterDetailPage() {
               </div>
               {!readOnly && (
                 <>
-                  <Button variant="outline" size="sm" onClick={handleAddPageClick} disabled={!canProduce}>
+                  <Button variant="outline" size="sm" onClick={handleAddPageClick} disabled={!canEdit}>
                     <Plus size={14} /> Thêm trang
                   </Button>
                   <input
@@ -450,7 +468,7 @@ export default function ChapterDetailPage() {
             </div>
 
             <div className="p-5">
-              {canProduce && pages.length === 0 && (
+              {canEdit && pages.length === 0 && (
                 <div className="mb-4 rounded-xl border border-border bg-muted/40 px-4 py-3 text-sm text-muted-foreground">
                   <strong className="text-foreground font-semibold">Workspace</strong> là studio sản xuất:
                   tải trang, khoanh vùng, giao task trợ lý. Bấm <strong className="text-foreground">Thêm trang</strong> để bắt đầu.
@@ -473,8 +491,8 @@ export default function ChapterDetailPage() {
                     <MangaPageCard
                       key={page.id}
                       page={page}
-                      onDelete={readOnly ? undefined : handleDeletePage}
-                      readOnly={readOnly}
+                      onDelete={readOnly || !canEdit ? undefined : handleDeletePage}
+                      readOnly={readOnly || !canEdit}
                     />
                   ))}
                 </div>
@@ -490,7 +508,7 @@ export default function ChapterDetailPage() {
                   <CardTitle className="mb-0">Bản thảo chương</CardTitle>
                   <p className="text-xs text-muted-foreground mt-1">PDF / ZIP / CBZ — khác với trang nháp</p>
                 </div>
-                {!readOnly && canProduce && (
+                {!readOnly && canEdit && (
                   <>
                     <Button
                       variant="outline"
@@ -553,11 +571,14 @@ export default function ChapterDetailPage() {
               <p className="font-semibold text-foreground text-sm">Gợi ý</p>
               <p>• <span className="text-foreground/80">Bản thảo</span> = file gốc (PDF/ZIP).</p>
               <p>• <span className="text-foreground/80">Trang manga</span> = ảnh từng trang để giao task.</p>
-              {!readOnly && (
+              {canEdit && (
                 <>
                   <p>• Bấm thẻ trang hoặc <span className="text-foreground/80">Mở Workspace</span> để sản xuất.</p>
                   <p>• Làm xong thì bấm <span className="text-foreground/80">Gửi xét duyệt</span> — Editor mới thấy chương. Board chỉ thấy sau khi Editor duyệt.</p>
                 </>
+              )}
+              {!readOnly && !canEdit && chapterLockHint && (
+                <p>• {chapterLockHint}</p>
               )}
             </div>
           </div>

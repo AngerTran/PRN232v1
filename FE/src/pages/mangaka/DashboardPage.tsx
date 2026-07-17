@@ -81,8 +81,14 @@ export default function DashboardPage() {
     }
   };
 
-  const activeSeries = series.filter(s => s.status === 'In Progress' || s.status === 'Approved');
-  const activeChapters = chapters.filter(c => c.status === 'In Progress');
+  // Đã duyệt / đang XB / sẵn sàng XB đều còn trong vòng sản xuất.
+  const activeSeries = series.filter(
+    s => s.status === 'In Progress' || s.status === 'Approved' || s.status === 'Completed',
+  );
+  // Bản nháp cũng là công việc đang làm; chỉ loại chương đã duyệt / xuất bản.
+  const activeChapters = chapters.filter(
+    c => c.status === 'Draft' || c.status === 'In Progress' || c.status === 'Review',
+  );
   const atRiskSeries = series.filter(s => s.isAtRisk);
 
   const upcomingDeadlines = chapters
@@ -155,7 +161,7 @@ export default function DashboardPage() {
         <StatCard
           label="Chương đang hoạt động"
           value={activeChapters.length}
-          sub="Đang thực hiện"
+          sub="Bản nháp / đang làm / xét duyệt"
           icon={<FileText size={20} />}
         />
         <StatCard

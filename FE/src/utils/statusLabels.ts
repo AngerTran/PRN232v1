@@ -66,9 +66,11 @@ export const TASK_STATUS_FILTER_OPTIONS: TaskStatus[] = [
 
 export const PAGE_STATUS_LABELS: Record<PageStatus, string> = {
   Draft: 'Bản nháp',
-  'In Progress': 'Đang vẽ',
-  Completed: 'Sẵn sàng XB',
+  'In Progress': 'Đang làm',
+  Review: 'Đang xét duyệt',
+  Completed: 'Hoàn thành',
   Approved: 'Đã duyệt',
+  Published: 'Đã xuất bản',
 };
 
 export const REVIEW_STATUS_LABELS: Record<ReviewStatus, string> = {

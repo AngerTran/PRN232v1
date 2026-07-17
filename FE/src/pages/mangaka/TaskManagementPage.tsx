@@ -70,10 +70,6 @@ export default function TaskManagementPage() {
         </div>
       </div>
 
-      <div className="rounded-xl border border-sky-200 bg-sky-50 px-4 py-3 text-sm text-sky-950">
-        Thù lao được tính sau khi bạn <strong>duyệt</strong> task. Kế toán chuyển khoản ngoài hệ thống rồi cập nhật trên Admin — trợ lý theo dõi tại mục Thu nhập.
-      </div>
-
       <div className="flex items-center gap-3 flex-wrap">
         <SearchInput value={search} onChange={setSearch} placeholder="Tìm kiếm nhiệm vụ…" className="flex-1 min-w-[200px] max-w-xs" />
         <FilterDropdown label="Trạng thái" options={STATUS_OPTIONS} value={statusFilter} onChange={setStatusFilter} formatOptionLabel={formatTaskStatusLabel} />
@@ -90,7 +86,7 @@ export default function TaskManagementPage() {
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-border bg-muted/30">
-                  {['Nhiệm vụ', 'Series', 'Trang', 'Trợ lý', 'Loại', 'Thời hạn', 'Trạng thái', ''].map(h => (
+                  {['Nhiệm vụ', 'Series', 'Trang', 'Trợ lý', 'Loại', 'Thời hạn', 'Trạng thái'].map(h => (
                     <th key={h} className="px-4 py-3 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wide whitespace-nowrap">
                       {h}
                     </th>
@@ -121,19 +117,19 @@ export default function TaskManagementPage() {
                       </td>
                       <td className="px-4 py-3"><TypeBadge type={task.type} /></td>
                       <td className="px-4 py-3 text-muted-foreground text-xs whitespace-nowrap">{task.deadline ? format(new Date(task.deadline), 'MMM d') : '—'}</td>
-                      <td className="px-4 py-3"><Badge status={task.status} statusKind="task" /></td>
                       <td className="px-4 py-3">
-                        {(task.status === 'Submitted' || task.status === 'Revision Required') && (
-                          <Button size="sm" variant={task.status === 'Submitted' ? 'primary' : 'outline'}
-                            onClick={() => navigate(`/mangaka/tasks/${task.id}/review`)}>
-                            {task.status === 'Submitted' ? 'Xét duyệt' : 'Xem'}
-                          </Button>
-                        )}
-                        {task.status === 'Approved' && (
-                          <span className="text-xs text-muted-foreground">
-                            {task.paymentStatus?.toLowerCase() === 'paid' ? 'Đã chi trả' : 'Chờ kế toán'}
-                          </span>
-                        )}
+                        <div className="flex items-center gap-2">
+                          <Badge status={task.status} statusKind="task" />
+                          {(task.status === 'Submitted' || task.status === 'Revision Required') && (
+                            <Button
+                              size="sm"
+                              variant={task.status === 'Submitted' ? 'primary' : 'outline'}
+                              onClick={() => navigate(`/mangaka/tasks/${task.id}/review`)}
+                            >
+                              {task.status === 'Submitted' ? 'Xét duyệt' : 'Xem'}
+                            </Button>
+                          )}
+                        </div>
                       </td>
                     </tr>
                   );
