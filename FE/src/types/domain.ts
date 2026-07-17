@@ -70,6 +70,7 @@ export interface Chapter {
   pagesCount: number;
   description: string;
   createdAt: string;
+  updatedAt?: string;
 }
 
 export interface MangaPage {

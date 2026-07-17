@@ -10,42 +10,44 @@ namespace DAL.Migrations
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
         {
-            migrationBuilder.AddColumn<Guid>(
-                name: "chapter_id",
-                table: "publishing_schedules",
-                type: "uuid",
-                nullable: true);
+            // Idempotent: chapter_id may already exist from a manual Supabase apply.
+            migrationBuilder.Sql("""
+                ALTER TABLE publishing_schedules
+                ADD COLUMN IF NOT EXISTS chapter_id uuid NULL;
 
-            migrationBuilder.CreateIndex(
-                name: "publishing_schedules_chapter_id_key",
-                table: "publishing_schedules",
-                column: "chapter_id",
-                unique: true,
-                filter: "chapter_id IS NOT NULL");
+                CREATE UNIQUE INDEX IF NOT EXISTS publishing_schedules_chapter_id_key
+                ON publishing_schedules (chapter_id)
+                WHERE chapter_id IS NOT NULL;
 
-            migrationBuilder.AddForeignKey(
-                name: "publishing_schedules_chapter_id_fkey",
-                table: "publishing_schedules",
-                column: "chapter_id",
-                principalTable: "chapters",
-                principalColumn: "id",
-                onDelete: ReferentialAction.SetNull);
+                DO $$
+                BEGIN
+                    IF NOT EXISTS (
+                        SELECT 1
+                        FROM pg_constraint
+                        WHERE conname = 'publishing_schedules_chapter_id_fkey'
+                    ) THEN
+                        ALTER TABLE publishing_schedules
+                        ADD CONSTRAINT publishing_schedules_chapter_id_fkey
+                        FOREIGN KEY (chapter_id)
+                        REFERENCES chapters (id)
+                        ON DELETE SET NULL;
+                    END IF;
+                END $$;
+                """);
         }
 
         /// <inheritdoc />
         protected override void Down(MigrationBuilder migrationBuilder)
         {
-            migrationBuilder.DropForeignKey(
-                name: "publishing_schedules_chapter_id_fkey",
-                table: "publishing_schedules");
+            migrationBuilder.Sql("""
+                ALTER TABLE publishing_schedules
+                DROP CONSTRAINT IF EXISTS publishing_schedules_chapter_id_fkey;
 
-            migrationBuilder.DropIndex(
-                name: "publishing_schedules_chapter_id_key",
-                table: "publishing_schedules");
+                DROP INDEX IF EXISTS publishing_schedules_chapter_id_key;
 
-            migrationBuilder.DropColumn(
-                name: "chapter_id",
-                table: "publishing_schedules");
+                ALTER TABLE publishing_schedules
+                DROP COLUMN IF EXISTS chapter_id;
+                """);
         }
     }
 }

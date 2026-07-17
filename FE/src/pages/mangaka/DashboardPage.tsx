@@ -87,7 +87,13 @@ export default function DashboardPage() {
 
   const upcomingDeadlines = chapters
     .filter(c => {
-      if (!c.deadline || c.status === 'Published' || !c.series) return false;
+      // Chương đã duyệt / xuất bản đã đóng công việc, không còn là deadline sắp tới.
+      if (
+        !c.deadline
+        || c.status === 'Approved'
+        || c.status === 'Published'
+        || !c.series
+      ) return false;
       return !isSeriesClosedForProduction(c.series.status);
     })
     .sort((a, b) => new Date(a.deadline).getTime() - new Date(b.deadline).getTime())

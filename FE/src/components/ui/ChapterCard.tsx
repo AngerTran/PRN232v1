@@ -1,5 +1,5 @@
 import { useNavigate } from 'react-router';
-import { Calendar, FileText, ChevronRight, Trash2 } from 'lucide-react';
+import { Calendar, FileText, ChevronRight, Trash2, CheckCircle2 } from 'lucide-react';
 import { clsx } from 'clsx';
 import Badge from './Badge';
 import ProgressBar from './ProgressBar';
@@ -13,13 +13,44 @@ interface ChapterCardProps {
   chapterDetailPath?: (chapterId: string) => string;
 }
 
+function parseDate(value?: string): Date | null {
+  if (!value) return null;
+  const d = new Date(value);
+  return isValid(d) ? d : null;
+}
+
 export default function ChapterCard({ chapter, seriesId, onDelete, chapterDetailPath }: ChapterCardProps) {
   const navigate = useNavigate();
   const detailPath = chapterDetailPath?.(chapter.id) ?? `/mangaka/chapters/${chapter.id}`;
-  const deadlineDate = chapter.deadline ? new Date(chapter.deadline) : null;
-  const hasDeadline = deadlineDate !== null && isValid(deadlineDate);
-  const daysLeft = hasDeadline ? differenceInDays(deadlineDate, new Date()) : null;
-  const isOverdue = hasDeadline && isPast(deadlineDate) && chapter.status !== 'Published' && chapter.status !== 'Approved';
+  const deadlineDate = parseDate(chapter.deadline);
+  const completedDate = parseDate(chapter.updatedAt) ?? parseDate(chapter.createdAt);
+  const isDone = chapter.status === 'Approved' || chapter.status === 'Published';
+  const daysLeft = deadlineDate ? differenceInDays(deadlineDate, new Date()) : null;
+  const isOverdue = Boolean(deadlineDate && !isDone && isPast(deadlineDate));
+  const showCountdown = Boolean(deadlineDate && !isDone);
+
+  let metaIcon = <Calendar size={11} />;
+  let metaLabel = 'Chưa có hạn';
+  let metaClass = '';
+
+  if (isDone) {
+    metaIcon = <CheckCircle2 size={11} />;
+    metaLabel = completedDate
+      ? `Hoàn thành ${format(completedDate, 'dd/MM')}`
+      : 'Đã hoàn thành';
+    metaClass = 'text-emerald-700';
+  } else if (!deadlineDate) {
+    metaLabel = 'Chưa có hạn';
+  } else if (isOverdue) {
+    metaLabel = `Trễ hạn (${format(deadlineDate, 'dd/MM')})`;
+    metaClass = 'text-red-500 font-semibold';
+  } else if (daysLeft! <= 0) {
+    metaLabel = 'Hạn hôm nay';
+    metaClass = 'text-orange-500';
+  } else {
+    metaLabel = `${format(deadlineDate, 'dd/MM')} · còn ${daysLeft} ngày`;
+    if (daysLeft! <= 7) metaClass = 'text-orange-500';
+  }
 
   return (
     <div
@@ -39,18 +70,9 @@ export default function ChapterCard({ chapter, seriesId, onDelete, chapterDetail
             <FileText size={11} />
             {chapter.pagesCount} trang
           </span>
-          <span className={clsx(
-            'flex items-center gap-1',
-            isOverdue ? 'text-red-500 font-semibold' : hasDeadline && daysLeft !== null && daysLeft <= 7 ? 'text-orange-500' : ''
-          )}>
-            <Calendar size={11} />
-            {!hasDeadline
-              ? 'Chưa có hạn'
-              : isOverdue
-              ? `Trễ hạn (${format(deadlineDate, 'dd/MM')})`
-              : daysLeft! <= 0
-              ? 'Hạn hôm nay'
-              : `${format(deadlineDate, 'dd/MM')} · còn ${daysLeft} ngày`}
+          <span className={clsx('flex items-center gap-1', metaClass)}>
+            {metaIcon}
+            {metaLabel}
           </span>
         </div>
         <ProgressBar value={chapter.progress} showLabel />

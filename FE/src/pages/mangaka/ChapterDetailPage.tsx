@@ -383,15 +383,27 @@ export default function ChapterDetailPage() {
             </div>
 
             <div className="mt-5 grid grid-cols-2 lg:grid-cols-4 gap-2.5">
-              <StatTile
-                icon={Calendar}
-                label="Hạn nộp"
-                value={hasDeadline ? format(new Date(chapter.deadline), 'dd/MM/yyyy') : 'Chưa đặt'}
-              />
+              {(chapter.status === 'Approved' || chapter.status === 'Published') ? (
+                <StatTile
+                  icon={CheckCircle2}
+                  label="Hoàn thành"
+                  value={
+                    chapter.updatedAt && !Number.isNaN(new Date(chapter.updatedAt).getTime())
+                      ? format(new Date(chapter.updatedAt), 'dd/MM/yyyy')
+                      : 'Đã duyệt'
+                  }
+                />
+              ) : (
+                <StatTile
+                  icon={Calendar}
+                  label="Hạn nộp"
+                  value={hasDeadline ? format(new Date(chapter.deadline), 'dd/MM/yyyy') : 'Chưa đặt'}
+                />
+              )}
               <StatTile icon={FileText} label="Trang" value={`${pages.length} trang`} />
               <StatTile
                 icon={CheckCircle2}
-                label="Hoàn thành"
+                label="Trang xong"
                 value={`${completedPages}/${pages.length}`}
               />
               <StatTile icon={Layers} label="Tiến độ task" value={`${progress}%`} />

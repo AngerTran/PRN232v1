@@ -221,6 +221,7 @@ export function mapChapter(item: ApiChapter): Chapter {
     pagesCount: 0,
     description: item.manuscriptUrl || '',
     createdAt: dateOnly(item.createdAt),
+    updatedAt: item.updatedAt ? dateOnly(item.updatedAt) : undefined,
   };
 }
 
