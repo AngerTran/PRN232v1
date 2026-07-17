@@ -77,10 +77,12 @@ interface BadgeProps {
   variant?: 'default' | 'overlay';
   /** Ngữ cảnh entity — tránh nhầm nhãn chung như "In Progress". */
   statusKind?: StatusEntityKind;
+  /** Ghi đè nhãn hiển thị. */
+  label?: string;
   className?: string;
 }
 
-export default function Badge({ status, showDot = true, size = 'sm', variant = 'default', statusKind = 'series', className }: BadgeProps) {
+export default function Badge({ status, showDot = true, size = 'sm', variant = 'default', statusKind = 'series', label, className }: BadgeProps) {
   const style = variant === 'overlay'
     ? (OVERLAY_STATUS_STYLES[status] ?? 'bg-black/80 text-white border-white/30 shadow-lg')
     : (STATUS_STYLES[status] ?? 'bg-muted text-muted-foreground border-border');
@@ -99,7 +101,7 @@ export default function Badge({ status, showDot = true, size = 'sm', variant = '
       )}
     >
       {showDot && <span className={clsx('rounded-full shrink-0', size === 'sm' ? 'w-1.5 h-1.5' : 'w-2 h-2', dot)} />}
-      {getStatusLabel(status as string, statusKind)}
+      {label ?? getStatusLabel(status as string, statusKind)}
     </span>
   );
 }

@@ -35,7 +35,7 @@ function SeriesSection({
           Xem tất cả <ArrowRight className="ml-1 h-3.5 w-3.5" />
         </Button>
       </div>
-      <div className="grid gap-3 grid-cols-[repeat(auto-fill,minmax(140px,168px))]">
+      <div className="grid gap-4 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4">
         {children}
       </div>
     </section>
@@ -99,7 +99,7 @@ export default function BoardDashboardPage() {
   if (pending.length > 0) summaryParts.push(`${pending.length} chờ duyệt`);
   if (approvedSeries.length > 0) summaryParts.push(`${approvedSeries.length} đã nhận`);
   if (publishingSeries.length > 0) summaryParts.push(`${publishingSeries.length} xuất bản`);
-  if (atRiskSeries.length > 0) summaryParts.push(`${atRiskSeries.length} At Risk`);
+  if (atRiskSeries.length > 0) summaryParts.push(`${atRiskSeries.length} nguy cơ`);
 
   const shortcuts = [
     {
@@ -127,7 +127,7 @@ export default function BoardDashboardPage() {
       href: '/board/publishing-schedule',
     },
     {
-      label: 'At Risk',
+      label: 'Nguy cơ',
       value: atRiskSeries.length,
       icon: <AlertTriangle className="h-4 w-4" />,
       color: 'text-red-600',
@@ -247,7 +247,7 @@ export default function BoardDashboardPage() {
       )}
 
       {atRiskTop.length > 0 && (
-        <SeriesSection title="At Risk" href="/board/series-decisions">
+        <SeriesSection title="Nguy cơ xếp hạng" href="/board/series-decisions">
           {atRiskTop.map(s => (
             <BoardMangaCard
               key={s.id}
@@ -258,7 +258,7 @@ export default function BoardDashboardPage() {
               genre={s.genre}
               badge={
                 <span className="text-xs font-semibold px-2 py-1 rounded-full bg-red-600/90 text-white">
-                  At Risk
+                  Nguy cơ
                 </span>
               }
               to="/board/series-decisions"

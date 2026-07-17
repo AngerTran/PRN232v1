@@ -153,9 +153,18 @@ export default function Sidebar() {
   const allHrefs = GROUPS.flatMap(group => group.items.map(item => item.href));
 
   const isActive = (href: string, exact?: boolean) => {
-    if (exact) return location.pathname === href;
+    const path = location.pathname;
 
-    const matches = location.pathname === href || location.pathname.startsWith(href + '/');
+    // /mangaka/series/:id/ranking thuộc tab Xếp hạng, không phải Series của tôi.
+    const isSeriesRankingPage = /^\/mangaka\/series\/[^/]+\/ranking\/?$/.test(path);
+    if (isSeriesRankingPage) {
+      if (href === '/mangaka/ranking') return true;
+      if (href === '/mangaka/series') return false;
+    }
+
+    if (exact) return path === href;
+
+    const matches = path === href || path.startsWith(href + '/');
     if (!matches) return false;
 
     // Nếu có mục khác cụ thể hơn (href dài hơn) cũng khớp đường dẫn hiện tại,
@@ -164,7 +173,7 @@ export default function Sidebar() {
       other =>
         other !== href &&
         other.startsWith(href + '/') &&
-        (location.pathname === other || location.pathname.startsWith(other + '/'))
+        (path === other || path.startsWith(other + '/'))
     );
     return !hasMoreSpecific;
   };

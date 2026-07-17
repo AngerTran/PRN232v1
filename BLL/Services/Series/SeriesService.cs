@@ -647,6 +647,27 @@ public class SeriesService
       throw new SeriesForbiddenException($"Role '{caller.Role}' cannot set status to '{SeriesStatuses.ToDbValue(newStatus)}' for this series.");
     }
 
+    // Editor báo sẵn sàng XB chỉ một lần. Khi board lên lịch, series có thể bị
+    // promote Completed → Publishing; không cho báo lại (kể cả khi còn chương đang review).
+    if (newStatus == SeriesStatus.Completed && IsEditor(caller.Role))
+    {
+      if (series.Status == SeriesStatus.Completed)
+      {
+        throw new ArgumentException("Series đã được báo sẵn sàng xuất bản.");
+      }
+
+      var hasPublishedChapter = await _unitOfWork.Context.Chapters.AsNoTracking().AnyAsync(
+        c => c.SeriesId == series.Id
+          && c.ChapterNumber > 0
+          && c.Status == ChapterStatus.Published,
+        cancellationToken);
+      if (hasPublishedChapter)
+      {
+        throw new ArgumentException(
+          "Series đã có chương xuất bản — không cần báo sẵn sàng lại khi mangaka gửi chương mới.");
+      }
+    }
+
     if (newStatus == SeriesStatus.PendingReview && series.Status != SeriesStatus.PendingReview)
     {
       var oldVotes = await _unitOfWork.Context.BoardVotes
@@ -1255,20 +1276,122 @@ public class SeriesService
       throw new SeriesForbiddenException($"Role '{caller.Role}' cannot set chapter status to '{ChapterStatuses.ToDbValue(newStatus)}'.");
     }
 
-    // Mangaka không tự mở khóa chương đã khóa — chỉ Editor/Board đặt lại InProgress.
-    if (IsMangaka(caller.Role)
-        && !IsAdmin(caller.Role)
-        && chapter.Status is ChapterStatus.Reviewing or ChapterStatus.Completed or ChapterStatus.Published)
+    var isMangakaAuthor = IsMangaka(caller.Role) && chapter.Series.AuthorId == callerId && !IsAdmin(caller.Role);
+    var isWithdrawFromReview = isMangakaAuthor
+      && chapter.Status == ChapterStatus.Reviewing
+      && newStatus is ChapterStatus.Draft or ChapterStatus.InProgress
+      && chapter.ReviewAcceptedAt is null;
+
+    // Mangaka không tự mở khóa chương đã duyệt/XB — thu hồi chỉ khi Editor chưa nhận.
+    if (isMangakaAuthor
+        && chapter.Status is ChapterStatus.Reviewing or ChapterStatus.Completed or ChapterStatus.Published
+        && !isWithdrawFromReview)
     {
+      if (chapter.Status == ChapterStatus.Reviewing && chapter.ReviewAcceptedAt is not null)
+      {
+        throw new SeriesForbiddenException(
+          "Editor đã nhận xét duyệt chương này — không thể thu hồi. Chờ Editor yêu cầu chỉnh sửa.");
+      }
+
       throw new SeriesForbiddenException(
-        "Chương đang khóa. Chỉ Editor hoặc Board có thể yêu cầu chỉnh sửa lại.");
+        "Chương đang khóa. Chỉ Editor hoặc Board có thể yêu cầu chỉnh sửa lại, hoặc thu hồi khi Editor chưa nhận.");
+    }
+
+    // Editor duyệt / yêu cầu sửa chỉ sau khi đã nhận xét duyệt.
+    var isEditorActing = IsEditor(caller.Role) || IsBoard(caller.Role) || IsAdmin(caller.Role);
+    if (isEditorActing
+        && chapter.Status == ChapterStatus.Reviewing
+        && newStatus is ChapterStatus.Completed or ChapterStatus.InProgress
+        && chapter.ReviewAcceptedAt is null
+        && !IsAdmin(caller.Role))
+    {
+      throw new SeriesForbiddenException("Hãy nhận xét duyệt chương trước khi duyệt hoặc yêu cầu sửa.");
     }
 
     chapter.Status = newStatus;
     chapter.UpdatedAt = DateTime.UtcNow;
+
+    // Gửi xét duyệt lại → reset nhận duyệt.
+    if (newStatus == ChapterStatus.Reviewing)
+    {
+      chapter.ReviewAcceptedAt = null;
+      chapter.ReviewAcceptedBy = null;
+    }
+
+    // Thu hồi hoặc Editor trả về sửa → clear nhận duyệt.
+    if (newStatus is ChapterStatus.Draft or ChapterStatus.InProgress)
+    {
+      chapter.ReviewAcceptedAt = null;
+      chapter.ReviewAcceptedBy = null;
+    }
+
     ChapterRepository.Update(chapter);
     await SyncPagesWithChapterStatusAsync(chapter.Id, newStatus, cancellationToken);
     await _unitOfWork.SaveChangesAsync(cancellationToken);
+
+    if (isWithdrawFromReview && chapter.Series.EditorId is Guid editorId)
+    {
+      var chapterLabel = $"Ch.{chapter.ChapterNumber}"
+        + (string.IsNullOrWhiteSpace(chapter.Title) ? "" : $" «{chapter.Title}»");
+      await _notificationService.CreateAsync(
+        editorId,
+        "Mangaka thu hồi xét duyệt chương",
+        $"{caller.FullName} đã thu hồi «{chapter.Series.Title}» — {chapterLabel} để chỉnh sửa thêm.",
+        WorkflowNotificationPaths.EditorSeries(chapter.SeriesId),
+        WorkflowNotificationPaths.CategorySubmission,
+        cancellationToken: cancellationToken);
+    }
+
+    return MapChapterToDto(chapter);
+  }
+
+  public async Task<ChapterResponse?> AcceptChapterReviewAsync(
+    Guid callerId,
+    Guid chapterId,
+    CancellationToken cancellationToken = default)
+  {
+    var caller = await RequireCallerAsync(callerId, cancellationToken);
+    var chapter = await _unitOfWork.Context.Chapters
+      .Include(c => c.Series)
+      .FirstOrDefaultAsync(c => c.Id == chapterId, cancellationToken);
+
+    if (chapter is null)
+    {
+      return null;
+    }
+
+    if (!IsAdmin(caller.Role)
+        && !(IsEditor(caller.Role) && (chapter.Series.EditorId == caller.Id || chapter.Series.EditorId is null))
+        && !IsBoard(caller.Role))
+    {
+      throw new SeriesForbiddenException("Only the assigned editor, board, or admin can accept chapter review.");
+    }
+
+    if (chapter.Status != ChapterStatus.Reviewing)
+    {
+      throw new SeriesForbiddenException("Chỉ nhận xét duyệt khi chương đang chờ Editor.");
+    }
+
+    if (chapter.ReviewAcceptedAt is not null)
+    {
+      return MapChapterToDto(chapter);
+    }
+
+    chapter.ReviewAcceptedAt = DateTime.UtcNow;
+    chapter.ReviewAcceptedBy = caller.Id;
+    chapter.UpdatedAt = DateTime.UtcNow;
+    ChapterRepository.Update(chapter);
+    await _unitOfWork.SaveChangesAsync(cancellationToken);
+
+    var chapterLabel = $"Ch.{chapter.ChapterNumber}"
+      + (string.IsNullOrWhiteSpace(chapter.Title) ? "" : $" «{chapter.Title}»");
+    await _notificationService.CreateAsync(
+      chapter.Series.AuthorId,
+      "Editor đã nhận xét duyệt chương",
+      $"{caller.FullName} đã nhận xét duyệt «{chapter.Series.Title}» — {chapterLabel}. Bạn không thể thu hồi cho đến khi Editor yêu cầu sửa.",
+      WorkflowNotificationPaths.MangakaSeries(chapter.SeriesId),
+      WorkflowNotificationPaths.CategorySubmission,
+      cancellationToken: cancellationToken);
 
     return MapChapterToDto(chapter);
   }
@@ -1524,7 +1647,9 @@ public class SeriesService
       c.Deadline,
       c.ReleaseDate,
       c.CreatedAt,
-      c.UpdatedAt);
+      c.UpdatedAt,
+      c.ReviewAcceptedAt,
+      c.ReviewAcceptedBy);
 
   private static SeriesResponse MapToDto(SeriesEntity s) =>
     new(
@@ -1663,6 +1788,8 @@ public class SeriesService
       ChapterStatus.Published => PageStatus.Published,
       ChapterStatus.Completed => PageStatus.Approved,
       ChapterStatus.Reviewing => PageStatus.Reviewing,
+      // Thu hồi xét duyệt → trang đang reviewing về draft để mangaka sửa tiếp.
+      ChapterStatus.Draft or ChapterStatus.InProgress => PageStatus.Draft,
       _ => null
     };
 
@@ -1671,9 +1798,18 @@ public class SeriesService
       return;
     }
 
-    var pages = await _unitOfWork.Context.Pages
-      .Where(p => p.ChapterId == chapterId && p.Status != target.Value)
-      .ToListAsync(cancellationToken);
+    IQueryable<Page> query = _unitOfWork.Context.Pages.Where(p => p.ChapterId == chapterId);
+    if (target == PageStatus.Draft)
+    {
+      // Chỉ hạ trang đang xét duyệt, không đụng trang đã duyệt/XB.
+      query = query.Where(p => p.Status == PageStatus.Reviewing);
+    }
+    else
+    {
+      query = query.Where(p => p.Status != target.Value);
+    }
+
+    var pages = await query.ToListAsync(cancellationToken);
 
     if (pages.Count == 0)
     {

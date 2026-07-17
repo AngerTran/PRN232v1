@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { useLocation, useNavigate, useParams } from 'react-router';
+import { useLocation, useNavigate, useParams, useSearchParams } from 'react-router';
 import { ArrowLeft, BookOpen, ChevronLeft, ChevronRight, ImageOff, Rows3, ZoomIn, ZoomOut } from 'lucide-react';
 import Button from '../../components/ui/Button';
 import EmptyState from '../../components/ui/EmptyState';
@@ -17,6 +17,8 @@ export default function SeriesReaderPage() {
   const { seriesId } = useParams<{ seriesId: string }>();
   const navigate = useNavigate();
   const location = useLocation();
+  const [searchParams] = useSearchParams();
+  const initialChapterId = searchParams.get('chapter');
   const { setPageMeta } = usePageMeta();
   const isBoardReader = location.pathname.startsWith('/board/');
   const backHref = isBoardReader
@@ -30,6 +32,7 @@ export default function SeriesReaderPage() {
   const [mode, setMode] = useState<'book' | 'vertical'>('book');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [jumpedToChapter, setJumpedToChapter] = useState(false);
 
   useEffect(() => {
     if (!seriesId) return;
@@ -73,6 +76,19 @@ export default function SeriesReaderPage() {
       active = false;
     };
   }, [seriesId, isBoardReader]);
+
+  useEffect(() => {
+    setJumpedToChapter(false);
+  }, [initialChapterId, seriesId]);
+
+  useEffect(() => {
+    if (jumpedToChapter || !initialChapterId || bookPages.length === 0) return;
+    const start = bookPages.findIndex(item => item.chapter.id === initialChapterId);
+    if (start >= 0) {
+      setSpreadIndex(start);
+      setJumpedToChapter(true);
+    }
+  }, [initialChapterId, bookPages, jumpedToChapter]);
 
   useEffect(() => {
     if (!series) return;

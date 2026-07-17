@@ -94,6 +94,52 @@ public class RankingsController : ControllerBase
         return Ok(await _rankingService.GetRecentInputsAsync(userId, limit, cancellationToken));
     }
 
+    [HttpPost("delete")]
+    [SwaggerOperation(Summary = "Delete ranking rows by id", Description = "Deletes selected ranking rows and reassigns ranks for affected issues.")]
+    [ProducesResponseType(typeof(DeleteRankingsResponse), StatusCodes.Status200OK)]
+    public async Task<ActionResult<DeleteRankingsResponse>> DeleteSelected(
+        [FromBody] DeleteRankingsRequest request,
+        CancellationToken cancellationToken)
+    {
+        if (!this.TryGetUserId(out var userId))
+        {
+            return Unauthorized();
+        }
+
+        var deleted = await _rankingService.DeleteByIdsAsync(userId, request.Ids, cancellationToken);
+        return Ok(new DeleteRankingsResponse(deleted));
+    }
+
+    [HttpPost("delete-all")]
+    [SwaggerOperation(Summary = "Delete all ranking rows", Description = "Deletes every ranking/vote input row.")]
+    [ProducesResponseType(typeof(DeleteRankingsResponse), StatusCodes.Status200OK)]
+    public async Task<ActionResult<DeleteRankingsResponse>> DeleteAll(CancellationToken cancellationToken)
+    {
+        if (!this.TryGetUserId(out var userId))
+        {
+            return Unauthorized();
+        }
+
+        var deleted = await _rankingService.DeleteAllAsync(userId, cancellationToken);
+        return Ok(new DeleteRankingsResponse(deleted));
+    }
+
+    [HttpPost("purge-legacy-issues")]
+    [SwaggerOperation(
+        Summary = "Purge legacy issue rankings",
+        Description = "Deletes ranking rows with old chapter-based issue numbers (< 1_000_000) and resyncs schedule issue numbers from publish dates.")]
+    [ProducesResponseType(typeof(object), StatusCodes.Status200OK)]
+    public async Task<ActionResult<object>> PurgeLegacyIssues(CancellationToken cancellationToken)
+    {
+        if (!this.TryGetUserId(out var userId))
+        {
+            return Unauthorized();
+        }
+
+        var deleted = await _rankingService.PurgeLegacyIssueRankingsAsync(userId, cancellationToken);
+        return Ok(new { deleted });
+    }
+
     [HttpGet("history")]
     [SwaggerOperation(Summary = "Get ranking history", Description = "Returns ranking history for a series when the authenticated user can view that ranking data.")]
     [ProducesResponseType(typeof(RankingHistoryResponse), StatusCodes.Status200OK)]

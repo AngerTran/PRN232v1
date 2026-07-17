@@ -6,14 +6,17 @@ import type {
   TaskStatus,
 } from '../types/domain';
 
-/** Nhãn tiếng Việt cho trạng thái series (workflow mangaka / hội đồng). */
+/** Nhãn tiếng Việt cho trạng thái series (workflow mangaka / hội đồng).
+ *  Map API: draft→Draft, pending_review→Submitted, approved→Approved,
+ *  publishing→In Progress, hiatus→At Risk, completed→Completed, cancelled→Cancelled.
+ *  (Published / Revision Required chỉ còn trên FE legacy, API không có.) */
 export const SERIES_STATUS_LABELS: Record<SeriesStatus, string> = {
   Draft: 'Bản nháp',
   Submitted: 'Chờ xét duyệt',
   Approved: 'Đã duyệt',
   'In Progress': 'Đang xuất bản',
   'Revision Required': 'Cần sửa đổi',
-  'At Risk': 'Nguy cơ',
+  'At Risk': 'Tạm dừng',
   Completed: 'Sẵn sàng XB',
   Published: 'Đã xuất bản',
   Cancelled: 'Đã từ chối',

@@ -1,6 +1,7 @@
 import { apiRequest, API_BASE_URL } from './apiClient';
 import { getChapterTaskStats } from './workspaceApi';
 import type { Chapter, ChapterStatus, Series, SeriesRanking, SeriesStatus } from '../types/domain';
+import { formatPublishingIssueLabel } from '../utils/publishingIssue';
 
 type ApiEnvelope<T> = T | { data: T };
 
@@ -35,6 +36,8 @@ interface ApiChapter {
   releaseDate?: string | null;
   createdAt?: string | null;
   updatedAt?: string | null;
+  reviewAcceptedAt?: string | null;
+  reviewAcceptedBy?: string | null;
 }
 
 export interface CreateSeriesInput {
@@ -69,9 +72,12 @@ export function mapUiStatusToApi(status: SeriesStatus): string {
     Submitted: 'pending_review',
     Approved: 'approved',
     'In Progress': 'publishing',
+    'Revision Required': 'pending_review',
     'At Risk': 'hiatus',
     Cancelled: 'cancelled',
     Completed: 'completed',
+    // Backend không có published cho series — giữ completed để tránh gửi status lạ.
+    Published: 'completed',
   };
   return map[status] ?? 'draft';
 }
@@ -222,6 +228,8 @@ export function mapChapter(item: ApiChapter): Chapter {
     description: item.manuscriptUrl || '',
     createdAt: dateOnly(item.createdAt),
     updatedAt: item.updatedAt ? dateOnly(item.updatedAt) : undefined,
+    reviewAcceptedAt: item.reviewAcceptedAt ?? null,
+    reviewAcceptedBy: item.reviewAcceptedBy ?? null,
   };
 }
 
@@ -255,16 +263,38 @@ export function canMangakaSubmitChapterForReview(status: ChapterStatus): boolean
   return status === 'Draft' || status === 'In Progress';
 }
 
+/** Mangaka được thu hồi khi chương đang chờ Editor và Editor chưa nhận. */
+export function canMangakaWithdrawChapterReview(
+  status: ChapterStatus,
+  reviewAcceptedAt?: string | null,
+): boolean {
+  return status === 'Review' && !reviewAcceptedAt;
+}
+
+export function isChapterReviewAccepted(chapter: Pick<Chapter, 'status' | 'reviewAcceptedAt'>): boolean {
+  return chapter.status === 'Review' && Boolean(chapter.reviewAcceptedAt);
+}
+
 /** Mangaka chỉ sửa nội dung khi nháp / đang sửa theo yêu cầu. Chương duyệt / XB bị khóa. */
 export function canMangakaEditChapter(status: ChapterStatus): boolean {
   return status === 'Draft' || status === 'In Progress';
 }
 
 export const CHAPTER_CONTENT_LOCK_HINT: Partial<Record<ChapterStatus, string>> = {
-  Review: 'Chương đang chờ Editor xét duyệt — tạm khóa chỉnh sửa.',
+  Review: 'Chương đang chờ Editor — tạm khóa chỉnh sửa.',
   Approved: 'Chương đã được duyệt — bị khóa. Chỉ mở lại khi Editor hoặc Board yêu cầu chỉnh sửa.',
   Published: 'Chương đã gắn lịch / xuất bản — bị khóa. Chỉ mở lại khi Editor hoặc Board yêu cầu chỉnh sửa.',
 };
+
+export function getChapterReviewLockHint(chapter: Pick<Chapter, 'status' | 'reviewAcceptedAt'>): string | undefined {
+  if (chapter.status !== 'Review') {
+    return CHAPTER_CONTENT_LOCK_HINT[chapter.status];
+  }
+  if (chapter.reviewAcceptedAt) {
+    return 'Editor đã nhận xét duyệt — bạn không thể thu hồi. Chờ Editor duyệt hoặc yêu cầu chỉnh sửa.';
+  }
+  return 'Chương đang chờ Editor nhận xét duyệt — tạm khóa. Bạn vẫn có thể thu hồi để sửa.';
+}
 
 export async function getMySeries(): Promise<Series[]> {
   const [items, rankings] = await Promise.all([
@@ -324,9 +354,9 @@ export const SERIES_SUBMISSION_STATUS_HINT: Record<SeriesStatus, string> = {
   Approved: 'Hội đồng đã duyệt series. Bạn có thể bắt đầu sản xuất.',
   'In Progress': 'Series đang trong quá trình xuất bản.',
   'Revision Required': 'Hội đồng yêu cầu chỉnh sửa trước khi duyệt lại.',
-  'At Risk': 'Series đang có nguy cơ tạm dừng vì xếp hạng thấp.',
+  'At Risk': 'Series đang tạm dừng (hiatus). Hội đồng cần quyết định tiếp tục hay dừng hẳn.',
   Completed: 'Editor đã báo series sẵn sàng xuất bản. Bạn vẫn có thể thêm chương; hội đồng vẫn có thể dời lịch XB.',
-  Published: 'Series đã xuất bản.',
+  Published: 'Series đã kết thúc xuất bản.',
   Cancelled: 'Series bị từ chối hoặc hết hạn xét duyệt. Bạn có thể chỉnh sửa rồi gửi lại.',
 };
 
@@ -663,6 +693,14 @@ export async function updateChapterStatus(id: string, status: string): Promise<C
   return mapChapter(updated);
 }
 
+/** Editor nhận xét duyệt chương — sau đó mangaka không thu hồi được. */
+export async function acceptChapterReview(id: string): Promise<Chapter> {
+  const updated = unwrap(await apiRequest<ApiEnvelope<ApiChapter>>(`/api/chapters/${id}/accept-review`, {
+    method: 'POST',
+  }));
+  return mapChapter(updated);
+}
+
 export async function deleteChapter(id: string): Promise<void> {
   await apiRequest<void>(`/api/chapters/${id}`, { method: 'DELETE' });
 }
@@ -795,7 +833,7 @@ export async function getRankingHistory(seriesId: string): Promise<RankingIssue[
 export async function createRanking(input: {
   seriesId: string;
   issueNumber: number;
-  rankPosition: number;
+  rankPosition?: number;
   voteCount?: number;
   popularityScore?: number;
 }): Promise<RankingIssue> {
@@ -961,7 +999,7 @@ export async function getSeriesRankingTrend(
 
   const sorted = [...issues].sort((a, b) => a.issueNumber - b.issueNumber);
   const history = sorted.map(i => ({
-    week: `Kỳ ${i.issueNumber}`,
+    week: formatPublishingIssueLabel(i.issueNumber),
     rank: i.rankPosition,
     votes: i.voteCount,
   }));

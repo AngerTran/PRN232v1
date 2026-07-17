@@ -11,6 +11,7 @@ import {
   Sparkles,
   CheckCircle2,
   Send,
+  Undo2,
 } from 'lucide-react';
 import Button from '../../components/ui/Button';
 import Badge from '../../components/ui/Badge';
@@ -28,8 +29,9 @@ import {
   canMangakaProduceOnSeries,
   canMangakaEditChapter,
   canMangakaSubmitChapterForReview,
+  canMangakaWithdrawChapterReview,
+  getChapterReviewLockHint,
   SERIES_PRODUCTION_LOCK_HINT,
-  CHAPTER_CONTENT_LOCK_HINT,
   uploadChapterManuscript,
   updateChapterStatus,
 } from '../../services/seriesApi';
@@ -89,6 +91,7 @@ export default function ChapterDetailPage() {
   const [error, setError] = useState<string | null>(null);
   const [uploadingManuscript, setUploadingManuscript] = useState(false);
   const [submittingReview, setSubmittingReview] = useState(false);
+  const [withdrawingReview, setWithdrawingReview] = useState(false);
   const manuscriptInputRef = useRef<HTMLInputElement>(null);
 
   const paths = useSeriesContentPaths(chapter?.seriesId);
@@ -237,14 +240,16 @@ export default function ChapterDetailPage() {
   const completedPages = pages.filter(p => (p.tasksCount ?? 0) > 0 && (p.completedTasksCount ?? 0) === p.tasksCount).length;
   const progress = totalTasks > 0
     ? Math.round((completedTasks / totalTasks) * 100)
-    : (chapter.status === 'Published' ? 100 : 0);
+    : (chapter.status === 'Published' || chapter.status === 'Approved' ? 100 : 0);
 
-  const displayChapterStatus =
-    (chapter.status === 'Draft' || chapter.status === 'In Progress') && totalTasks > 0 && progress === 100
-      ? 'Approved'
-      : (chapter.status === 'Draft' || chapter.status === 'In Progress') && totalTasks > 0 && progress > 0
-      ? 'In Progress'
-      : chapter.status;
+  // Không ghi đè status chương bằng tiến độ task — «Đã duyệt» chỉ khi Editor duyệt.
+  const displayChapterStatus = chapter.status;
+  const displayChapterStatusLabel =
+    chapter.status === 'Review' && chapter.reviewAcceptedAt
+      ? 'Editor đang xét'
+      : chapter.status === 'Review'
+        ? 'Chờ Editor nhận'
+        : undefined;
 
   const displayPages = pages.map(p => {
     // Chương đã khóa / XB → trang không còn hiện Bản nháp / sẵn sàng XB giả.
@@ -264,7 +269,9 @@ export default function ChapterDetailPage() {
   const canEdit = canProduce && canEditChapter;
   const productionLockHint = !readOnly && series ? SERIES_PRODUCTION_LOCK_HINT[series.status] : undefined;
   const chapterLockHint =
-    !readOnly && chapter && !canEditChapter ? CHAPTER_CONTENT_LOCK_HINT[chapter.status] : undefined;
+    !readOnly && chapter && !canEditChapter
+      ? getChapterReviewLockHint(chapter)
+      : undefined;
   const canOpenWorkspace = canEdit && pages.length > 0;
   const canSubmitForReview =
     !readOnly
@@ -272,8 +279,11 @@ export default function ChapterDetailPage() {
     && chapter
     && canMangakaSubmitChapterForReview(chapter.status)
     && pages.length > 0;
-  const manuscriptUrl = isManuscriptUrl(chapter.description) ? chapter.description.trim() : null;
-  const hasDeadline = Boolean(chapter.deadline) && !Number.isNaN(new Date(chapter.deadline).getTime());
+  const canWithdrawReview =
+    !readOnly
+    && canProduce
+    && chapter
+    && canMangakaWithdrawChapterReview(chapter.status, chapter.reviewAcceptedAt);
 
   const handleSubmitForReview = async () => {
     if (!chapter) return;
@@ -305,11 +315,46 @@ export default function ChapterDetailPage() {
     }
   };
 
+  const handleWithdrawReview = async () => {
+    if (!chapter) return;
+    const confirmed = await confirm({
+      title: 'Thu hồi xét duyệt',
+      variant: 'danger',
+      message: (
+        <>
+          Thu hồi <span className="font-semibold text-foreground">Ch.{chapter.number} · {chapter.title}</span> về trạng thái chỉnh sửa?
+          <br />
+          <span className="text-xs mt-1 inline-block">
+            Editor sẽ không còn thấy chương trong hàng chờ cho đến khi bạn gửi lại.
+          </span>
+        </>
+      ),
+      confirmText: 'Thu hồi để sửa',
+    });
+    if (!confirmed) return;
+
+    setWithdrawingReview(true);
+    try {
+      const updated = await updateChapterStatus(chapter.id, 'in_progress');
+      setChapter(updated);
+      const refreshedPages = await getChapterPages(chapter.id).catch(() => pages);
+      setPages(refreshedPages);
+      toast.success('Đã thu hồi xét duyệt — bạn có thể chỉnh sửa lại.');
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Không thu hồi được xét duyệt.');
+    } finally {
+      setWithdrawingReview(false);
+    }
+  };
+
   const openWorkspace = () => {
     const firstPage = pages[0];
     if (!firstPage) return;
     navigate(`/mangaka/pages/${firstPage.id}/workspace`);
   };
+
+  const manuscriptUrl = isManuscriptUrl(chapter.description) ? chapter.description.trim() : null;
+  const hasDeadline = Boolean(chapter.deadline) && !Number.isNaN(new Date(chapter.deadline).getTime());
 
   return (
     <div className="relative min-h-full">
@@ -342,7 +387,12 @@ export default function ChapterDetailPage() {
                       Ch.{chapter.number}
                     </span>
                     <h1 className="text-2xl font-bold tracking-tight leading-tight">{chapter.title}</h1>
-                    <Badge status={displayChapterStatus} statusKind="chapter" size="md" />
+                    <Badge
+                      status={displayChapterStatus}
+                      statusKind="chapter"
+                      size="md"
+                      label={displayChapterStatusLabel}
+                    />
                   </div>
                   <p className="text-sm text-muted-foreground">{series?.title ?? '—'}</p>
                 </div>
@@ -379,10 +429,15 @@ export default function ChapterDetailPage() {
                       Gửi xét duyệt
                     </Button>
                   )}
-                  {chapter.status === 'Review' && (
-                    <Button variant="outline" className="w-full sm:w-auto" disabled>
-                      <Send size={15} />
-                      Đã gửi Editor
+                  {canWithdrawReview && (
+                    <Button
+                      variant="outline"
+                      className="w-full sm:w-auto"
+                      loading={withdrawingReview}
+                      onClick={() => void handleWithdrawReview()}
+                    >
+                      <Undo2 size={15} />
+                      Thu hồi để sửa
                     </Button>
                   )}
                   {(chapter.status === 'Approved' || chapter.status === 'Published') && (

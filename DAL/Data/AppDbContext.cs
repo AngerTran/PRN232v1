@@ -255,6 +255,8 @@ public partial class AppDbContext : DbContext
                 .HasColumnType("chapter_status")
                 .HasDefaultValueSql("'draft'::chapter_status")
                 .HasColumnName("status");
+            entity.Property(e => e.ReviewAcceptedAt).HasColumnName("review_accepted_at");
+            entity.Property(e => e.ReviewAcceptedBy).HasColumnName("review_accepted_by");
             entity.Property(e => e.SeriesId).HasColumnName("series_id");
             entity.Property(e => e.Title)
                 .HasMaxLength(255)
@@ -266,6 +268,11 @@ public partial class AppDbContext : DbContext
             entity.HasOne(d => d.Series).WithMany(p => p.Chapters)
                 .HasForeignKey(d => d.SeriesId)
                 .HasConstraintName("chapters_series_id_fkey");
+
+            entity.HasOne<Profile>().WithMany()
+                .HasForeignKey(d => d.ReviewAcceptedBy)
+                .OnDelete(DeleteBehavior.SetNull)
+                .HasConstraintName("chapters_review_accepted_by_fkey");
         });
 
         modelBuilder.Entity<Notification>(entity =>

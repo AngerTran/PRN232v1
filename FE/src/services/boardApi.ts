@@ -477,7 +477,6 @@ export async function bulkSaveRankings(
   issueNumber: number,
   entries: Array<{
     seriesId: string;
-    rankPosition: number;
     voteCount?: number;
     popularityScore?: number;
     notes?: string;
@@ -487,6 +486,29 @@ export async function bulkSaveRankings(
     method: 'POST',
     body: JSON.stringify({ issueNumber, entries }),
   });
+}
+
+/** Xóa ranking gắn kỳ cũ (số chương) và đồng bộ lại kỳ lịch XB theo ngày. */
+export async function purgeLegacyRankingIssues(): Promise<number> {
+  const result = unwrap(await apiRequest<ApiEnvelope<{ deleted: number }>>('/api/rankings/purge-legacy-issues', {
+    method: 'POST',
+  }));
+  return result.deleted ?? 0;
+}
+
+export async function deleteRankingInputs(ids: string[]): Promise<number> {
+  const result = unwrap(await apiRequest<ApiEnvelope<{ deleted: number }>>('/api/rankings/delete', {
+    method: 'POST',
+    body: JSON.stringify({ ids }),
+  }));
+  return result.deleted ?? 0;
+}
+
+export async function deleteAllRankingInputs(): Promise<number> {
+  const result = unwrap(await apiRequest<ApiEnvelope<{ deleted: number }>>('/api/rankings/delete-all', {
+    method: 'POST',
+  }));
+  return result.deleted ?? 0;
 }
 
 export interface RecentRankingInput {

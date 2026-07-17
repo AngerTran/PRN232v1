@@ -11,7 +11,9 @@ export function useSeriesContentPaths(seriesId?: string) {
       isBoard: true as const,
       seriesBase,
       chaptersList: seriesId ? `${seriesBase}/chapters` : '/board/approved-series',
-      chapterDetail: (chapterId: string) => `/board/chapters/${chapterId}`,
+      // Board: vào thẳng trang đọc chương (không vào trang quản lý chi tiết).
+      chapterDetail: (chapterId: string) =>
+        seriesId ? `${seriesBase}/read?chapter=${chapterId}` : `/board/chapters/${chapterId}`,
       reader: seriesId ? `${seriesBase}/read` : undefined,
       breadcrumbRoot: { label: 'Series Đã Nhận', href: '/board/approved-series' },
       seriesCrumbLabel: (title: string) => title,

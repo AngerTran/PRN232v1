@@ -36,8 +36,17 @@ public class RankingService
             .GetByIdAsync(request.SeriesId, asNoTracking: false, cancellationToken)
             ?? throw new ArgumentException("Series not found.");
 
-        var ranking = await UpsertRankingAsync(series, request, cancellationToken);
+        // Hạng tạm — sẽ xếp lại theo vote cho cả kỳ.
+        var ranking = await UpsertRankingAsync(
+            series,
+            request with { RankPosition = request.RankPosition is > 0 ? request.RankPosition : null },
+            cancellationToken);
         await _unitOfWork.SaveChangesAsync(cancellationToken);
+
+        var ordered = await ReassignRanksByVotesAsync(request.IssueNumber, cancellationToken);
+        await _unitOfWork.SaveChangesAsync(cancellationToken);
+
+        ranking = ordered.First(r => r.SeriesId == request.SeriesId);
         await NotifyDangerZoneIfNeededAsync(series, ranking, cancellationToken);
 
         return Map(ranking, series.Title);
@@ -65,24 +74,28 @@ public class RankingService
             throw new ArgumentException("One or more series were not found.");
         }
 
-        var saved = new List<Ranking>();
         foreach (var entry in request.Entries)
         {
             var series = seriesById[entry.SeriesId];
-            var ranking = await UpsertRankingAsync(
+            await UpsertRankingAsync(
                 series,
                 new CreateRankingRequest(
                     entry.SeriesId,
                     request.IssueNumber,
-                    entry.RankPosition,
+                    null,
                     entry.VoteCount,
                     entry.PopularityScore,
                     entry.Notes),
                 cancellationToken);
-            saved.Add(ranking);
         }
 
         await _unitOfWork.SaveChangesAsync(cancellationToken);
+
+        var ordered = await ReassignRanksByVotesAsync(request.IssueNumber, cancellationToken);
+        await _unitOfWork.SaveChangesAsync(cancellationToken);
+
+        var savedIds = seriesIds.ToHashSet();
+        var saved = ordered.Where(r => savedIds.Contains(r.SeriesId)).ToList();
 
         foreach (var ranking in saved)
         {
@@ -101,6 +114,7 @@ public class RankingService
         CancellationToken cancellationToken = default)
     {
         await RequireBoardOrAdminAsync(callerId, cancellationToken);
+        await SyncScheduleIssueNumbersAsync(cancellationToken);
 
         var rankingIssues = await _unitOfWork.Context.Rankings
             .AsNoTracking()
@@ -128,6 +142,7 @@ public class RankingService
         CancellationToken cancellationToken = default)
     {
         await RequireBoardOrAdminAsync(callerId, cancellationToken);
+        await SyncScheduleIssueNumbersAsync(cancellationToken);
 
         var availableIssues = await ListIssueNumbersAsync(callerId, cancellationToken);
         var maxRankingIssue = await _unitOfWork.Context.Rankings
@@ -212,6 +227,28 @@ public class RankingService
             rows);
     }
 
+    private async Task SyncScheduleIssueNumbersAsync(CancellationToken cancellationToken)
+    {
+        var items = await _unitOfWork.Context.PublishingSchedules.ToListAsync(cancellationToken);
+        var dirty = false;
+        foreach (var schedule in items)
+        {
+            var expected = PublishingIssueNumbers.FromPublishDate(schedule.PublishDate, schedule.Frequency);
+            if (schedule.IssueNumber == expected)
+            {
+                continue;
+            }
+
+            schedule.IssueNumber = expected;
+            dirty = true;
+        }
+
+        if (dirty)
+        {
+            await _unitOfWork.SaveChangesAsync(cancellationToken);
+        }
+    }
+
     public async Task<RankingHistoryResponse?> GetHistoryAsync(
         Guid callerId,
         Guid seriesId,
@@ -262,6 +299,53 @@ public class RankingService
         return items.Select(r => Map(r, r.Series?.Title)).ToList();
     }
 
+    /// <summary>
+    /// Xếp hạng theo vote (cao hơn = tốt hơn).
+    /// Hòa vote → xét popularity; hòa cả vote lẫn popularity → đồng hạng (cùng số hạng, bỏ chỗ trống).
+    /// Ví dụ: #1, #2, #2, #4.
+    /// </summary>
+    private async Task<List<Ranking>> ReassignRanksByVotesAsync(
+        int issueNumber,
+        CancellationToken cancellationToken)
+    {
+        var rankings = await _unitOfWork.Context.Rankings
+            .Include(r => r.Series)
+            .Where(r => r.IssueNumber == issueNumber)
+            .ToListAsync(cancellationToken);
+
+        var ordered = rankings
+            .OrderByDescending(r => r.VoteCount ?? 0)
+            .ThenByDescending(r => r.PopularityScore ?? 0m)
+            .ThenBy(r => r.Series?.Title ?? string.Empty, StringComparer.OrdinalIgnoreCase)
+            .ThenBy(r => r.SeriesId)
+            .ToList();
+
+        var index = 0;
+        while (index < ordered.Count)
+        {
+            var vote = ordered[index].VoteCount ?? 0;
+            var popularity = ordered[index].PopularityScore ?? 0m;
+            var end = index + 1;
+            while (end < ordered.Count
+                && (ordered[end].VoteCount ?? 0) == vote
+                && (ordered[end].PopularityScore ?? 0m) == popularity)
+            {
+                end++;
+            }
+
+            var rank = index + 1;
+            for (var k = index; k < end; k++)
+            {
+                ordered[k].RankPosition = rank;
+                Repository.Update(ordered[k]);
+            }
+
+            index = end;
+        }
+
+        return ordered;
+    }
+
     private async Task<Ranking> UpsertRankingAsync(
         DAL.Models.Series series,
         CreateRankingRequest request,
@@ -274,7 +358,11 @@ public class RankingService
 
         if (existing is not null)
         {
-            existing.RankPosition = request.RankPosition;
+            if (request.RankPosition is > 0)
+            {
+                existing.RankPosition = request.RankPosition.Value;
+            }
+
             existing.VoteCount = request.VoteCount ?? 0;
             existing.PopularityScore = request.PopularityScore ?? 0;
             if (request.Notes is not null)
@@ -290,7 +378,8 @@ public class RankingService
             Id = Guid.NewGuid(),
             SeriesId = request.SeriesId,
             IssueNumber = request.IssueNumber,
-            RankPosition = request.RankPosition,
+            // Placeholder — ReassignRanksByVotesAsync sẽ gán lại ngay sau.
+            RankPosition = request.RankPosition is > 0 ? request.RankPosition.Value : 9999,
             VoteCount = request.VoteCount ?? 0,
             PopularityScore = request.PopularityScore ?? 0,
             Notes = string.IsNullOrWhiteSpace(request.Notes) ? null : request.Notes.Trim(),
@@ -381,6 +470,80 @@ public class RankingService
             WorkflowNotificationPaths.BoardSeriesDecisions(),
             WorkflowNotificationPaths.CategoryRanking,
             cancellationToken);
+    }
+
+    public async Task<int> DeleteByIdsAsync(
+        Guid callerId,
+        IReadOnlyList<Guid> ids,
+        CancellationToken cancellationToken = default)
+    {
+        await RequireBoardOrAdminAsync(callerId, cancellationToken);
+
+        var distinctIds = ids.Where(id => id != Guid.Empty).Distinct().ToList();
+        if (distinctIds.Count == 0)
+        {
+            return 0;
+        }
+
+        var rows = await _unitOfWork.Context.Rankings
+            .Where(r => distinctIds.Contains(r.Id))
+            .ToListAsync(cancellationToken);
+        if (rows.Count == 0)
+        {
+            return 0;
+        }
+
+        var affectedIssues = rows.Select(r => r.IssueNumber).Distinct().ToList();
+        _unitOfWork.Context.Rankings.RemoveRange(rows);
+        await _unitOfWork.SaveChangesAsync(cancellationToken);
+
+        foreach (var issue in affectedIssues)
+        {
+            await ReassignRanksByVotesAsync(issue, cancellationToken);
+        }
+
+        await _unitOfWork.SaveChangesAsync(cancellationToken);
+        return rows.Count;
+    }
+
+    public async Task<int> DeleteAllAsync(
+        Guid callerId,
+        CancellationToken cancellationToken = default)
+    {
+        await RequireBoardOrAdminAsync(callerId, cancellationToken);
+
+        var rows = await _unitOfWork.Context.Rankings.ToListAsync(cancellationToken);
+        if (rows.Count == 0)
+        {
+            return 0;
+        }
+
+        _unitOfWork.Context.Rankings.RemoveRange(rows);
+        await _unitOfWork.SaveChangesAsync(cancellationToken);
+        return rows.Count;
+    }
+
+    public async Task<int> PurgeLegacyIssueRankingsAsync(
+        Guid callerId,
+        CancellationToken cancellationToken = default)
+    {
+        await RequireBoardOrAdminAsync(callerId, cancellationToken);
+
+        // Encode mới: weekly >= 1_000_000, monthly >= 2_000_000. Số nhỏ hơn = kỳ kiểu cũ (số chương).
+        var legacy = await _unitOfWork.Context.Rankings
+            .Where(r => r.IssueNumber < PublishingIssueNumbers.WeeklyOffset)
+            .ToListAsync(cancellationToken);
+
+        if (legacy.Count == 0)
+        {
+            await SyncScheduleIssueNumbersAsync(cancellationToken);
+            return 0;
+        }
+
+        _unitOfWork.Context.Rankings.RemoveRange(legacy);
+        await _unitOfWork.SaveChangesAsync(cancellationToken);
+        await SyncScheduleIssueNumbersAsync(cancellationToken);
+        return legacy.Count;
     }
 
     private static bool CanViewRankingHistory(Profile caller, DAL.Models.Series series) =>

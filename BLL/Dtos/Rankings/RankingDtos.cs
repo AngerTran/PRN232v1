@@ -16,7 +16,8 @@ public record RankingResponse(
 public record CreateRankingRequest(
     [Required] Guid SeriesId,
     [Range(1, int.MaxValue)] int IssueNumber,
-    [Range(1, int.MaxValue)] int RankPosition,
+    /// <summary>Tuỳ chọn — hệ thống tự xếp lại theo vote trong kỳ.</summary>
+    int? RankPosition,
     int? VoteCount,
     decimal? PopularityScore,
     string? Notes);
@@ -28,7 +29,8 @@ public record RankingHistoryResponse(
 
 public record BulkRankingEntryRequest(
     [Required] Guid SeriesId,
-    [Range(1, int.MaxValue)] int RankPosition,
+    /// <summary>Tuỳ chọn — hệ thống tự xếp lại theo vote trong kỳ.</summary>
+    int? RankPosition,
     int? VoteCount,
     decimal? PopularityScore,
     string? Notes);
@@ -56,3 +58,9 @@ public record VoteInputContextResponse(
     int SuggestedIssueNumber,
     IReadOnlyList<int> AvailableIssueNumbers,
     IReadOnlyList<VoteInputSeriesRowResponse> Series);
+
+public record DeleteRankingsRequest(
+    [Required] IReadOnlyList<Guid> Ids);
+
+public record DeleteRankingsResponse(
+    int Deleted);

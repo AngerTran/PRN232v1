@@ -4,6 +4,7 @@ import {
   ArrowLeft,
   CheckCircle2,
   Crosshair,
+  Hand,
   ImageIcon,
   ListChecks,
   MessageSquarePlus,
@@ -36,7 +37,7 @@ import {
   getPageAnnotations,
   type PageAnnotation,
 } from '../../services/annotationsApi';
-import { getChapter, getSeries, updateChapterStatus } from '../../services/seriesApi';
+import { getChapter, getSeries, updateChapterStatus, acceptChapterReview } from '../../services/seriesApi';
 import { getChapterPages, type WorkspacePageItem } from '../../services/workspaceApi';
 import type { Chapter, ChapterStatus, Series } from '../../types/domain';
 
@@ -215,6 +216,10 @@ export default function ChapterReviewPage() {
 
   const handleApprove = async () => {
     if (!chapter) return;
+    if (chapter.status === 'Review' && !chapter.reviewAcceptedAt) {
+      toast.error('Hãy nhận xét duyệt trước khi duyệt chương.');
+      return;
+    }
     const ok = await confirm({
       title: 'Duyệt chapter này?',
       variant: 'success',
@@ -247,8 +252,45 @@ export default function ChapterReviewPage() {
     }
   };
 
+  const handleAcceptReview = async () => {
+    if (!chapter) return;
+    const ok = await confirm({
+      title: 'Nhận xét duyệt chương?',
+      variant: 'submit',
+      message: (
+        <>
+          Nhận <span className="font-semibold text-foreground">{chapter.title}</span> vào hàng xét duyệt?
+          <br />
+          <span className="text-xs mt-1 inline-block">
+            Sau khi nhận, mangaka không thể thu hồi gửi duyệt nữa.
+          </span>
+        </>
+      ),
+      confirmText: 'Nhận xét duyệt',
+      cancelText: 'Hủy',
+    });
+    if (!ok) return;
+
+    setStatusUpdating(true);
+    setError('');
+    try {
+      const updated = await acceptChapterReview(chapter.id);
+      setChapter(updated);
+      toast.success('Đã nhận xét duyệt chương');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Không thể nhận xét duyệt.');
+      toast.error('Không thể nhận xét duyệt');
+    } finally {
+      setStatusUpdating(false);
+    }
+  };
+
   const handleRequestRevision = async () => {
     if (!chapter) return;
+    if (chapter.status === 'Review' && !chapter.reviewAcceptedAt) {
+      toast.error('Hãy nhận xét duyệt trước khi yêu cầu mangaka sửa.');
+      return;
+    }
     const ok = await confirm({
       title: 'Yêu cầu mangaka sửa?',
       variant: 'submit',
@@ -297,6 +339,8 @@ export default function ChapterReviewPage() {
 
   const pageImage = selectedPage?.imageUrl || selectedPage?.thumbnailUrl;
   const isApproved = chapter.status === 'Approved' || chapter.status === 'Published';
+  const needsAcceptReview = chapter.status === 'Review' && !chapter.reviewAcceptedAt;
+  const reviewInProgress = chapter.status === 'Review' && Boolean(chapter.reviewAcceptedAt);
   const selectedIndex = Math.max(0, pages.findIndex(p => p.id === selectedPage?.id));
 
   return (
@@ -318,7 +362,11 @@ export default function ChapterReviewPage() {
                 <span
                   className={`inline-flex items-center rounded-full border px-2.5 py-0.5 text-[11px] font-semibold ${chapterStatusStyle(chapter.status)}`}
                 >
-                  {formatChapterStatusLabel(chapter.status)}
+                  {needsAcceptReview
+                    ? 'Chờ nhận xét duyệt'
+                    : reviewInProgress
+                      ? 'Đang xét duyệt'
+                      : formatChapterStatusLabel(chapter.status)}
                 </span>
               </div>
               <p className="text-xs text-muted-foreground truncate">
@@ -330,29 +378,43 @@ export default function ChapterReviewPage() {
           </div>
 
           <div className="flex flex-wrap items-center gap-2 shrink-0">
-            <Button
-              variant="outline"
-              size="sm"
-              disabled={statusUpdating || chapter.status === 'In Progress'}
-              onClick={handleRequestRevision}
-            >
-              <RotateCcw className="h-4 w-4 mr-1" />
-              {chapter.status === 'In Progress' ? 'Đang chờ sửa' : 'Yêu cầu sửa'}
-            </Button>
-            {!isApproved ? (
-              <Button size="sm" disabled={statusUpdating} onClick={handleApprove}>
-                <CheckCircle2 className="h-4 w-4 mr-1" />
-                Duyệt chapter
+            {needsAcceptReview ? (
+              <Button size="sm" disabled={statusUpdating} onClick={() => void handleAcceptReview()}>
+                <Hand className="h-4 w-4 mr-1" />
+                Nhận xét duyệt
               </Button>
             ) : (
-              <Button size="sm" variant="secondary" onClick={() => navigate('/editor/reviews')}>
-                <ListChecks className="h-4 w-4 mr-1" />
-                Về danh sách review
-              </Button>
+              <>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={statusUpdating || chapter.status === 'In Progress' || isApproved}
+                  onClick={() => void handleRequestRevision()}
+                >
+                  <RotateCcw className="h-4 w-4 mr-1" />
+                  {chapter.status === 'In Progress' ? 'Đang chờ sửa' : 'Yêu cầu sửa'}
+                </Button>
+                {!isApproved ? (
+                  <Button size="sm" disabled={statusUpdating} onClick={() => void handleApprove()}>
+                    <CheckCircle2 className="h-4 w-4 mr-1" />
+                    Duyệt chapter
+                  </Button>
+                ) : (
+                  <Button size="sm" variant="secondary" onClick={() => navigate('/editor/reviews')}>
+                    <ListChecks className="h-4 w-4 mr-1" />
+                    Về danh sách review
+                  </Button>
+                )}
+              </>
             )}
           </div>
         </div>
 
+        {needsAcceptReview && (
+          <div className="mt-3 rounded-xl border border-amber-200 bg-amber-50 px-3.5 py-2.5 text-sm text-amber-950">
+            Mangaka đã gửi chương. Bấm <strong>Nhận xét duyệt</strong> để bắt đầu — sau đó mangaka không thu hồi được nữa.
+          </div>
+        )}
         {isApproved && (
           <div className="mt-3 flex flex-wrap items-center justify-between gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-3.5 py-2.5 text-sm text-emerald-900">
             <span className="inline-flex items-center gap-2 font-medium">

@@ -99,7 +99,7 @@ export default function PublishingSchedulePage() {
       )}
 
       {loading ? (
-        <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+        <div className="grid gap-4 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4">
           {Array.from({ length: 4 }).map((_, i) => (
             <div key={i} className="rounded-2xl border bg-muted/30 aspect-[3/5] animate-pulse" />
           ))}
@@ -113,7 +113,7 @@ export default function PublishingSchedulePage() {
           </p>
         </div>
       ) : (
-        <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+        <div className="grid gap-4 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4">
           {filtered.map(series => (
             <BoardMangaCard
               key={series.id}

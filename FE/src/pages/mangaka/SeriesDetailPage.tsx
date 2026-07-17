@@ -74,14 +74,18 @@ export default function SeriesDetailPage() {
   const canProduce = series ? canMangakaProduceOnSeries(series.status) : false;
   const productionLockHint = series ? SERIES_PRODUCTION_LOCK_HINT[series.status] : undefined;
   const isAssignedEditor = Boolean(isEditorView && series && user && series.editorId === user.id);
+  const productionChapters = chapters.filter(c => c.number > 0);
+  // Sau khi board lên lịch, series Completed → Publishing nên mất cờ "đã báo".
+  // Coi đã báo nếu còn nhãn Completed hoặc đã có chương xuất bản.
+  const hasPublishedChapter = productionChapters.some(c => c.status === 'Published');
+  const alreadyReportedReady =
+    isAssignedEditor && (series?.status === 'Completed' || hasPublishedChapter);
   const canMarkReadyForPublish =
-    isAssignedEditor && canProduce && series?.status !== 'Completed';
-  const alreadyReportedReady = isAssignedEditor && series?.status === 'Completed';
+    isAssignedEditor && canProduce && !alreadyReportedReady;
   const canEditProfile = isMangakaView && series && (series.status === 'Draft' || series.status === 'Cancelled');
   const waitingForBoardEditor = isMangakaView && series && canProduce && !series.editorId;
   const proposalChapter = chapters.find(c => c.number === 0) ?? chapters.find(c => Boolean(c.description?.trim()));
   const manuscriptUrl = proposalChapter?.description?.trim() || null;
-  const productionChapters = chapters.filter(c => c.number > 0);
 
   useEffect(() => {
     if (!seriesId) return;

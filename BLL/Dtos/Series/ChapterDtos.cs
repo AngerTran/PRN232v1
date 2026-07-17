@@ -12,7 +12,9 @@ public record ChapterResponse(
     DateTime? Deadline,
     DateTime? ReleaseDate,
     DateTime? CreatedAt,
-    DateTime? UpdatedAt);
+    DateTime? UpdatedAt,
+    DateTime? ReviewAcceptedAt = null,
+    Guid? ReviewAcceptedBy = null);
 
 public record CreateChapterRequest(
     [Range(0, int.MaxValue)] int ChapterNumber,

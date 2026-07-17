@@ -27,6 +27,7 @@ public class PublishingScheduleService
         CancellationToken cancellationToken = default)
     {
         _ = await RequireSeriesAccessAsync(callerId, seriesId, cancellationToken);
+        await SyncIssueNumbersAsync(seriesId, cancellationToken);
 
         var items = await _unitOfWork.Context.PublishingSchedules
             .AsNoTracking()
@@ -36,6 +37,39 @@ public class PublishingScheduleService
             .ToListAsync(cancellationToken);
 
         return items.Select(Map).ToList();
+    }
+
+    /// <summary>
+    /// Đồng bộ số kỳ theo ngày XB (migrate dữ liệu cũ gắn kỳ = số chương).
+    /// </summary>
+    public async Task SyncIssueNumbersAsync(
+        Guid? seriesId = null,
+        CancellationToken cancellationToken = default)
+    {
+        var query = _unitOfWork.Context.PublishingSchedules.AsQueryable();
+        if (seriesId is Guid sid)
+        {
+            query = query.Where(s => s.SeriesId == sid);
+        }
+
+        var items = await query.ToListAsync(cancellationToken);
+        var dirty = false;
+        foreach (var schedule in items)
+        {
+            var expected = PublishingIssueNumbers.FromPublishDate(schedule.PublishDate, schedule.Frequency);
+            if (schedule.IssueNumber == expected)
+            {
+                continue;
+            }
+
+            schedule.IssueNumber = expected;
+            dirty = true;
+        }
+
+        if (dirty)
+        {
+            await _unitOfWork.SaveChangesAsync(cancellationToken);
+        }
     }
 
     public async Task<IReadOnlyList<ScheduleChapterOptionResponse>> ListChapterOptionsAsync(
@@ -94,7 +128,9 @@ public class PublishingScheduleService
             chapter = await RequireChapterForSeriesAsync(seriesId, chapterId, excludeScheduleId: null, cancellationToken);
         }
 
-        var issueNumber = request.IssueNumber ?? chapter?.ChapterNumber;
+        var frequency = PublishingFrequencies.ParseOrDefault(request.Frequency);
+        // Kỳ = đợt XB theo ngày (tuần/tháng), không theo số chương.
+        var issueNumber = PublishingIssueNumbers.FromPublishDate(request.PublishDate, frequency);
 
         var schedule = new PublishingSchedule
         {
@@ -102,7 +138,7 @@ public class PublishingScheduleService
             SeriesId = seriesId,
             ChapterId = chapter?.Id,
             PublishDate = request.PublishDate,
-            Frequency = PublishingFrequencies.ParseOrDefault(request.Frequency),
+            Frequency = frequency,
             IssueNumber = issueNumber,
             Notes = request.Notes,
             CreatedAt = DateTime.UtcNow
@@ -132,8 +168,9 @@ public class PublishingScheduleService
             ? ""
             : $" · Ch.{chapter.ChapterNumber}{(string.IsNullOrWhiteSpace(chapter.Title) ? "" : $" «{chapter.Title}»")}";
         var dateLabel = request.PublishDate.ToString("dd/MM/yyyy");
+        var issueLabel = PublishingIssueNumbers.FormatLabel(issueNumber);
         var scheduleMessage =
-            $"Lịch xuất bản mới cho \"{series.Title}\" — ngày {dateLabel} (kỳ {issueNumber}){chapterLabel}.";
+            $"Lịch xuất bản mới cho \"{series.Title}\" — ngày {dateLabel} ({issueLabel}){chapterLabel}.";
 
         await _notificationService.CreateAsync(
             series.AuthorId,
@@ -193,11 +230,7 @@ public class PublishingScheduleService
             schedule.Frequency = PublishingFrequencies.ParseOrDefault(request.Frequency);
         }
 
-        if (request.IssueNumber is not null)
-        {
-            schedule.IssueNumber = request.IssueNumber;
-        }
-
+        // Không nhận IssueNumber tay — luôn suy từ ngày XB + tần suất (chuẩn tạp chí).
         if (request.ClearChapter)
         {
             if (schedule.Chapter is { Status: ChapterStatus.Published } previous)
@@ -225,7 +258,6 @@ public class PublishingScheduleService
                 cancellationToken);
             schedule.ChapterId = chapter.Id;
             schedule.Chapter = chapter;
-            schedule.IssueNumber ??= chapter.ChapterNumber;
 
             if (chapter.Status is ChapterStatus.Completed or ChapterStatus.Reviewing or ChapterStatus.InProgress)
             {
@@ -239,6 +271,8 @@ public class PublishingScheduleService
         {
             schedule.Notes = request.Notes;
         }
+
+        schedule.IssueNumber = PublishingIssueNumbers.FromPublishDate(schedule.PublishDate, schedule.Frequency);
 
         Repository.Update(schedule);
 
@@ -256,7 +290,7 @@ public class PublishingScheduleService
             var oldLabel = oldDate.ToString("dd/MM/yyyy");
             var note = string.IsNullOrWhiteSpace(schedule.Notes) ? "" : $" Lý do/ghi chú: {schedule.Notes}";
             var message =
-                $"Lịch XB \"{series.Title}\" kỳ {schedule.IssueNumber?.ToString() ?? "—"} đã dời từ {oldLabel} sang {newLabel}.{note}";
+                $"Lịch XB \"{series.Title}\" ({PublishingIssueNumbers.FormatLabel(schedule.IssueNumber)}) đã dời từ {oldLabel} sang {newLabel}.{note}";
 
             await _notificationService.CreateAsync(
                 series.AuthorId,

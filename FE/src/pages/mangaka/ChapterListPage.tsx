@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router';
-import { BookOpen, ChevronLeft, Plus } from 'lucide-react';
+import { ChevronLeft, FileText, Plus } from 'lucide-react';
 import Button from '../../components/ui/Button';
 import ChapterCard from '../../components/ui/ChapterCard';
 import EmptyState from '../../components/ui/EmptyState';
@@ -9,7 +9,7 @@ import { useConfirm } from '../../components/ui/ConfirmDialog';
 import { useSeriesContentPaths } from '../../hooks/useSeriesContentPaths';
 import type { Chapter, Series } from '../../types/domain';
 import { getSeries, getSeriesChapters, deleteChapter, canMangakaProduceOnSeries, canMangakaDeleteChapter, SERIES_PRODUCTION_LOCK_HINT } from '../../services/seriesApi';
-import { FileText } from 'lucide-react';
+
 
 export default function ChapterListPage() {
   const { seriesId } = useParams<{ seriesId: string }>();
@@ -126,22 +126,15 @@ export default function ChapterListPage() {
             <p className="text-sm text-muted-foreground">{chapters.length} chương</p>
           </div>
         </div>
-        <div className="flex items-center gap-2">
-          {readOnly && paths.reader && chapters.length > 0 && (
-            <Button variant="outline" onClick={() => navigate(paths.reader!)}>
-              <BookOpen size={16} /> Đọc truyện
-            </Button>
-          )}
-          {!readOnly && (
-            <Button
-              variant="primary"
-              disabled={!canProduce}
-              onClick={() => navigate(`/mangaka/series/${seriesId}/chapters/create`)}
-            >
-              <Plus size={16} /> Chương mới
-            </Button>
-          )}
-        </div>
+        {!readOnly && (
+          <Button
+            variant="primary"
+            disabled={!canProduce}
+            onClick={() => navigate(`/mangaka/series/${seriesId}/chapters/create`)}
+          >
+            <Plus size={16} /> Chương mới
+          </Button>
+        )}
       </div>
 
       {!canProduce && productionLockHint && (

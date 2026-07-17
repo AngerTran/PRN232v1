@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using DAL.Common;
 
@@ -17,6 +17,11 @@ public partial class Chapter
     public string? ManuscriptUrl { get; set; }
 
     public ChapterStatus Status { get; set; } = ChapterStatus.Draft;
+
+    /// <summary>Editor đã nhận xét duyệt chương (null = mangaka vẫn thu hồi được).</summary>
+    public DateTime? ReviewAcceptedAt { get; set; }
+
+    public Guid? ReviewAcceptedBy { get; set; }
 
     public DateTime? Deadline { get; set; }
 

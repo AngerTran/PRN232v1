@@ -74,6 +74,22 @@ public class ChaptersController : ControllerBase
         return updated is null ? NotFound() : Ok(updated);
     }
 
+    [HttpPost("{id:guid}/accept-review")]
+    [SwaggerOperation(Summary = "Accept chapter review", Description = "Editor claims a submitted chapter for review. After this, mangaka can no longer withdraw the submission.")]
+    [ProducesResponseType(typeof(ChapterResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<ActionResult<ChapterResponse>> AcceptReview(Guid id, CancellationToken cancellationToken)
+    {
+        if (!this.TryGetUserId(out var userId))
+        {
+            return Unauthorized();
+        }
+
+        var updated = await _seriesService.AcceptChapterReviewAsync(userId, id, cancellationToken);
+        return updated is null ? NotFound() : Ok(updated);
+    }
+
     [HttpPost("{id:guid}/manuscript")]
     [Consumes("multipart/form-data")]
     [SwaggerOperation(Summary = "Upload chapter manuscript", Description = "Uploads a manuscript file and stores its public URL on the chapter. Allowed for the series author or admin.")]

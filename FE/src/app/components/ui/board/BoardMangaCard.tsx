@@ -62,7 +62,7 @@ export function BoardMangaCard({
       )}
       data-series-id={seriesId}
     >
-      <div className="relative aspect-[3/4] bg-muted overflow-hidden shrink-0">
+      <div className="relative h-[280px] sm:h-[320px] lg:h-[360px] bg-muted overflow-hidden shrink-0">
         {coverUrl ? (
           <img
             src={coverUrl}

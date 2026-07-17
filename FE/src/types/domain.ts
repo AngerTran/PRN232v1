@@ -71,6 +71,9 @@ export interface Chapter {
   description: string;
   createdAt: string;
   updatedAt?: string;
+  /** Editor đã nhận xét duyệt — mangaka không thu hồi được nữa. */
+  reviewAcceptedAt?: string | null;
+  reviewAcceptedBy?: string | null;
 }
 
 export interface MangaPage {
