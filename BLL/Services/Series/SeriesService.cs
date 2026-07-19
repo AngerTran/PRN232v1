@@ -1746,17 +1746,19 @@ public class SeriesService
   }
 
   /// <summary>
-  /// Chương đã gắn lịch XB nhưng còn completed → chuyển published (+ trang theo chương).
+  /// Chương đã gắn lịch XB và ngày XB đã tới nhưng còn completed → chuyển published.
   /// </summary>
   private async Task PromoteScheduledChaptersToPublishedAsync(
     Guid seriesId,
     CancellationToken cancellationToken)
   {
+    var today = DateOnly.FromDateTime(DateTime.UtcNow);
     var toPromote = await _unitOfWork.Context.Chapters
       .Where(c =>
         c.SeriesId == seriesId
         && c.Status == ChapterStatus.Completed
-        && _unitOfWork.Context.PublishingSchedules.Any(ps => ps.ChapterId == c.Id))
+        && _unitOfWork.Context.PublishingSchedules.Any(ps =>
+          ps.ChapterId == c.Id && ps.PublishDate <= today))
       .ToListAsync(cancellationToken);
 
     if (toPromote.Count == 0)

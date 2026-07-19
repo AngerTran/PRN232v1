@@ -102,11 +102,23 @@ function RootRedirect() {
   return <Navigate to="/mangaka/dashboard" replace />;
 }
 
-function BoardOnlyRoutes() {
+function roleHome(role: string): string {
+  if (role === 'admin') return '/admin/dashboard';
+  if (role === 'assistant') return '/assistant/dashboard';
+  if (role === 'editor') return '/editor/dashboard';
+  if (role === 'board') return '/board/dashboard';
+  return '/mangaka/dashboard';
+}
+
+function RoleOnlyRoutes({ allow }: { allow: Array<'mangaka' | 'assistant' | 'editor' | 'board' | 'admin'> }) {
   const user = getStoredUser();
   if (!user) return <Navigate to="/login" replace />;
-  if (user.role !== 'board') return <Navigate to={`/${user.role}/dashboard`} replace />;
+  if (!allow.includes(user.role)) return <Navigate to={roleHome(user.role)} replace />;
   return <Outlet />;
+}
+
+function BoardOnlyRoutes() {
+  return <RoleOnlyRoutes allow={['board']} />;
 }
 
 export const router = createBrowserRouter([
@@ -130,71 +142,77 @@ export const router = createBrowserRouter([
       { path: '/payment-return', element: <PaymentReturnPage /> },
 
       // Mangaka
-      { path: '/mangaka/dashboard', element: <DashboardPage /> },
-
-      // Series
-      { path: '/mangaka/series', element: <SeriesListPage /> },
-      { path: '/mangaka/series/create', element: <CreateSeriesPage /> },
-      { path: '/mangaka/series/:seriesId/edit', element: <EditSeriesPage /> },
-      { path: '/mangaka/series/:seriesId', element: <SeriesDetailPage /> },
-      { path: '/mangaka/series/:seriesId/read', element: <SeriesReaderPage /> },
-      { path: '/mangaka/series/:seriesId/chapters', element: <ChapterListPage /> },
-      { path: '/mangaka/series/:seriesId/chapters/create', element: <CreateChapterPage /> },
-      { path: '/mangaka/series/:seriesId/ranking', element: <SeriesRankingPage /> },
-
-      // Chapters overview (sidebar link)
-      { path: '/mangaka/chapters', element: <ChaptersOverviewPage /> },
-
-      // Chapter detail
-      { path: '/mangaka/chapters/:chapterId', element: <ChapterDetailPage /> },
-
-      // Workspace
-      { path: '/mangaka/pages/:pageId/workspace', element: <WorkspacePage /> },
-
-      // Tasks
-      { path: '/mangaka/tasks', element: <TaskManagementPage /> },
-      { path: '/mangaka/tasks/:taskId/review', element: <TaskReviewPage /> },
-      { path: '/mangaka/assistants', element: <AssistantsPage /> },
-
-      // Series submission history
-      { path: '/mangaka/submissions', element: <SubmissionHistoryPage /> },
-
-      // Ranking overview (sidebar link)
-      { path: '/mangaka/ranking', element: <RankingOverviewPage /> },
+      {
+        element: <RoleOnlyRoutes allow={['mangaka']} />,
+        children: [
+          { path: '/mangaka/dashboard', element: <DashboardPage /> },
+          { path: '/mangaka/series', element: <SeriesListPage /> },
+          { path: '/mangaka/series/create', element: <CreateSeriesPage /> },
+          { path: '/mangaka/series/:seriesId/edit', element: <EditSeriesPage /> },
+          { path: '/mangaka/series/:seriesId', element: <SeriesDetailPage /> },
+          { path: '/mangaka/series/:seriesId/read', element: <SeriesReaderPage /> },
+          { path: '/mangaka/series/:seriesId/chapters', element: <ChapterListPage /> },
+          { path: '/mangaka/series/:seriesId/chapters/create', element: <CreateChapterPage /> },
+          { path: '/mangaka/series/:seriesId/ranking', element: <SeriesRankingPage /> },
+          { path: '/mangaka/chapters', element: <ChaptersOverviewPage /> },
+          { path: '/mangaka/chapters/:chapterId', element: <ChapterDetailPage /> },
+          { path: '/mangaka/pages/:pageId/workspace', element: <WorkspacePage /> },
+          { path: '/mangaka/tasks', element: <TaskManagementPage /> },
+          { path: '/mangaka/tasks/:taskId/review', element: <TaskReviewPage /> },
+          { path: '/mangaka/assistants', element: <AssistantsPage /> },
+          { path: '/mangaka/submissions', element: <SubmissionHistoryPage /> },
+          { path: '/mangaka/ranking', element: <RankingOverviewPage /> },
+        ],
+      },
 
       // Assistant
-      { path: '/assistant/dashboard', element: <AssistantDashboardPage /> },
-      { path: '/assistant/tasks', element: <MyTasksPage /> },
-      { path: '/assistant/tasks/:taskId', element: <TaskDetailPage /> },
-      { path: '/assistant/tasks/:taskId/submit', element: <SubmitResultPage /> },
-      { path: '/assistant/revisions', element: <RevisionTasksPage /> },
-      { path: '/assistant/approved', element: <ApprovedTasksPage /> },
-      { path: '/assistant/income', element: <IncomePage /> },
-      { path: '/assistant/calendar', element: <WorkCalendarPage /> },
-      { path: '/assistant/invitations', element: <StudioInvitationsPage /> },
+      {
+        element: <RoleOnlyRoutes allow={['assistant']} />,
+        children: [
+          { path: '/assistant/dashboard', element: <AssistantDashboardPage /> },
+          { path: '/assistant/tasks', element: <MyTasksPage /> },
+          { path: '/assistant/tasks/:taskId', element: <TaskDetailPage /> },
+          { path: '/assistant/tasks/:taskId/submit', element: <SubmitResultPage /> },
+          { path: '/assistant/revisions', element: <RevisionTasksPage /> },
+          { path: '/assistant/approved', element: <ApprovedTasksPage /> },
+          { path: '/assistant/income', element: <IncomePage /> },
+          { path: '/assistant/calendar', element: <WorkCalendarPage /> },
+          { path: '/assistant/invitations', element: <StudioInvitationsPage /> },
+        ],
+      },
 
       // Editor
-      { path: '/editor/dashboard', element: <EditorDashboardPage /> },
-      { path: '/editor/series', element: <AssignedSeriesPage /> },
-      { path: '/editor/studio', element: <EditorStudioPage /> },
-      { path: '/editor/series/:seriesId', element: <SeriesDetailPage /> },
-      { path: '/editor/reviews', element: <ChapterReviewsPage /> },
-      { path: '/editor/chapters/:chapterId/review', element: <ChapterReviewPage /> },
-      { path: '/editor/ranking-watch', element: <RankingWatchPage /> },
-      { path: '/editor/series-defense', element: <SeriesDefensePage /> },
+      {
+        element: <RoleOnlyRoutes allow={['editor']} />,
+        children: [
+          { path: '/editor/dashboard', element: <EditorDashboardPage /> },
+          { path: '/editor/series', element: <AssignedSeriesPage /> },
+          { path: '/editor/studio', element: <EditorStudioPage /> },
+          { path: '/editor/series/:seriesId', element: <SeriesDetailPage /> },
+          { path: '/editor/reviews', element: <ChapterReviewsPage /> },
+          { path: '/editor/chapters/:chapterId/review', element: <ChapterReviewPage /> },
+          { path: '/editor/ranking-watch', element: <RankingWatchPage /> },
+          { path: '/editor/series-defense', element: <SeriesDefensePage /> },
+        ],
+      },
 
       // Admin
-      { path: '/admin/dashboard', element: <AdminDashboardPage /> },
-      { path: '/admin/users', element: <UserManagementPage /> },
-      { path: '/admin/users/create', element: <CreateUserPage /> },
-      { path: '/admin/users/:userId', element: <UserDetailPage /> },
-      { path: '/admin/users/:userId/edit', element: <EditUserPage /> },
-      { path: '/admin/series', element: <AdminSeriesPage /> },
-      { path: '/admin/roles', element: <RoleManagementPage /> },
-      { path: '/admin/activity', element: <SystemActivityPage /> },
-      { path: '/admin/payroll', element: <AdminPayrollPage /> },
-      { path: '/admin/task-pricing', element: <AdminTaskPricingPage /> },
-      { path: '/admin/settings', element: <AdminSettingsPage /> },
+      {
+        element: <RoleOnlyRoutes allow={['admin']} />,
+        children: [
+          { path: '/admin/dashboard', element: <AdminDashboardPage /> },
+          { path: '/admin/users', element: <UserManagementPage /> },
+          { path: '/admin/users/create', element: <CreateUserPage /> },
+          { path: '/admin/users/:userId', element: <UserDetailPage /> },
+          { path: '/admin/users/:userId/edit', element: <EditUserPage /> },
+          { path: '/admin/series', element: <AdminSeriesPage /> },
+          { path: '/admin/roles', element: <RoleManagementPage /> },
+          { path: '/admin/activity', element: <SystemActivityPage /> },
+          { path: '/admin/payroll', element: <AdminPayrollPage /> },
+          { path: '/admin/task-pricing', element: <AdminTaskPricingPage /> },
+          { path: '/admin/settings', element: <AdminSettingsPage /> },
+        ],
+      },
 
       // Board
       {

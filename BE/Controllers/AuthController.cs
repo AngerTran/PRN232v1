@@ -109,6 +109,21 @@ public class AuthController : ControllerBase
         return NoContent();
     }
 
+    [HttpPost("forgot-password")]
+    [AllowAnonymous]
+    [SwaggerOperation(
+        Summary = "Request password reset email",
+        Description = "Asks Supabase Auth to email a password recovery link. Always returns 204 when the request is accepted.")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(typeof(object), StatusCodes.Status503ServiceUnavailable)]
+    public async Task<IActionResult> ForgotPassword(
+        [FromBody] ForgotPasswordRequest request,
+        CancellationToken cancellationToken)
+    {
+        await _authService.RequestPasswordResetAsync(request.Email, cancellationToken);
+        return NoContent();
+    }
+
     [HttpPost("logout")]
     [Authorize]
     [SwaggerOperation(

@@ -16,12 +16,12 @@ flowchart LR
         A[Tạo series draft]
         B[Nộp duyệt]
         C[Sản xuất chapter/page]
-        D[Giao task + thanh toán]
+        D[Giao task; Admin payroll]
     end
     subgraph Board
-        E[Vote duyệt series]
-        F[Nhập ranking độc giả]
-        G[Lịch xuất bản]
+        E[3 board được gán vote]
+        F[Nhập ranking theo kỳ XB]
+        G[Lead lên lịch xuất bản]
         H[Quyết định danger zone]
     end
     subgraph Editor
@@ -61,8 +61,8 @@ flowchart LR
 
 - Mangaka chỉ **sản xuất chapter** (số > 0) khi series đã `approved`, `publishing` hoặc `hiatus`.
 - **Bản thảo đề xuất** (chapter 0) chỉ upload khi series còn `draft`.
-- Board chỉ **lên lịch xuất bản** khi series ở `completed`.
-
+- Board **Lead của series** mới **lên lịch xuất bản** (admin bypass được).
+- Ngày XB tương lai: chapter giữ/chuyển `completed`; tới ngày mới `published`.
 ---
 
 ## 1. Mangaka (Tác giả)
@@ -86,7 +86,7 @@ flowchart LR
 | Quản lý team | Mời assistant / editor | `/mangaka/assistants`, `/mangaka/editors` | `POST /api/profiles/assistants/invite`, `POST /api/series/{id}/editor-invitations` |
 | Giao việc | Tạo task trên page, gán assistant, đặt giá | `/mangaka/tasks` | `POST /api/tasks` |
 | Review bài nộp | Duyệt / từ chối submission | `/mangaka/tasks/{id}/review` | `PATCH /api/submissions/{id}` |
-| Thanh toán | Task approved → trả tiền assistant qua VNPay | Workspace / TaskList | `POST /api/tasks/{id}/payment` |
+| Thanh toán | Theo dõi thu nhập assistant (chi trả do Admin payroll) | Workspace / TaskList | earnings / payroll |
 | Theo dõi | Xếp hạng, lịch sử nộp | `/mangaka/ranking`, `/mangaka/submissions` | `GET /api/series/ranking` |
 
 ### Luồng duyệt series (mangaka)
@@ -95,7 +95,8 @@ flowchart LR
 Tạo series (draft)
   → Upload chapter 0 + bản thảo
   → Nộp duyệt (pending_review)
-  → Chờ board vote (≥3 phiếu)
+  → Hệ thống gán cố định 3 board (1 Lead ít việc + 2 board thường)
+  → Chỉ 3 board đó vote (≥3 phiếu → quyết định)
   → approved → Bắt đầu sản xuất chapter
 ```
 
@@ -124,7 +125,7 @@ Tạo series (draft)
 | Thu nhập | Xem earnings | `/assistant/income` | `GET /api/submissions/earnings` |
 | Lịch | Deadline task | `/assistant/calendar` | `GET /api/tasks` |
 
-**Lưu ý:** Assistant **không** tự tạo thanh toán — mangaka/editor/admin mới initiate VNPay.
+**Lưu ý:** Assistant **không** tự tạo thanh toán. Chi trả theo **Admin payroll** (ngày 5 hàng tháng), không còn VNPay trên FE.
 
 ---
 
@@ -167,24 +168,31 @@ Tạo series (draft)
 
 | Luồng | Hoạt động | Trang FE | API BE |
 |-------|-----------|----------|--------|
-| Duyệt series mới | Vote approve/reject | `/board/submissions`, `/board/submissions/{id}` | `POST /api/board/votes` |
-| Quorum | **≥ 3 phiếu board** → tự quyết định | — | `BoardService.TryAutoUpdateSeriesStatusAsync` |
-| Series đã duyệt | Xem approved / publishing | `/board/approved-series` | `GET /api/series` |
-| Nhập vote độc giả | Ranking (rank, vote count, popularity) | `/board/vote-input` | `POST /api/rankings` |
-| Bảng xếp hạng | Leaderboard | `/board/rankings` | `GET /api/board/leaderboard` |
-| Lịch xuất bản | Lên lịch khi series `completed` | `/board/publishing-schedule` | `POST /api/publishing-schedules` |
+| Duyệt series mới | Vote approve/reject (chỉ 3 board được gán) | `/board/submissions`, `/board/submissions/{id}` | `POST /api/board/votes` |
+| Quorum | **≥ 3 phiếu** từ nhóm được gán → tự quyết định | — | `BoardService.TryAutoUpdateSeriesStatusAsync` |
+| Series đã duyệt / đã nhận | Xem approved / publishing | `/board/approved-series` | `GET /api/series` |
+| Nhập vote độc giả | Vote + popularity theo **kỳ XB** (từ ngày publish) | `/board/vote-input` | `GET/POST /api/rankings…` |
+| Bảng xếp hạng | Sort vote → popularity; hạng cạnh tranh (tie = cùng hạng) | `/board/rankings` | `GET /api/board/leaderboard` |
+| Lịch xuất bản | Lead series lên lịch; ngày tương lai → chapter `completed`, tới ngày → `published` | `/board/publishing-schedule` | `POST /api/publishing-schedules` |
 | Danger zone | Rank thấp → continue / monthly / hiatus / cancel | `/board/series-decisions` | `POST /api/board/danger-series/{id}/decision` |
-| Báo cáo | Tổng hợp vote, leaderboard | `/board/reports` | `GET /api/board/votes`, leaderboard |
+| Báo cáo | Pending / approved / cancelled từ series APIs | `/board/reports` | pending + visible + approved series |
 
 ### Luồng vote duyệt series
 
 ```
 Mangaka gửi pending_review
-  → Mỗi board member: POST /api/board/votes { decision: approve|reject }
-  → Khi ≥ 3 board đã vote:
+  → Auto-gán 3 board: 1 Board Lead (ít việc nhất) + 2 board thường (ít việc nhất)
+  → Chỉ 3 người đó: POST /api/board/votes { decision: approve|reject }
+  → Khi ≥ 3 phiếu:
        approve > reject  →  approved (Series Đã Duyệt)
        reject ≥ approve  →  cancelled (Từ chối)
+  → Board Lead của series phụ trách lên lịch xuất bản sau khi sản xuất xong
 ```
+
+### Kỳ xếp hạng (issue)
+
+- **Issue/kỳ** encode từ **ngày xuất bản** + tần suất (weekly ISO / monthly), không phải số chapter.
+- Nhập vote: không nhập hạng thủ công — hệ thống xếp theo vote rồi popularity.
 
 ---
 
@@ -207,7 +215,8 @@ Mangaka gửi pending_review
 | Quản lý user | CRUD, kích hoạt/vô hiệu | `/admin/users` | `GET/PUT/DELETE /api/profiles` |
 | Vai trò | Phân role | `/admin/roles` | `PUT /api/profiles/{id}` |
 | Activity log | Audit hành động | `/admin/activity` | `GET /api/activity-logs` |
-| Cài đặt | Cấu hình admin | `/admin/settings` | — |
+| Cài đặt | Gán / gỡ **Board Lead** (chính sách khác chưa có API) | `/admin/settings` | Board Lead APIs |
+| Payroll | Chi trả assistant theo tháng (ngày 5) | `/admin/payroll` | `GET/POST /api/payroll…` |
 
 ---
 
@@ -221,7 +230,7 @@ stateDiagram-v2
     submitted --> approved: Mangaka duyệt
     submitted --> rejected: Mangaka từ chối
     rejected --> in_progress: Assistant sửa lại
-    approved --> paid: Mangaka thanh toán VNPay
+    approved --> paid: Admin đánh dấu payroll đã trả
 ```
 
 | Trạng thái task | Ai thao tác |
@@ -230,24 +239,22 @@ stateDiagram-v2
 | `in_progress` | Assistant bắt đầu làm |
 | `submitted` | Assistant nộp bài |
 | `approved` / `rejected` | Mangaka review submission |
-| `paid` | Mangaka thanh toán VNPay (sau approved) |
+| `paid` | Admin đánh dấu đã chi trong payroll tháng |
 
 **Loại task:** `background`, `shading`, `cleanup`, `speech_bubble`, `effects`, `lineart`, `other`
 
 ---
 
-## Luồng thanh toán VNPay
+## Luồng thanh toán (Admin payroll)
 
 ```
-Mangaka/Editor (người giao task) hoặc Admin
-  → POST /api/tasks/{id}/payment
-  → Redirect VNPay sandbox
-  → GET /api/tasks/payment/return (callback)
-  → POST /api/tasks/payment/ipn (IPN)
-  → task.payment_status = paid
+Task approved (có giá)
+  → Cộng vào bảng lương assistant theo tháng
+  → Admin mở /admin/payroll (ngày chi: ngày 5)
+  → Đánh dấu đã trả → task.payment_status = paid
 ```
 
-**Điều kiện:** Task phải `approved`, chưa `paid`, có `price` > 0.
+**Lưu ý:** Endpoint VNPay cũ có thể còn trên BE nhưng FE không còn luồng thanh toán từng task; `/payment-return` chỉ trang giải thích.
 
 ---
 
@@ -257,11 +264,12 @@ Mangaka/Editor (người giao task) hoặc Admin
 |-----------|----------|--------|
 | Đăng nhập | `/login` | `POST /api/auth/login` |
 | Đăng ký | `/register` | `POST /api/auth/register` |
+| Quên mật khẩu | `/forgot-password` | `POST /api/auth/forgot-password` |
 | Google OAuth | `/auth/google/callback` | `GET /api/auth/google/url` |
 | Thông báo | `/notifications` | `GET /api/notifications` |
 | Hồ sơ | `/profile` | `GET/PUT /api/profiles/me` |
-| Cài đặt | `/settings` | — |
-| Payment return | `/payment-return` | Callback từ VNPay |
+| Cài đặt | `/settings` | Preview UI — chưa sync server |
+| Payment return | `/payment-return` | Trang giải thích (legacy VNPay) |
 
 ---
 
@@ -269,11 +277,11 @@ Mangaka/Editor (người giao task) hoặc Admin
 
 | Role | Trọng tâm |
 |------|-----------|
-| **Mangaka** | Tạo truyện → nộp duyệt → sản xuất → giao task → review → trả tiền |
-| **Assistant** | Nhận việc → làm → nộp → sửa nếu reject → nhận tiền |
+| **Mangaka** | Tạo truyện → nộp duyệt → sản xuất → giao task → review |
+| **Assistant** | Nhận việc → làm → nộp → sửa nếu reject → nhận lương (payroll) |
 | **Editor** | Nhận series → review chapter → annotation → hoàn thành series |
-| **Board** | Vote duyệt truyện (3 phiếu) → nhập ranking → lịch xuất bản → xử lý at-risk |
-| **Admin** | User, role, audit log, override hệ thống |
+| **Board** | 3 board được gán vote duyệt → nhập ranking theo kỳ → Lead lên lịch XB → at-risk |
+| **Admin** | User, role, Board Lead, payroll, audit log |
 
 ---
 
@@ -293,4 +301,4 @@ Chạy seed: `scripts/supabase-seed-sample-data.sql` trong Supabase SQL Editor.
 
 ---
 
-*Cập nhật: quorum board = 3 phiếu (`BoardService.MinimumBoardVotesForDecision`).*
+*Cập nhật 2026-07-19: auto-gán 3 board (Lead + 2), kỳ ranking từ ngày XB, lịch publish gating, payroll Admin, quên mật khẩu API.*

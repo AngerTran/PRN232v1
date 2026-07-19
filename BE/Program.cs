@@ -45,10 +45,38 @@ builder.Services.AddControllers();
 builder.Services.AddCors(options =>
 {
     options.AddPolicy("Frontend", policy =>
+    {
+        var origins = builder.Configuration.GetSection("Cors:AllowedOrigins").Get<string[]>()
+            ?? Array.Empty<string>();
+        origins = origins
+            .Where(o => !string.IsNullOrWhiteSpace(o))
+            .Select(o => o.Trim().TrimEnd('/'))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+
+        if (origins.Length == 0)
+        {
+            // Fail closed in non-dev; allow local Vite defaults in Development only.
+            if (builder.Environment.IsDevelopment())
+            {
+                origins =
+                [
+                    "http://localhost:5173",
+                    "http://127.0.0.1:5173",
+                ];
+            }
+            else
+            {
+                throw new InvalidOperationException(
+                    "Cors:AllowedOrigins must be configured for non-Development environments.");
+            }
+        }
+
         policy
-            .AllowAnyOrigin()
+            .WithOrigins(origins)
             .AllowAnyHeader()
-            .AllowAnyMethod());
+            .AllowAnyMethod();
+    });
 });
 builder.Services.AddRepositoriesAndServices();
 builder.Services.AddAppAuthentication(builder.Configuration);

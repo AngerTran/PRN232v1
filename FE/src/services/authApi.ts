@@ -141,6 +141,15 @@ export async function registerWithApi(input: RegisterInput): Promise<{ user: Use
   return { user: null, needsEmailConfirm: true };
 }
 
+/** Gửi email đặt lại mật khẩu (Supabase recover). */
+export async function requestPasswordReset(email: string): Promise<void> {
+  await apiRequest<void>('/api/auth/forgot-password', {
+    auth: false,
+    method: 'POST',
+    body: JSON.stringify({ email: email.trim() }),
+  });
+}
+
 export async function getMe(): Promise<User> {
   const profile = await apiRequest<ApiProfile>('/api/auth/me');
   return mapProfileToUser(profile);

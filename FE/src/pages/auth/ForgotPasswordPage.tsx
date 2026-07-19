@@ -2,16 +2,26 @@ import { useState, type FormEvent } from 'react';
 import { Link } from 'react-router';
 import { PenTool, Mail, ArrowLeft } from 'lucide-react';
 import Button from '../../components/ui/Button';
+import { requestPasswordReset } from '../../services/authApi';
 
 export default function ForgotPasswordPage() {
   const [email, setEmail] = useState('');
   const [loading, setLoading] = useState(false);
   const [sent, setSent] = useState(false);
+  const [error, setError] = useState('');
 
-  const handleSubmit = (e: FormEvent) => {
+  const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
     setLoading(true);
-    setTimeout(() => { setLoading(false); setSent(true); }, 900);
+    setError('');
+    try {
+      await requestPasswordReset(email);
+      setSent(true);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Không thể gửi email đặt lại mật khẩu.');
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -21,7 +31,7 @@ export default function ForgotPasswordPage() {
           <div className="w-8 h-8 rounded-lg bg-primary flex items-center justify-center">
             <PenTool size={16} className="text-white" />
           </div>
-          <span className="font-bold text-lg">InkFlow</span>
+          <span className="font-bold text-lg">MangaFlow</span>
         </div>
 
         {sent ? (
@@ -31,7 +41,8 @@ export default function ForgotPasswordPage() {
             </div>
             <h2 className="font-bold text-xl mb-2">Kiểm tra email của bạn</h2>
             <p className="text-muted-foreground text-sm mb-6">
-              Chúng tôi đã gửi liên kết đặt lại mật khẩu đến <strong>{email}</strong>.
+              Nếu <strong>{email}</strong> có trong hệ thống, chúng tôi đã gửi liên kết đặt lại mật khẩu.
+              Kiểm tra cả hộp thư rác.
             </p>
             <Link to="/login" className="text-primary font-semibold hover:underline text-sm flex items-center justify-center gap-1">
               <ArrowLeft size={14} /> Quay lại Đăng nhập
@@ -41,17 +52,20 @@ export default function ForgotPasswordPage() {
           <>
             <h1 className="text-2xl font-bold mb-1">Quên mật khẩu?</h1>
             <p className="text-muted-foreground text-sm mb-8">
-              Nhập email và chúng tôi sẽ gửi liên kết đặt lại mật khẩu.
+              Nhập email và chúng tôi sẽ gửi liên kết đặt lại mật khẩu qua Supabase.
             </p>
-            <form onSubmit={handleSubmit} className="space-y-4">
+            <form onSubmit={e => void handleSubmit(e)} className="space-y-4">
               <div>
                 <label className="block text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-1.5">Email</label>
                 <input
                   type="email" value={email} onChange={e => setEmail(e.target.value)} required
-                  placeholder="hiroshi.tanaka@inkflow.jp"
+                  placeholder="you@example.com"
                   className="w-full px-4 py-2.5 text-sm bg-card border border-border rounded-xl focus:outline-none focus:ring-2 focus:ring-ring/30 focus:border-primary/50 transition-colors"
                 />
               </div>
+              {error && (
+                <p className="text-sm text-destructive">{error}</p>
+              )}
               <Button type="submit" variant="primary" size="lg" loading={loading} className="w-full">
                 Gửi liên kết đặt lại
               </Button>

@@ -639,6 +639,9 @@ export default function ScheduleSeriesDetailPage() {
                   required
                   className="bg-background"
                 />
+                <p className="mt-1 text-[11px] text-muted-foreground">
+                  Ngày hôm nay → chương Published ngay. Ngày tương lai → đã lên lịch, Published khi tới ngày (khi mở danh sách chương).
+                </p>
               </div>
               <div>
                 <FieldLabel>Loại xuất bản</FieldLabel>

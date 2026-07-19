@@ -1,9 +1,12 @@
 # FE ↔ BE Integration Plan
 
+> **Lịch sử (2026-06-06).** Nhiều hạng mục mock đã wire xong (board reports, forgot-password, role guards, payroll thay VNPay FE, settings honesty…).  
+> Nguồn mô tả luồng hiện tại: [`ROLE-WORKFLOWS.md`](./ROLE-WORKFLOWS.md). Không dùng bảng “mock 100%” bên dưới làm checklist triển khai mới.
+
 Tài liệu đối chiếu trang FE chưa có API, API BE chưa có FE, và kế hoạch liên kết theo phase.
 
-**Cập nhật:** 2026-06-06  
-**Phạm vi:** 57 route FE · ~92 endpoint BE · 9 FE service modules
+**Cập nhật gốc:** 2026-06-06 · **Banner:** 2026-07-19  
+**Phạm vi (lúc viết):** 57 route FE · ~92 endpoint BE · 9 FE service modules
 
 ---
 

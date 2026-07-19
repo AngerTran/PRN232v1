@@ -153,13 +153,10 @@ public class PublishingScheduleService
             series.UpdatedAt = DateTime.UtcNow;
         }
 
-        // Chương gắn lịch → đánh dấu đã xuất bản / khóa chỉnh sửa phía mangaka.
-        if (chapter is not null
-            && chapter.Status is ChapterStatus.Completed or ChapterStatus.Reviewing or ChapterStatus.InProgress)
+        // Chỉ Published khi ngày XB đã tới; ngày tương lai giữ Completed (đã lên lịch).
+        if (chapter is not null)
         {
-            chapter.Status = ChapterStatus.Published;
-            chapter.UpdatedAt = DateTime.UtcNow;
-            await MarkChapterPagesAsync(chapter.Id, PageStatus.Published, cancellationToken);
+            await ApplyChapterPublishStateAsync(chapter, request.PublishDate, cancellationToken);
         }
 
         await _unitOfWork.SaveChangesAsync(cancellationToken);
@@ -258,13 +255,6 @@ public class PublishingScheduleService
                 cancellationToken);
             schedule.ChapterId = chapter.Id;
             schedule.Chapter = chapter;
-
-            if (chapter.Status is ChapterStatus.Completed or ChapterStatus.Reviewing or ChapterStatus.InProgress)
-            {
-                chapter.Status = ChapterStatus.Published;
-                chapter.UpdatedAt = DateTime.UtcNow;
-                await MarkChapterPagesAsync(chapter.Id, PageStatus.Published, cancellationToken);
-            }
         }
 
         if (request.Notes is not null)
@@ -273,6 +263,11 @@ public class PublishingScheduleService
         }
 
         schedule.IssueNumber = PublishingIssueNumbers.FromPublishDate(schedule.PublishDate, schedule.Frequency);
+
+        if (schedule.Chapter is not null)
+        {
+            await ApplyChapterPublishStateAsync(schedule.Chapter, schedule.PublishDate, cancellationToken);
+        }
 
         Repository.Update(schedule);
 
@@ -455,6 +450,52 @@ public class PublishingScheduleService
         if (publishDate < today)
         {
             throw new ArgumentException("Không thể chọn ngày phát hành trong quá khứ.");
+        }
+    }
+
+    /// <summary>
+    /// Ngày XB đã tới → Published; còn tương lai → giữ/đưa về Completed (đã lên lịch, chưa XB).
+    /// </summary>
+    private async Task ApplyChapterPublishStateAsync(
+        Chapter chapter,
+        DateOnly publishDate,
+        CancellationToken cancellationToken)
+    {
+        var today = DateOnly.FromDateTime(DateTime.UtcNow);
+        var due = publishDate <= today;
+
+        if (due)
+        {
+            if (chapter.Status is ChapterStatus.Completed
+                or ChapterStatus.Reviewing
+                or ChapterStatus.InProgress
+                or ChapterStatus.Published)
+            {
+                if (chapter.Status != ChapterStatus.Published)
+                {
+                    chapter.Status = ChapterStatus.Published;
+                    chapter.UpdatedAt = DateTime.UtcNow;
+                }
+
+                await MarkChapterPagesAsync(chapter.Id, PageStatus.Published, cancellationToken);
+            }
+
+            return;
+        }
+
+        // Ngày XB tương lai: không Published sớm.
+        if (chapter.Status is ChapterStatus.Published
+            or ChapterStatus.Reviewing
+            or ChapterStatus.InProgress
+            or ChapterStatus.Completed)
+        {
+            if (chapter.Status != ChapterStatus.Completed)
+            {
+                chapter.Status = ChapterStatus.Completed;
+                chapter.UpdatedAt = DateTime.UtcNow;
+            }
+
+            await MarkChapterPagesAsync(chapter.Id, PageStatus.Approved, cancellationToken);
         }
     }
 

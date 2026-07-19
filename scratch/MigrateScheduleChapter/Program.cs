@@ -1,7 +1,17 @@
 using Npgsql;
 
-var connStr =
-    "Host=aws-1-ap-southeast-1.pooler.supabase.com;Port=5432;Database=postgres;Username=postgres.icoplbjqykxtpguxmcbf;Password=JbWQHvXhiePhwPjk;SSL Mode=Require;Trust Server Certificate=true";
+// One-off helper — never hardcode secrets. Pass connection via env or arg:
+//   set SUPABASE_CONNECTION=Host=...;Password=...
+//   dotnet run --project scratch/MigrateScheduleChapter
+var connStr = args.ElementAtOrDefault(0)
+    ?? Environment.GetEnvironmentVariable("SUPABASE_CONNECTION");
+
+if (string.IsNullOrWhiteSpace(connStr))
+{
+    Console.Error.WriteLine(
+        "Missing connection string. Set SUPABASE_CONNECTION or pass as first argument.");
+    return 1;
+}
 
 await using var conn = new NpgsqlConnection(connStr);
 await conn.OpenAsync();
@@ -13,7 +23,7 @@ await using (var check = new NpgsqlCommand(
     if (await check.ExecuteScalarAsync() is not null)
     {
         Console.WriteLine("chapter_id already exists");
-        return;
+        return 0;
     }
 }
 
@@ -26,3 +36,4 @@ await using var cmd = new NpgsqlCommand("""
     """, conn);
 await cmd.ExecuteNonQueryAsync();
 Console.WriteLine("Migration applied: publishing_schedules.chapter_id");
+return 0;

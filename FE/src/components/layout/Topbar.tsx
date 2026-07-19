@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router';
-import { Search, Bell, ChevronDown } from 'lucide-react';
-import { clsx } from 'clsx';
+import { Bell, ChevronDown } from 'lucide-react';
 import { getStoredUser } from '../../services/authApi';
 import {
   getNotifications,
@@ -17,7 +16,6 @@ export default function Topbar({ title, breadcrumb }: TopbarProps) {
   const navigate = useNavigate();
   const location = useLocation();
   const user = getStoredUser();
-  const [searchFocused, setSearchFocused] = useState(false);
   const [unreadCount, setUnreadCount] = useState(0);
 
   const refreshUnread = useCallback(() => {
@@ -61,20 +59,6 @@ export default function Topbar({ title, breadcrumb }: TopbarProps) {
       </div>
 
       <div className="flex items-center gap-3">
-        <div className={clsx(
-          'hidden md:flex items-center gap-2 px-3 py-1.5 border rounded-lg text-sm transition-all duration-150',
-          searchFocused ? 'w-64 border-primary/50 ring-2 ring-ring/20' : 'w-48 border-border bg-card'
-        )}>
-          <Search size={14} className="text-muted-foreground shrink-0" />
-          <input
-            type="text"
-            placeholder="Tìm kiếm series, chương…"
-            onFocus={() => setSearchFocused(true)}
-            onBlur={() => setSearchFocused(false)}
-            className="bg-transparent outline-none text-sm text-foreground placeholder:text-muted-foreground flex-1 min-w-0"
-          />
-        </div>
-
         <button
           onClick={() => navigate('/notifications')}
           className="relative w-9 h-9 flex items-center justify-center rounded-xl hover:bg-muted transition-colors text-muted-foreground hover:text-foreground"
@@ -98,9 +82,9 @@ export default function Topbar({ title, breadcrumb }: TopbarProps) {
             )}
           </div>
           <span className="hidden md:block text-sm font-semibold text-foreground max-w-[120px] truncate">
-            {user?.name ?? 'Mangaka'}
+            {user?.name}
           </span>
-          <ChevronDown size={14} className="hidden md:block text-muted-foreground group-hover:text-foreground transition-colors" />
+          <ChevronDown size={14} className="hidden md:block text-muted-foreground group-hover:text-foreground" />
         </button>
       </div>
     </header>

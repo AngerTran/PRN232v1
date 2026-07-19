@@ -281,6 +281,45 @@ public class SupabaseAuthService
         throw new AuthServiceException(message, HttpStatusCode.BadRequest);
     }
 
+    /// <summary>
+    /// Gửi email đặt lại mật khẩu qua Supabase Auth (POST /auth/v1/recover).
+    /// Luôn trả về thành công với client để tránh lộ email có tồn tại hay không.
+    /// </summary>
+    public async Task RequestPasswordResetAsync(string email, CancellationToken cancellationToken = default)
+    {
+        EnsureSupabaseConfigured();
+
+        var trimmed = email.Trim();
+        var payload = new
+        {
+            email = trimmed,
+            options = BuildEmailOptions()
+        };
+
+        using var response = await PostAuthAsync("recover", payload, cancellationToken);
+        if (response.IsSuccessStatusCode)
+        {
+            _logger.LogInformation("Password recovery email accepted for {Email}.", trimmed);
+            return;
+        }
+
+        var body = await response.Content.ReadAsStringAsync(cancellationToken);
+        _logger.LogWarning(
+            "Password recovery failed for {Email}. Status: {Status}. Body: {Body}",
+            trimmed,
+            response.StatusCode,
+            body);
+
+        // Không lộ chi tiết cho client; vẫn báo lỗi hệ thống nếu cấu hình sai.
+        if (response.StatusCode is HttpStatusCode.Unauthorized or HttpStatusCode.Forbidden
+            or HttpStatusCode.ServiceUnavailable or HttpStatusCode.BadGateway)
+        {
+            throw new AuthServiceException(
+                "Không thể gửi email đặt lại mật khẩu. Kiểm tra cấu hình Supabase.",
+                HttpStatusCode.ServiceUnavailable);
+        }
+    }
+
     private async Task TrySendSignupConfirmationEmailAsync(string email, CancellationToken cancellationToken)
     {
         _logger.LogInformation("Requesting Supabase signup confirmation email for {Email}.", email);

@@ -17,7 +17,7 @@ Tài liệu bổ sung cho [ROLE-WORKFLOWS.md](./ROLE-WORKFLOWS.md), mô tả **t
 6. [Board](#6-board)
 7. [Admin](#7-admin)
 8. [Luồng Task + Submission](#8-luồng-task--submission)
-9. [Luồng thanh toán VNPay](#9-luồng-thanh-toán-vnpay)
+9. [Luồng thanh toán (Admin payroll)](#9-luồng-thanh-toán-admin-payroll)
 10. [Luồng mời Assistant / Editor](#10-luồng-mời-assistant--editor)
 11. [Luồng Auth & chung](#11-luồng-auth--chung)
 12. [Sơ đồ phụ thuộc quyền (ai làm được gì)](#12-sơ-đồ-phụ-thuộc-quyền-ai-làm-được-gì)
@@ -496,36 +496,22 @@ mindmap
 
 ---
 
-## 9. Luồng thanh toán VNPay
+## 9. Luồng thanh toán (Admin payroll)
+
+> VNPay từng-task trên FE đã gỡ. Chi trả qua `/admin/payroll` (ngày 5). Chi tiết: [ROLE-WORKFLOWS.md](./ROLE-WORKFLOWS.md#luồng-thanh-toán-admin-payroll).
 
 ```mermaid
 sequenceDiagram
-    actor Payer as Mangaka/Editor/Admin
-    participant FE as Frontend
-    participant BE as Backend
-    participant VN as VNPay Sandbox
+    participant M as Mangaka
     participant A as Assistant
+    participant AD as Admin
+    participant BE as Backend
 
-    Note over Payer,A: Điều kiện: task approved, unpaid, price > 0
-
-    Payer->>FE: Bấm Thanh toán
-    FE->>BE: POST /api/tasks/{id}/payment
-    BE->>BE: Tạo txnRef, lưu VnPayTxnRef
-    BE-->>FE: paymentUrl
-    FE->>VN: Redirect user
-
-    par Return URL
-        VN->>BE: GET /api/tasks/payment/return?vnp_...
-        BE->>BE: Verify HMAC signature
-        BE->>BE: responseCode = 00 → paid
-        BE->>FE: Redirect /payment-return?success=
-    and IPN
-        VN->>BE: POST /api/tasks/payment/ipn
-        BE->>BE: Verify + cập nhật paid
-    end
-
-    FE->>Payer: Hiển thị kết quả
-    Note over A: Assistant thấy paid trong /assistant/income
+    M->>BE: Duyệt task (approved)
+    Note over BE: Task vào kỳ payroll tháng
+    AD->>BE: GET payroll summaries
+    AD->>BE: Mark paid
+    BE-->>A: payment_status = paid
 ```
 
 ---

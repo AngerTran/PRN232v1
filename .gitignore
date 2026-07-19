@@ -42,6 +42,11 @@ out/
 .env.test.local
 .env.production.local
 
+# Local ASP.NET overrides (real connection strings / API keys)
+**/appsettings.Development.json
+**/appsettings.*.local.json
+**/secrets.json
+
 # =========================
 # IDE / Editor
 # =========================

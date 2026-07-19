@@ -18,9 +18,10 @@ public static class WorkflowNotificationPaths
 
     public static string BoardSchedule(Guid seriesId) => $"/board/publishing-schedule/{seriesId}";
 
-    public static string BoardReviewInvitations() => "/board/review-invitations";
+    public static string BoardReviewInvitations() => "/board/submissions";
 
     public static string BoardSeriesDecisions() => "/board/series-decisions";
 
-    public static string EditorInvitations() => "/editor/invitations";
+    /// <summary>Editor được Board gán trực tiếp — không còn trang lời mời riêng.</summary>
+    public static string EditorInvitations() => "/editor/series";
 }

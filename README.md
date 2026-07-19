@@ -25,7 +25,16 @@ PRN232v1/
 
 ## Chạy backend
 
-Cấu hình `BE/appsettings.json` (tham khảo `BE/appsettings.example.json` nếu cần).
+1. Copy cấu hình mẫu và điền secret **local** (file này đã gitignore):
+
+```bash
+copy BE\appsettings.example.json BE\appsettings.Development.json
+```
+
+Hoặc chỉnh `BE/appsettings.Development.json` (connection string, Supabase, Cloudinary…).  
+`BE/appsettings.json` trong repo chỉ chứa placeholder — không commit secret.
+
+2. Cấu hình `Cors:AllowedOrigins` (mặc định Vite `http://localhost:5173`).
 
 ```bash
 dotnet restore
@@ -33,7 +42,7 @@ dotnet ef database update --project DAL --startup-project BE
 dotnet run --project BE
 ```
 
-Swagger mặc định: `https://localhost:7054/swagger`
+Swagger mặc định: `https://localhost:7054/swagger` (hoặc port trong `launchSettings`).
 
 ## Chạy frontend
 
@@ -50,6 +59,11 @@ dotnet build PRN232v1.slnx
 cd FE
 npm run build
 ```
+
+## Tài liệu nghiệp vụ
+
+- Luồng theo role: [`docs/ROLE-WORKFLOWS.md`](docs/ROLE-WORKFLOWS.md)
+- Sơ đồ Mermaid: [`docs/ROLE-WORKFLOWS-DIAGRAMS.md`](docs/ROLE-WORKFLOWS-DIAGRAMS.md)
 
 Xem thêm:
 

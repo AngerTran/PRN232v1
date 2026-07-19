@@ -24,6 +24,9 @@ public record ConfirmEmailRequest(
 public record ResendConfirmEmailRequest(
     [Required, EmailAddress] string Email);
 
+public record ForgotPasswordRequest(
+    [Required, EmailAddress] string Email);
+
 public record GoogleIdTokenRequest(
     [Required] string IdToken);
 

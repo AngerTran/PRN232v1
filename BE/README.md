@@ -8,7 +8,10 @@ Controller -> Service -> UnitOfWork/Repository -> AppDbContext
 
 ## Cấu hình và chạy
 
-Tạo `BE/appsettings.json` từ `BE/appsettings.example.json` (hoặc chỉnh trực tiếp `BE/appsettings.json`) rồi cấu hình connection string và Supabase.
+Copy `BE/appsettings.example.json` → `BE/appsettings.Development.json` và điền secret local (file Development đã gitignore).  
+`BE/appsettings.json` trong repo chỉ chứa placeholder.
+
+Cấu hình `Cors:AllowedOrigins` cho origin FE (mặc định Vite localhost:5173).
 
 ```bash
 dotnet restore
