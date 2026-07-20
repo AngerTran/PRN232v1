@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router';
-import { BookOpen, FileText, ClipboardList, AlertTriangle, ArrowRight, TrendingDown } from 'lucide-react';
+import { BookOpen, AlertTriangle, ArrowRight, TrendingDown, Crown } from 'lucide-react';
 import Card, { StatCard } from '../../components/ui/Card';
 import DeadlineCard from '../../components/ui/DeadlineCard';
 import Button from '../../components/ui/Button';
@@ -40,7 +40,8 @@ export default function DashboardPage() {
         );
         if (!isActive) return;
         setSeries(list);
-        setChapters(lists.flat());
+        // Chương 0 = bản thảo đề xuất khi nộp series — không tính vào sản xuất / thống kê.
+        setChapters(lists.flat().filter(c => c.number > 0));
       })
       .catch(() => {
         if (isActive) {
@@ -85,11 +86,10 @@ export default function DashboardPage() {
   const activeSeries = series.filter(
     s => s.status === 'In Progress' || s.status === 'Approved' || s.status === 'Completed',
   );
-  // Bản nháp cũng là công việc đang làm; chỉ loại chương đã duyệt / xuất bản.
-  const activeChapters = chapters.filter(
-    c => c.status === 'Draft' || c.status === 'In Progress' || c.status === 'Review',
-  );
   const atRiskSeries = series.filter(s => s.isAtRisk);
+  const topRankedSeries = series
+    .filter(s => s.currentRank > 0)
+    .sort((a, b) => a.currentRank - b.currentRank || b.voteScore - a.voteScore)[0];
 
   const upcomingDeadlines = chapters
     .filter(c => {
@@ -151,25 +151,40 @@ export default function DashboardPage() {
         </div>
       )}
 
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         <StatCard
           label="Series của tôi"
           value={series.length}
           sub={`${activeSeries.length} đang hoạt động`}
           icon={<BookOpen size={20} />}
         />
-        <StatCard
-          label="Chương đang hoạt động"
-          value={activeChapters.length}
-          sub="Bản nháp / đang làm / xét duyệt"
-          icon={<FileText size={20} />}
-        />
-        <StatCard
-          label="Tổng số chương"
-          value={chapters.length}
-          sub="Trên tất cả series"
-          icon={<ClipboardList size={20} />}
-        />
+        <Card
+          className={topRankedSeries ? 'cursor-pointer hover:shadow-md transition-shadow' : undefined}
+          onClick={
+            topRankedSeries
+              ? () => navigate(`/mangaka/series/${topRankedSeries.id}/ranking`)
+              : undefined
+          }
+        >
+          <div className="flex items-start justify-between gap-3">
+            <div className="min-w-0 flex-1">
+              <p className="text-xs font-semibold uppercase tracking-widest text-muted-foreground mb-2">
+                Series dẫn đầu
+              </p>
+              <p className="text-2xl font-bold tracking-tight truncate">
+                {topRankedSeries?.title ?? '—'}
+              </p>
+              <p className="text-xs text-muted-foreground mt-1 truncate">
+                {topRankedSeries
+                  ? `Hạng #${topRankedSeries.currentRank} · ${topRankedSeries.voteScore.toLocaleString()} vote`
+                  : 'Chưa có dữ liệu xếp hạng'}
+              </p>
+            </div>
+            <div className="p-2.5 rounded-xl shrink-0 bg-amber-100 text-amber-700">
+              <Crown size={20} />
+            </div>
+          </div>
+        </Card>
         <StatCard
           label="Series có nguy cơ"
           value={atRiskSeries.length}
@@ -179,52 +194,96 @@ export default function DashboardPage() {
         />
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
-        <div className="lg:col-span-2 space-y-3">
-          <div className="flex items-center justify-between">
-            <h2 className="font-bold text-base">Thời hạn sắp tới</h2>
-            <button onClick={() => navigate('/mangaka/series')} className="text-xs text-primary font-semibold hover:underline flex items-center gap-1">
-              Xem tất cả <ArrowRight size={12} />
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-5 lg:gap-6">
+        {/* Trái — series đang hoạt động (lưới như Series của tôi) */}
+        <div className="lg:col-span-2 space-y-3 min-w-0">
+          <div className="flex items-center justify-between gap-2">
+            <h2 className="font-bold text-base">Series đang hoạt động</h2>
+            <button
+              type="button"
+              onClick={() => navigate('/mangaka/series')}
+              className="text-xs text-primary font-semibold hover:underline flex items-center gap-1 shrink-0"
+            >
+              Tất cả series <ArrowRight size={12} />
             </button>
           </div>
-          {upcomingDeadlines.length === 0 ? (
-            <Card><p className="text-sm text-muted-foreground text-center py-4">Không có thời hạn sắp tới.</p></Card>
+          {activeSeries.length === 0 ? (
+            <Card>
+              <p className="text-sm text-muted-foreground text-center py-8">Chưa có series đang hoạt động.</p>
+            </Card>
           ) : (
-            <div className="space-y-2">
-              {upcomingDeadlines.map(chapter => (
-                <DeadlineCard
-                  key={chapter.id}
-                  chapter={chapter}
-                  onDelete={canMangakaDeleteChapter(chapter.status) ? handleDeleteChapter : undefined}
-                />
+            <div className="grid gap-4 sm:grid-cols-2">
+              {activeSeries.map(s => (
+                <SeriesCard key={s.id} series={s} view="grid" />
               ))}
             </div>
           )}
         </div>
 
-        <div className="space-y-5">
+        {/* Phải — thời hạn gọn + xếp hạng */}
+        <div className="space-y-5 min-w-0">
           <div>
-            <div className="flex items-center justify-between mb-3">
-              <h2 className="font-bold text-base">Series đang hoạt động</h2>
+            <div className="flex items-center justify-between gap-2 mb-3">
+              <h2 className="font-bold text-base">Thời hạn sắp tới</h2>
               <button
                 type="button"
-                onClick={() => navigate('/mangaka/series')}
-                className="text-xs text-primary font-semibold hover:underline flex items-center gap-1"
+                onClick={() => navigate('/mangaka/chapters')}
+                className="text-xs text-primary font-semibold hover:underline flex items-center gap-1 shrink-0"
               >
-                Tất cả series <ArrowRight size={12} />
+                Xem tất cả <ArrowRight size={12} />
               </button>
             </div>
-            {activeSeries.length === 0 ? (
-              <Card>
-                <p className="text-sm text-muted-foreground text-center py-5">Chưa có series đang hoạt động.</p>
-              </Card>
-            ) : (
-              <div className="space-y-4">
-                {activeSeries.slice(0, 3).map(s => (
-                  <SeriesCard key={s.id} series={s} view="grid" />
-                ))}
-              </div>
-            )}
+            <Card padding="none" className="overflow-hidden">
+              {upcomingDeadlines.length === 0 ? (
+                <p className="text-sm text-muted-foreground text-center px-4 py-6">Không có thời hạn sắp tới.</p>
+              ) : (
+                <ul className="divide-y divide-border">
+                  {upcomingDeadlines.slice(0, 5).map(chapter => {
+                    const deadlineDate = chapter.deadline ? new Date(chapter.deadline) : null;
+                    const daysLeft = deadlineDate
+                      ? Math.ceil((deadlineDate.getTime() - Date.now()) / (1000 * 60 * 60 * 24))
+                      : null;
+                    const urgent = daysLeft !== null && daysLeft <= 5;
+                    const overdue = daysLeft !== null && daysLeft < 0;
+                    return (
+                      <li key={chapter.id}>
+                        <button
+                          type="button"
+                          onClick={() => navigate(`/mangaka/chapters/${chapter.id}`)}
+                          className="w-full text-left px-3.5 py-3 hover:bg-muted/40 transition-colors"
+                        >
+                          <div className="flex items-start justify-between gap-2">
+                            <div className="min-w-0">
+                              {chapter.series && (
+                                <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground truncate">
+                                  {chapter.series.title}
+                                </p>
+                              )}
+                              <p className="text-sm font-semibold truncate mt-0.5">
+                                Ch.{chapter.number} — {chapter.title}
+                              </p>
+                            </div>
+                            <span
+                              className={`text-[11px] font-bold shrink-0 ${
+                                overdue ? 'text-red-600' : urgent ? 'text-orange-600' : 'text-muted-foreground'
+                              }`}
+                            >
+                              {daysLeft === null
+                                ? '—'
+                                : overdue
+                                  ? `Trễ ${Math.abs(daysLeft)}d`
+                                  : daysLeft === 0
+                                    ? 'Hôm nay'
+                                    : `${daysLeft}d`}
+                            </span>
+                          </div>
+                        </button>
+                      </li>
+                    );
+                  })}
+                </ul>
+              )}
+            </Card>
           </div>
 
           <div>

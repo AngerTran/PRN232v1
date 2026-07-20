@@ -191,7 +191,28 @@ jobs:
           docker build . -t img-dotnet:latest
           docker build -t img-fe:latest --build-arg VITE_API_BASE_URL="$PUBLIC_API_BASE_URL" ./FE
 
-          docker rm -f cons-dotnet cons-fe cons-react || true
+          # rm -f đôi khi trả về trong khi daemon còn "removal in progress"
+          # → đợi tên container thực sự trống trước khi docker run.
+          remove_container() {
+            local name="$1"
+            docker stop "$name" >/dev/null 2>&1 || true
+            docker rm -f "$name" >/dev/null 2>&1 || true
+            local i
+            for i in $(seq 1 45); do
+              if ! docker container inspect "$name" >/dev/null 2>&1; then
+                return 0
+              fi
+              docker rm -f "$name" >/dev/null 2>&1 || true
+              sleep 1
+            done
+            echo "Timed out removing container: $name"
+            docker ps -a --filter "name=^/${name}$" || true
+            return 1
+          }
+
+          remove_container cons-dotnet
+          remove_container cons-fe
+          remove_container cons-react || true
 
           docker run -d \
             --name cons-dotnet \
