@@ -7,8 +7,6 @@ import {
   Trash2,
   Sparkles,
   Search,
-  Plus,
-  Pencil,
   CalendarDays,
 } from 'lucide-react';
 import { toast } from 'sonner';
@@ -91,7 +89,6 @@ export default function VoteInputPage() {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [selectedSeriesId, setSelectedSeriesId] = useState<string>('');
   const [seriesQuery, setSeriesQuery] = useState('');
-  const [form, setForm] = useState<RowDraft>(emptyDraft());
   const [pickerOpen, setPickerOpen] = useState(false);
   const [loading, setLoading] = useState(true);
   const [historyLoading, setHistoryLoading] = useState(true);
@@ -127,7 +124,6 @@ export default function VoteInputPage() {
       setRows(ctx.series);
       setDrafts(Object.fromEntries(ctx.series.map(row => [rowKey(row.seriesId), initDraft(row)])));
       setSelectedSeriesId('');
-      setForm(emptyDraft());
       setSeriesQuery('');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Không thể tải dữ liệu ranking.');
@@ -152,6 +148,10 @@ export default function VoteInputPage() {
     () => rows.find(r => r.seriesId === selectedSeriesId) ?? null,
     [rows, selectedSeriesId]
   );
+
+  const activeDraft = selectedSeriesId
+    ? (drafts[rowKey(selectedSeriesId)] ?? emptyDraft())
+    : emptyDraft();
 
   const filteredSeries = useMemo(() => {
     const q = seriesQuery.trim().toLowerCase();
@@ -185,47 +185,23 @@ export default function VoteInputPage() {
     const row = rows.find(r => r.seriesId === seriesId);
     if (!row) return;
     setSelectedSeriesId(seriesId);
-    setForm(drafts[rowKey(seriesId)] ?? initDraft(row));
     setSeriesQuery(row.title);
     setPickerOpen(false);
+    setError('');
     setSaved(false);
   };
 
-  const applyFormToDraft = () => {
-    if (!selectedSeriesId) {
-      setError('Chọn series trước khi thêm vào danh sách.');
-      return;
-    }
-    if (!form.voteCount.trim()) {
-      setError('Nhập số vote trước khi thêm.');
-      return;
-    }
-    const voteCount = Number(form.voteCount);
-    if (!Number.isFinite(voteCount) || voteCount < 0) {
-      setError('Số vote không hợp lệ.');
-      return;
-    }
-
+  const patchActiveDraft = (patch: Partial<RowDraft>) => {
+    if (!selectedSeriesId) return;
     setDrafts(prev => ({
       ...prev,
       [selectedSeriesId]: {
-        voteCount: form.voteCount.trim(),
-        popularityScore: form.popularityScore.trim(),
-        notes: form.notes,
+        ...(prev[selectedSeriesId] ?? emptyDraft()),
+        ...patch,
       },
     }));
+    setSaved(false);
     setError('');
-    setSaved(false);
-    toast.success(`Đã thêm «${selectedRow?.title ?? 'series'}» vào danh sách lưu.`);
-  };
-
-  const removePending = (seriesId: string) => {
-    setDrafts(prev => ({
-      ...prev,
-      [seriesId]: emptyDraft(),
-    }));
-    if (selectedSeriesId === seriesId) setForm(emptyDraft());
-    setSaved(false);
   };
 
   const handleIssueChange = async (value: string) => {
@@ -326,7 +302,7 @@ export default function VoteInputPage() {
       .filter((e): e is NonNullable<typeof e> => e != null);
 
     if (entries.length === 0) {
-      setError('Thêm ít nhất một series (có số vote) trước khi lưu.');
+      setError('Chọn series và nhập ít nhất một số vote trước khi lưu.');
       return;
     }
 
@@ -345,51 +321,49 @@ export default function VoteInputPage() {
   };
 
   return (
-    <div className="mx-auto w-full max-w-5xl space-y-5 p-5 sm:p-6">
-      <section className="overflow-hidden rounded-2xl border border-border/80 bg-card">
-        <div className="flex flex-col gap-4 p-5 sm:flex-row sm:items-center sm:justify-between sm:p-6">
-          <div className="flex min-w-0 items-start gap-3">
-            <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
-              <Vote className="h-5 w-5" />
-            </span>
-            <div>
-              <h1 className="text-xl font-bold tracking-tight">Nhập vote độc giả</h1>
-              <p className="mt-1 text-sm text-muted-foreground leading-relaxed">
-                Chọn series → nhập vote/phổ biến → thêm vào danh sách → lưu một lần.
-              </p>
-            </div>
-          </div>
-
-          <div className="space-y-1.5 shrink-0">
-            <label className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
-              Đợt xuất bản
-            </label>
-            <Select value={issueNumber != null ? String(issueNumber) : undefined} onValueChange={handleIssueChange}>
-              <SelectTrigger className="min-w-[12rem] bg-background">
-                <SelectValue placeholder="Chọn đợt" />
-              </SelectTrigger>
-              <SelectContent>
-                {issueOptions.map(n => (
-                  <SelectItem key={n} value={String(n)}>{formatPublishingIssueLabel(n)}</SelectItem>
-                ))}
-                {issueNumber != null && !issueOptions.includes(issueNumber) && (
-                  <SelectItem value={String(issueNumber)}>{formatPublishingIssueLabel(issueNumber)}</SelectItem>
-                )}
-              </SelectContent>
-            </Select>
-          </div>
-        </div>
-
-        <div className="flex flex-wrap items-center gap-x-5 gap-y-2 border-t border-border/60 bg-muted/20 px-5 py-2.5 text-xs text-muted-foreground sm:px-6">
-          <span><strong className="text-foreground">{rows.length}</strong> series</span>
-          <span><strong className="text-foreground">{scheduledCount}</strong> có lịch đợt này</span>
-          <span><strong className="text-foreground">{pendingRows.length}</strong> chờ lưu</span>
-          <span className="inline-flex items-center gap-1">
-            <Sparkles className="h-3.5 w-3.5 text-primary" />
-            Hạng tự tính sau khi lưu
+    <div className="mx-auto w-full max-w-4xl space-y-5 p-5 sm:p-6">
+      <header className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+        <div className="flex items-start gap-3 min-w-0">
+          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
+            <Vote className="h-5 w-5" />
           </span>
+          <div>
+            <h1 className="text-xl font-bold tracking-tight">Nhập vote độc giả</h1>
+            <p className="mt-1 text-sm text-muted-foreground leading-relaxed">
+              Chọn series, nhập vote — bấm lưu một lần cho cả đợt.
+            </p>
+          </div>
         </div>
-      </section>
+
+        <div className="space-y-1.5 shrink-0">
+          <label className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+            Đợt xuất bản
+          </label>
+          <Select value={issueNumber != null ? String(issueNumber) : undefined} onValueChange={handleIssueChange}>
+            <SelectTrigger className="min-w-[12rem] bg-background">
+              <SelectValue placeholder="Chọn đợt" />
+            </SelectTrigger>
+            <SelectContent>
+              {issueOptions.map(n => (
+                <SelectItem key={n} value={String(n)}>{formatPublishingIssueLabel(n)}</SelectItem>
+              ))}
+              {issueNumber != null && !issueOptions.includes(issueNumber) && (
+                <SelectItem value={String(issueNumber)}>{formatPublishingIssueLabel(issueNumber)}</SelectItem>
+              )}
+            </SelectContent>
+          </Select>
+        </div>
+      </header>
+
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted-foreground">
+        <span><strong className="text-foreground">{rows.length}</strong> series</span>
+        <span><strong className="text-foreground">{scheduledCount}</strong> có lịch đợt này</span>
+        <span><strong className="text-foreground">{pendingRows.length}</strong> đã nhập</span>
+        <span className="inline-flex items-center gap-1">
+          <Sparkles className="h-3.5 w-3.5 text-primary" />
+          Hạng tự tính sau khi lưu
+        </span>
+      </div>
 
       {error && <div className="rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700">{error}</div>}
       {saved && (
@@ -399,239 +373,201 @@ export default function VoteInputPage() {
       )}
 
       <Card className="overflow-visible border-border/80 shadow-none">
-        <CardHeader className="pb-3">
-          <CardTitle className="text-base">Nhập theo series</CardTitle>
-          <p className="text-xs text-muted-foreground">
-            Tìm và chọn series — không cần kéo cả bảng dài khi có nhiều bộ.
-          </p>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          {loading ? (
-            <p className="py-8 text-center text-sm text-muted-foreground">Đang tải…</p>
-          ) : rows.length === 0 ? (
-            <p className="py-8 text-center text-sm text-muted-foreground">
-              Chưa có series để nhập. Duyệt series và lên lịch XB trước.
-            </p>
-          ) : (
-            <>
-              <div className="space-y-1.5">
-                <label className="text-xs font-medium text-muted-foreground">Series</label>
-                <div className="relative">
-                  <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                  <Input
-                    className="pl-9"
-                    placeholder="Tìm theo tên series…"
-                    value={seriesQuery}
-                    onChange={e => {
-                      setSeriesQuery(e.target.value);
-                      setPickerOpen(true);
-                    }}
-                    onFocus={() => setPickerOpen(true)}
-                    onBlur={() => {
-                      // Delay để click item kịp chạy
-                      window.setTimeout(() => setPickerOpen(false), 150);
-                    }}
-                  />
-                  {pickerOpen && (
-                    <div className="absolute z-20 mt-1 max-h-64 w-full overflow-auto rounded-xl border border-border bg-card shadow-lg">
-                      {filteredSeries.length === 0 ? (
-                        <p className="px-3 py-4 text-center text-sm text-muted-foreground">Không tìm thấy series</p>
-                      ) : (
-                        filteredSeries.map(row => {
-                          const filled = isDraftFilled(drafts[rowKey(row.seriesId)]);
-                          return (
-                            <button
-                              key={row.seriesId}
-                              type="button"
-                              className={clsx(
-                                'flex w-full items-start gap-2 px-3 py-2.5 text-left text-sm hover:bg-muted/60',
-                                selectedSeriesId === row.seriesId && 'bg-primary/5'
-                              )}
-                              onMouseDown={e => e.preventDefault()}
-                              onClick={() => selectSeries(row.seriesId)}
-                            >
-                              <div className="min-w-0 flex-1">
-                                <p className="font-medium truncate">{row.title}</p>
-                                <p className="text-[11px] text-muted-foreground mt-0.5">
-                                  {mapApiStatusToLabel(row.status)}
-                                  {row.scheduleCountForIssue > 0
-                                    ? ` · ${row.scheduleCountForIssue} lịch kỳ này`
-                                    : ' · chưa có lịch kỳ này'}
-                                </p>
-                              </div>
-                              {filled && (
-                                <span className="shrink-0 rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-semibold text-emerald-700">
-                                  Đã nhập
-                                </span>
-                              )}
-                            </button>
-                          );
-                        })
-                      )}
-                    </div>
-                  )}
-                </div>
-                {selectedRow && (
-                  <p className="text-xs text-muted-foreground flex items-center gap-1.5 pt-0.5">
-                    {selectedRow.scheduleCountForIssue > 0 ? (
-                      <>
-                        <CalendarDays className="h-3.5 w-3.5 text-emerald-600" />
-                        Có {selectedRow.scheduleCountForIssue} lịch đúng đợt này
-                      </>
-                    ) : (
-                      'Series chưa gắn lịch đợt này — vẫn nhập vote được'
-                    )}
-                  </p>
-                )}
-              </div>
-
-              <div className="grid gap-3 sm:grid-cols-2">
-                <div className="space-y-1.5">
-                  <label className="text-xs font-medium text-muted-foreground">Vote</label>
-                  <Input
-                    type="number"
-                    min={0}
-                    placeholder="0"
-                    disabled={!selectedSeriesId}
-                    value={form.voteCount}
-                    onChange={e => setForm(prev => ({ ...prev, voteCount: e.target.value }))}
-                  />
-                </div>
-                <div className="space-y-1.5">
-                  <label className="text-xs font-medium text-muted-foreground">Phổ biến</label>
-                  <Input
-                    type="number"
-                    min={0}
-                    step={0.1}
-                    placeholder="0"
-                    disabled={!selectedSeriesId}
-                    value={form.popularityScore}
-                    onChange={e => setForm(prev => ({ ...prev, popularityScore: e.target.value }))}
-                  />
-                </div>
-              </div>
-
-              <div className="space-y-1.5">
-                <label className="text-xs font-medium text-muted-foreground">Ghi chú (tuỳ chọn)</label>
-                <Input
-                  placeholder="Nhận xét kỳ này…"
-                  disabled={!selectedSeriesId}
-                  value={form.notes}
-                  onChange={e => setForm(prev => ({ ...prev, notes: e.target.value }))}
-                />
-              </div>
-
-              <div className="flex flex-wrap gap-2">
-                <Button type="button" onClick={applyFormToDraft} disabled={!selectedSeriesId}>
-                  <Plus className="h-4 w-4 mr-1" />
-                  Thêm / cập nhật danh sách
-                </Button>
-                <Button
-                  type="button"
-                  variant="outline"
-                  disabled={!selectedSeriesId}
-                  onClick={() => {
-                    if (!selectedSeriesId) return;
-                    const row = rows.find(r => r.seriesId === selectedSeriesId);
-                    setForm(row ? initDraft(row) : emptyDraft());
-                  }}
-                >
-                  Đặt lại form
-                </Button>
-              </div>
-            </>
-          )}
-        </CardContent>
-      </Card>
-
-      <Card className="overflow-hidden border-border/80 shadow-none">
-        <CardHeader className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between pb-3">
+        <CardHeader className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between border-b border-border/60 pb-4">
           <div>
-            <CardTitle className="text-base">Danh sách chờ lưu</CardTitle>
+            <CardTitle className="text-base">Nhập kết quả vote</CardTitle>
             <p className="mt-1 text-xs text-muted-foreground">
-              {pendingRows.length === 0
-                ? 'Chưa có series nào — chọn và thêm ở form phía trên'
-                : `${pendingRows.length} series sẽ được lưu cho ${formatPublishingIssueLabel(issueNumber)}`}
+              {formatPublishingIssueLabel(issueNumber)}
+              {pendingRows.length > 0 ? ` · ${pendingRows.length} series sẵn sàng lưu` : ''}
             </p>
           </div>
           <Button
             type="button"
+            className="shrink-0"
             onClick={() => void submit()}
             disabled={saving || loading || pendingRows.length === 0}
           >
-            <Save className="h-4 w-4 mr-1" />
-            {saving ? 'Đang lưu…' : `Lưu kết quả (${pendingRows.length})`}
+            <Save className="h-4 w-4 mr-1.5" />
+            {saving ? 'Đang lưu…' : 'Lưu kết quả'}
           </Button>
         </CardHeader>
-        <CardContent>
-          {pendingRows.length === 0 ? (
-            <p className="rounded-xl border border-dashed border-border px-4 py-8 text-center text-sm text-muted-foreground">
-              Danh sách trống. Mỗi lần chọn một series, nhập vote, rồi bấm «Thêm / cập nhật danh sách».
+
+        <CardContent className="space-y-5 pt-5">
+          {loading ? (
+            <p className="py-10 text-center text-sm text-muted-foreground">Đang tải…</p>
+          ) : rows.length === 0 ? (
+            <p className="py-10 text-center text-sm text-muted-foreground">
+              Chưa có series để nhập. Duyệt series và lên lịch XB trước.
             </p>
           ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b text-left text-muted-foreground">
-                    <th className="py-2 pr-3 font-medium">Series</th>
-                    <th className="py-2 px-2 font-medium w-24 text-right">Vote</th>
-                    <th className="py-2 px-2 font-medium w-28 text-right">Phổ biến</th>
-                    <th className="py-2 px-2 font-medium">Ghi chú</th>
-                    <th className="py-2 pl-2 font-medium w-24 text-right"> </th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y">
-                  {pendingRows.map(row => {
-                    const draft = drafts[rowKey(row.seriesId)];
-                    return (
-                      <tr key={row.seriesId} className="group">
-                        <td className="py-2.5 pr-3">
-                          <p className="font-medium">{row.title}</p>
-                          <p className="text-[11px] text-muted-foreground mt-0.5">
-                            {row.scheduleCountForIssue > 0
-                              ? `${row.scheduleCountForIssue} lịch kỳ này`
-                              : 'Chưa có lịch kỳ này'}
-                          </p>
-                        </td>
-                        <td className="py-2.5 px-2 text-right font-mono font-semibold tabular-nums">
-                          {Number(draft.voteCount).toLocaleString()}
-                        </td>
-                        <td className="py-2.5 px-2 text-right font-mono tabular-nums text-muted-foreground">
-                          {(Number(draft.popularityScore) || 0).toLocaleString()}
-                        </td>
-                        <td className="py-2.5 px-2 text-muted-foreground max-w-[200px] truncate">
-                          {draft.notes.trim() || '—'}
-                        </td>
-                        <td className="py-2.5 pl-2 text-right">
-                          <div className="inline-flex gap-1">
-                            <Button
-                              type="button"
-                              size="sm"
-                              variant="ghost"
-                              className="h-8 px-2"
-                              title="Sửa"
-                              onClick={() => selectSeries(row.seriesId)}
-                            >
-                              <Pencil className="h-3.5 w-3.5" />
-                            </Button>
-                            <Button
-                              type="button"
-                              size="sm"
-                              variant="ghost"
-                              className="h-8 px-2 text-destructive hover:text-destructive"
-                              title="Bỏ khỏi danh sách"
-                              onClick={() => removePending(row.seriesId)}
-                            >
-                              <Trash2 className="h-3.5 w-3.5" />
-                            </Button>
-                          </div>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
+            <>
+              <div className="space-y-3">
+                <div className="space-y-1.5">
+                  <label className="text-xs font-medium text-muted-foreground">Series</label>
+                  <div className="relative">
+                    <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                    <Input
+                      className="pl-9 h-10"
+                      placeholder="Tìm và chọn series…"
+                      value={seriesQuery}
+                      onChange={e => {
+                        setSeriesQuery(e.target.value);
+                        setPickerOpen(true);
+                        if (selectedSeriesId) {
+                          const current = rows.find(r => r.seriesId === selectedSeriesId);
+                          if (current && e.target.value !== current.title) {
+                            setSelectedSeriesId('');
+                          }
+                        }
+                      }}
+                      onFocus={() => setPickerOpen(true)}
+                      onBlur={() => {
+                        window.setTimeout(() => setPickerOpen(false), 150);
+                      }}
+                    />
+                    {pickerOpen && (
+                      <div className="absolute z-20 mt-1.5 max-h-64 w-full overflow-auto rounded-xl border border-border bg-card shadow-lg">
+                        {filteredSeries.length === 0 ? (
+                          <p className="px-3 py-4 text-center text-sm text-muted-foreground">Không tìm thấy series</p>
+                        ) : (
+                          filteredSeries.map(row => {
+                            const filled = isDraftFilled(drafts[rowKey(row.seriesId)]);
+                            return (
+                              <button
+                                key={row.seriesId}
+                                type="button"
+                                className={clsx(
+                                  'flex w-full items-start gap-2 px-3 py-2.5 text-left text-sm hover:bg-muted/60',
+                                  selectedSeriesId === row.seriesId && 'bg-primary/5'
+                                )}
+                                onMouseDown={e => e.preventDefault()}
+                                onClick={() => selectSeries(row.seriesId)}
+                              >
+                                <div className="min-w-0 flex-1">
+                                  <p className="font-medium truncate">{row.title}</p>
+                                  <p className="text-[11px] text-muted-foreground mt-0.5">
+                                    {mapApiStatusToLabel(row.status)}
+                                    {row.scheduleCountForIssue > 0
+                                      ? ` · ${row.scheduleCountForIssue} lịch kỳ này`
+                                      : ' · chưa có lịch kỳ này'}
+                                  </p>
+                                </div>
+                                {filled && (
+                                  <span className="shrink-0 rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-semibold text-emerald-700">
+                                    Đã nhập
+                                  </span>
+                                )}
+                              </button>
+                            );
+                          })
+                        )}
+                      </div>
+                    )}
+                  </div>
+                  {selectedRow && (
+                    <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                      {selectedRow.scheduleCountForIssue > 0 ? (
+                        <>
+                          <CalendarDays className="h-3.5 w-3.5 text-emerald-600" />
+                          Có {selectedRow.scheduleCountForIssue} lịch đúng đợt này
+                        </>
+                      ) : (
+                        'Chưa gắn lịch đợt này — vẫn nhập được'
+                      )}
+                    </p>
+                  )}
+                </div>
+
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-medium text-muted-foreground">Vote</label>
+                    <Input
+                      type="number"
+                      min={0}
+                      placeholder="0"
+                      className="h-10"
+                      disabled={!selectedSeriesId}
+                      value={selectedSeriesId ? activeDraft.voteCount : ''}
+                      onChange={e => patchActiveDraft({ voteCount: e.target.value })}
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-medium text-muted-foreground">Phổ biến</label>
+                    <Input
+                      type="number"
+                      min={0}
+                      step={0.1}
+                      placeholder="0"
+                      className="h-10"
+                      disabled={!selectedSeriesId}
+                      value={selectedSeriesId ? activeDraft.popularityScore : ''}
+                      onChange={e => patchActiveDraft({ popularityScore: e.target.value })}
+                    />
+                  </div>
+                </div>
+
+                <div className="space-y-1.5">
+                  <label className="text-xs font-medium text-muted-foreground">Ghi chú</label>
+                  <Input
+                    placeholder="Nhận xét kỳ này…"
+                    className="h-10"
+                    disabled={!selectedSeriesId}
+                    value={selectedSeriesId ? activeDraft.notes : ''}
+                    onChange={e => patchActiveDraft({ notes: e.target.value })}
+                  />
+                </div>
+              </div>
+
+              <div className="border-t border-border/60 pt-4 space-y-2.5">
+                <div className="flex items-baseline justify-between gap-2">
+                  <p className="text-sm font-semibold">Sẽ lưu trong đợt này</p>
+                  <span className="text-xs text-muted-foreground">{pendingRows.length} series</span>
+                </div>
+
+                {pendingRows.length === 0 ? (
+                  <p className="rounded-xl border border-dashed border-border px-4 py-7 text-center text-sm text-muted-foreground">
+                    Chọn series và nhập vote — các dòng sẽ hiện ở đây trước khi lưu.
+                  </p>
+                ) : (
+                  <ul className="divide-y rounded-xl border border-border/80 overflow-hidden">
+                    {pendingRows.map(row => {
+                      const draft = drafts[rowKey(row.seriesId)];
+                      const active = selectedSeriesId === row.seriesId;
+                      return (
+                        <li key={row.seriesId}>
+                          <button
+                            type="button"
+                            onClick={() => selectSeries(row.seriesId)}
+                            className={clsx(
+                              'flex w-full items-center gap-3 px-3.5 py-3 text-left transition-colors hover:bg-muted/40',
+                              active && 'bg-primary/[0.06]'
+                            )}
+                          >
+                            <div className="min-w-0 flex-1">
+                              <p className="text-sm font-medium truncate">{row.title}</p>
+                              <p className="text-[11px] text-muted-foreground mt-0.5 truncate">
+                                {draft.notes.trim() || (row.scheduleCountForIssue > 0
+                                  ? `${row.scheduleCountForIssue} lịch kỳ này`
+                                  : 'Không ghi chú')}
+                              </p>
+                            </div>
+                            <div className="shrink-0 text-right">
+                              <p className="text-sm font-semibold tabular-nums">
+                                {Number(draft.voteCount).toLocaleString()}
+                                <span className="text-muted-foreground font-normal text-xs"> vote</span>
+                              </p>
+                              <p className="text-[11px] text-muted-foreground tabular-nums mt-0.5">
+                                PB {Number(draft.popularityScore) || 0}
+                              </p>
+                            </div>
+                          </button>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                )}
+              </div>
+            </>
           )}
         </CardContent>
       </Card>
