@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useNavigate } from 'react-router';
 import {
   CheckCircle,
   History,
@@ -8,6 +9,7 @@ import {
   Sparkles,
   Search,
   CalendarDays,
+  Trophy,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { usePageMeta } from '../../hooks/usePageMeta';
@@ -80,6 +82,7 @@ function isDraftFilled(draft?: RowDraft): boolean {
 
 export default function VoteInputPage() {
   usePageMeta({ title: 'Nhập Vote Độc Giả' });
+  const navigate = useNavigate();
   const confirm = useConfirm();
   const [issueNumber, setIssueNumber] = useState<number | null>(null);
   const [rows, setRows] = useState<VoteInputSeriesRow[]>([]);
@@ -321,8 +324,8 @@ export default function VoteInputPage() {
   };
 
   return (
-    <div className="mx-auto w-full max-w-4xl space-y-5 p-5 sm:p-6">
-      <header className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+    <div className="w-full min-w-0 space-y-5 p-5 sm:p-6">
+      <header className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
         <div className="flex items-start gap-3 min-w-0">
           <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
             <Vote className="h-5 w-5" />
@@ -335,34 +338,57 @@ export default function VoteInputPage() {
           </div>
         </div>
 
-        <div className="space-y-1.5 shrink-0">
-          <label className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
-            Đợt xuất bản
-          </label>
-          <Select value={issueNumber != null ? String(issueNumber) : undefined} onValueChange={handleIssueChange}>
-            <SelectTrigger className="min-w-[12rem] bg-background">
-              <SelectValue placeholder="Chọn đợt" />
-            </SelectTrigger>
-            <SelectContent>
-              {issueOptions.map(n => (
-                <SelectItem key={n} value={String(n)}>{formatPublishingIssueLabel(n)}</SelectItem>
-              ))}
-              {issueNumber != null && !issueOptions.includes(issueNumber) && (
-                <SelectItem value={String(issueNumber)}>{formatPublishingIssueLabel(issueNumber)}</SelectItem>
-              )}
-            </SelectContent>
-          </Select>
+        <div className="flex flex-wrap items-end gap-3">
+          <div className="space-y-1.5">
+            <label className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+              Đợt xuất bản
+            </label>
+            <Select value={issueNumber != null ? String(issueNumber) : undefined} onValueChange={handleIssueChange}>
+              <SelectTrigger className="min-w-[14rem] bg-background">
+                <SelectValue placeholder="Chọn đợt" />
+              </SelectTrigger>
+              <SelectContent>
+                {issueOptions.map(n => (
+                  <SelectItem key={n} value={String(n)}>{formatPublishingIssueLabel(n)}</SelectItem>
+                ))}
+                {issueNumber != null && !issueOptions.includes(issueNumber) && (
+                  <SelectItem value={String(issueNumber)}>{formatPublishingIssueLabel(issueNumber)}</SelectItem>
+                )}
+              </SelectContent>
+            </Select>
+          </div>
+          <Button type="button" variant="outline" onClick={() => navigate('/board/rankings')}>
+            <Trophy className="h-4 w-4 mr-1.5" />
+            Xem bảng xếp hạng
+          </Button>
+          <Button
+            type="button"
+            onClick={() => void submit()}
+            disabled={saving || loading || pendingRows.length === 0}
+          >
+            <Save className="h-4 w-4 mr-1.5" />
+            {saving ? 'Đang lưu…' : 'Lưu kết quả'}
+          </Button>
         </div>
       </header>
 
-      <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted-foreground">
-        <span><strong className="text-foreground">{rows.length}</strong> series</span>
-        <span><strong className="text-foreground">{scheduledCount}</strong> có lịch đợt này</span>
-        <span><strong className="text-foreground">{pendingRows.length}</strong> đã nhập</span>
-        <span className="inline-flex items-center gap-1">
-          <Sparkles className="h-3.5 w-3.5 text-primary" />
-          Hạng tự tính sau khi lưu
-        </span>
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+        <div className="rounded-xl border border-border/80 bg-card px-4 py-3">
+          <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">Series</p>
+          <p className="mt-1 text-2xl font-bold tabular-nums">{rows.length}</p>
+        </div>
+        <div className="rounded-xl border border-border/80 bg-card px-4 py-3">
+          <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">Có lịch đợt này</p>
+          <p className="mt-1 text-2xl font-bold tabular-nums">{scheduledCount}</p>
+        </div>
+        <div className="rounded-xl border border-border/80 bg-card px-4 py-3">
+          <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">Đã nhập</p>
+          <p className="mt-1 text-2xl font-bold tabular-nums text-primary">{pendingRows.length}</p>
+        </div>
+        <div className="rounded-xl border border-border/80 bg-card px-4 py-3 flex items-center gap-2">
+          <Sparkles className="h-4 w-4 text-primary shrink-0" />
+          <p className="text-xs text-muted-foreground leading-snug">Hạng tự tính sau khi lưu kết quả</p>
+        </div>
       </div>
 
       {error && <div className="rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700">{error}</div>}
@@ -373,26 +399,15 @@ export default function VoteInputPage() {
       )}
 
       <Card className="overflow-visible border-border/80 shadow-none">
-        <CardHeader className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between border-b border-border/60 pb-4">
-          <div>
-            <CardTitle className="text-base">Nhập kết quả vote</CardTitle>
-            <p className="mt-1 text-xs text-muted-foreground">
-              {formatPublishingIssueLabel(issueNumber)}
-              {pendingRows.length > 0 ? ` · ${pendingRows.length} series sẵn sàng lưu` : ''}
-            </p>
-          </div>
-          <Button
-            type="button"
-            className="shrink-0"
-            onClick={() => void submit()}
-            disabled={saving || loading || pendingRows.length === 0}
-          >
-            <Save className="h-4 w-4 mr-1.5" />
-            {saving ? 'Đang lưu…' : 'Lưu kết quả'}
-          </Button>
+        <CardHeader className="border-b border-border/60 pb-4">
+          <CardTitle className="text-base">Nhập kết quả vote</CardTitle>
+          <p className="mt-1 text-xs text-muted-foreground">
+            {formatPublishingIssueLabel(issueNumber)}
+            {pendingRows.length > 0 ? ` · ${pendingRows.length} series sẵn sàng lưu` : ''}
+          </p>
         </CardHeader>
 
-        <CardContent className="space-y-5 pt-5">
+        <CardContent className="pt-5">
           {loading ? (
             <p className="py-10 text-center text-sm text-muted-foreground">Đang tải…</p>
           ) : rows.length === 0 ? (
@@ -400,8 +415,9 @@ export default function VoteInputPage() {
               Chưa có series để nhập. Duyệt series và lên lịch XB trước.
             </p>
           ) : (
-            <>
+            <div className="grid gap-6 lg:grid-cols-2 lg:gap-8">
               <div className="space-y-3">
+                <p className="text-sm font-semibold">Chọn & nhập</p>
                 <div className="space-y-1.5">
                   <label className="text-xs font-medium text-muted-foreground">Series</label>
                   <div className="relative">
@@ -518,18 +534,18 @@ export default function VoteInputPage() {
                 </div>
               </div>
 
-              <div className="border-t border-border/60 pt-4 space-y-2.5">
+              <div className="space-y-2.5 lg:border-l lg:border-border/60 lg:pl-8">
                 <div className="flex items-baseline justify-between gap-2">
                   <p className="text-sm font-semibold">Sẽ lưu trong đợt này</p>
                   <span className="text-xs text-muted-foreground">{pendingRows.length} series</span>
                 </div>
 
                 {pendingRows.length === 0 ? (
-                  <p className="rounded-xl border border-dashed border-border px-4 py-7 text-center text-sm text-muted-foreground">
+                  <p className="rounded-xl border border-dashed border-border px-4 py-12 text-center text-sm text-muted-foreground h-full min-h-[200px] flex items-center justify-center">
                     Chọn series và nhập vote — các dòng sẽ hiện ở đây trước khi lưu.
                   </p>
                 ) : (
-                  <ul className="divide-y rounded-xl border border-border/80 overflow-hidden">
+                  <ul className="divide-y rounded-xl border border-border/80 overflow-hidden max-h-[420px] overflow-y-auto">
                     {pendingRows.map(row => {
                       const draft = drafts[rowKey(row.seriesId)];
                       const active = selectedSeriesId === row.seriesId;
@@ -567,7 +583,7 @@ export default function VoteInputPage() {
                   </ul>
                 )}
               </div>
-            </>
+            </div>
           )}
         </CardContent>
       </Card>

@@ -126,7 +126,7 @@ export default function BoardRankingPage() {
   const totalVotes = items.reduce((sum, i) => sum + i.totalVotes, 0);
 
   return (
-    <div className="w-full min-w-0 space-y-5 p-5 md:p-6 max-w-6xl">
+    <div className="w-full min-w-0 space-y-5 p-5 md:p-6">
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
           <div className="flex flex-wrap items-center gap-2">
@@ -141,12 +141,18 @@ export default function BoardRankingPage() {
             Hạng, vote và độ phổ biến theo kỳ xuất bản.
           </p>
         </div>
-        <Button variant="outline" size="sm" onClick={() => navigate('/board/vote-input')}>
-          Nhập kết quả vote
-        </Button>
+        <div className="flex flex-wrap gap-2">
+          <Button variant="outline" size="sm" onClick={() => navigate('/board/series-decisions')}>
+            <AlertTriangle className="h-4 w-4 mr-1.5" />
+            Quyết định series
+          </Button>
+          <Button size="sm" onClick={() => navigate('/board/vote-input')}>
+            Nhập kết quả vote
+          </Button>
+        </div>
       </div>
 
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+      <div className="grid grid-cols-2 gap-3 xl:grid-cols-4">
         <SummaryCard
           label="Series dẫn đầu"
           value={topSeries?.title ?? '—'}
@@ -191,14 +197,14 @@ export default function BoardRankingPage() {
       </div>
 
       <Card className="gap-0 overflow-visible shadow-none border-border/80">
-        <CardContent className="p-4">
-          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+        <CardContent className="p-4 md:p-5">
+          <div className="grid gap-5 lg:grid-cols-2">
             <div className="flex items-start gap-3 min-w-0">
               <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
                 <SlidersHorizontal className="h-4 w-4" />
               </div>
-              <div className="min-w-0">
-                <p className="text-sm font-semibold">Phạm vi</p>
+              <div className="min-w-0 flex-1">
+                <p className="text-sm font-semibold">Phạm vi dữ liệu</p>
                 <div className="mt-2 flex flex-wrap items-center gap-2">
                   <Button
                     variant={viewMode === 'latest' ? 'default' : 'outline'}
@@ -224,7 +230,7 @@ export default function BoardRankingPage() {
                       value={issueNumber != null ? String(issueNumber) : undefined}
                       onValueChange={v => setIssueNumber(Number(v))}
                     >
-                      <SelectTrigger className="h-9 w-[220px]">
+                      <SelectTrigger className="h-9 w-full min-w-[200px] max-w-[260px]">
                         <CalendarRange className="mr-2 h-4 w-4" />
                         <SelectValue placeholder="Chọn kỳ" />
                       </SelectTrigger>
@@ -241,27 +247,32 @@ export default function BoardRankingPage() {
               </div>
             </div>
 
-            <div className="sm:border-l sm:pl-5">
-              <p className="text-sm font-semibold">Sắp xếp</p>
-              <div className="mt-2 flex flex-wrap gap-2">
-                {(['rank', 'votes', 'popularity'] as const).map(f => (
-                  <Button
-                    key={f}
-                    variant={metric === f ? 'default' : 'outline'}
-                    size="sm"
-                    onClick={() => setMetric(f)}
-                  >
-                    {METRIC_LABEL[f]}
-                  </Button>
-                ))}
+            <div className="flex items-start gap-3 min-w-0 lg:border-l lg:border-border/60 lg:pl-5">
+              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-muted text-muted-foreground">
+                <Trophy className="h-4 w-4" />
+              </div>
+              <div className="min-w-0 flex-1">
+                <p className="text-sm font-semibold">Sắp xếp theo</p>
+                <div className="mt-2 flex flex-wrap gap-2">
+                  {(['rank', 'votes', 'popularity'] as const).map(f => (
+                    <Button
+                      key={f}
+                      variant={metric === f ? 'default' : 'outline'}
+                      size="sm"
+                      onClick={() => setMetric(f)}
+                    >
+                      {METRIC_LABEL[f]}
+                    </Button>
+                  ))}
+                </div>
               </div>
             </div>
           </div>
         </CardContent>
       </Card>
 
-      <section className="space-y-2.5">
-        <div className="flex flex-wrap items-baseline justify-between gap-2 px-0.5">
+      <Card className="gap-0 overflow-hidden shadow-none border-border/80">
+        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border/60 px-4 py-3 md:px-5">
           <div className="flex items-center gap-2">
             <Trophy className="h-4 w-4 text-amber-500" />
             <h2 className="text-sm font-semibold">Xếp hạng chi tiết</h2>
@@ -269,135 +280,135 @@ export default function BoardRankingPage() {
               {loading ? 'Đang tải…' : `${items.length} series`}
             </span>
           </div>
-          <span className="text-xs font-medium text-muted-foreground">{METRIC_LABEL[metric]}</span>
+          <span className="rounded-md bg-muted px-2 py-0.5 text-xs font-medium text-muted-foreground">
+            {METRIC_LABEL[metric]}
+          </span>
         </div>
 
-        <Card className="gap-0 overflow-hidden shadow-none border-border/80">
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-[560px] text-sm">
-              <thead className="border-b bg-muted/30">
+        <div className="overflow-x-auto">
+          <table className="w-full table-fixed text-sm">
+            <thead className="border-b bg-muted/30">
+              <tr>
+                <th className="w-[88px] px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-muted-foreground md:px-5">
+                  Hạng
+                </th>
+                <th className="w-[38%] px-3 py-3 text-left text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                  Series
+                </th>
+                <th className="w-[22%] px-3 py-3 text-left text-xs font-semibold uppercase tracking-wide text-muted-foreground hidden md:table-cell">
+                  Mangaka
+                </th>
+                <th className="w-[14%] px-3 py-3 text-right text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                  Vote
+                </th>
+                <th className="w-[14%] px-4 py-3 text-right text-xs font-semibold uppercase tracking-wide text-muted-foreground md:px-5">
+                  Phổ biến
+                </th>
+              </tr>
+            </thead>
+            <tbody className="divide-y">
+              {loading ? (
                 <tr>
-                  <th className="w-16 px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                    Hạng
-                  </th>
-                  <th className="px-3 py-3 text-left text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                    Series
-                  </th>
-                  <th className="px-3 py-3 text-left text-xs font-semibold uppercase tracking-wide text-muted-foreground hidden sm:table-cell">
-                    Mangaka
-                  </th>
-                  <th className="px-3 py-3 text-right text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                    Vote
-                  </th>
-                  <th className="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                    Phổ biến
-                  </th>
+                  <td colSpan={5} className="px-4 py-14 text-center text-muted-foreground">
+                    Đang tải bảng xếp hạng…
+                  </td>
                 </tr>
-              </thead>
-              <tbody className="divide-y">
-                {loading ? (
-                  <tr>
-                    <td colSpan={5} className="px-4 py-12 text-center text-muted-foreground">
-                      Đang tải bảng xếp hạng…
-                    </td>
-                  </tr>
-                ) : error ? (
-                  <tr>
-                    <td colSpan={5} className="px-4 py-12 text-center text-destructive">
-                      {error}
-                    </td>
-                  </tr>
-                ) : items.length === 0 ? (
-                  <tr>
-                    <td colSpan={5} className="px-4 py-12 text-center text-muted-foreground">
-                      Chưa có dữ liệu xếp hạng
-                    </td>
-                  </tr>
-                ) : (
-                  items.map((r, idx) => {
-                    const rank = r.latestRank ?? idx + 1;
-                    const meta = metaById.get(r.seriesId);
-                    const atRisk = meta?.isAtRisk ?? false;
+              ) : error ? (
+                <tr>
+                  <td colSpan={5} className="px-4 py-14 text-center text-destructive">
+                    {error}
+                  </td>
+                </tr>
+              ) : items.length === 0 ? (
+                <tr>
+                  <td colSpan={5} className="px-4 py-14 text-center text-muted-foreground">
+                    Chưa có dữ liệu xếp hạng
+                  </td>
+                </tr>
+              ) : (
+                items.map((r, idx) => {
+                  const rank = r.latestRank ?? idx + 1;
+                  const meta = metaById.get(r.seriesId);
+                  const atRisk = meta?.isAtRisk ?? false;
 
-                    return (
-                      <tr
-                        key={r.seriesId}
-                        role="link"
-                        tabIndex={0}
-                        onClick={() => navigate(`/board/approved-series/${r.seriesId}`)}
-                        onKeyDown={e => {
-                          if (e.key === 'Enter' || e.key === ' ') {
-                            e.preventDefault();
-                            navigate(`/board/approved-series/${r.seriesId}`);
-                          }
-                        }}
-                        className={clsx(
-                          'group cursor-pointer transition-colors hover:bg-muted/40',
-                          atRisk && 'bg-red-50/50'
-                        )}
-                      >
-                        <td className="px-4 py-3.5">
-                          <div
-                            className={clsx(
-                              'flex h-9 w-9 items-center justify-center rounded-lg text-sm font-bold',
-                              rank === 1
-                                ? 'bg-amber-100 text-amber-700 ring-1 ring-amber-200'
-                                : rank === 2
-                                  ? 'bg-slate-100 text-slate-700 ring-1 ring-slate-200'
-                                  : rank === 3
-                                    ? 'bg-orange-100 text-orange-700 ring-1 ring-orange-200'
-                                    : 'bg-muted text-muted-foreground'
+                  return (
+                    <tr
+                      key={r.seriesId}
+                      role="link"
+                      tabIndex={0}
+                      onClick={() => navigate(`/board/approved-series/${r.seriesId}`)}
+                      onKeyDown={e => {
+                        if (e.key === 'Enter' || e.key === ' ') {
+                          e.preventDefault();
+                          navigate(`/board/approved-series/${r.seriesId}`);
+                        }
+                      }}
+                      className={clsx(
+                        'group cursor-pointer transition-colors hover:bg-muted/40',
+                        atRisk && 'bg-red-50/50'
+                      )}
+                    >
+                      <td className="px-4 py-3.5 md:px-5">
+                        <div
+                          className={clsx(
+                            'flex h-9 w-9 items-center justify-center rounded-lg text-sm font-bold',
+                            rank === 1
+                              ? 'bg-amber-100 text-amber-700 ring-1 ring-amber-200'
+                              : rank === 2
+                                ? 'bg-slate-100 text-slate-700 ring-1 ring-slate-200'
+                                : rank === 3
+                                  ? 'bg-orange-100 text-orange-700 ring-1 ring-orange-200'
+                                  : 'bg-muted text-muted-foreground'
+                          )}
+                        >
+                          #{rank}
+                        </div>
+                      </td>
+                      <td className="px-3 py-3.5">
+                        <div className="flex items-center gap-2 min-w-0">
+                          <div className="min-w-0 flex-1">
+                            <p className="font-semibold truncate">{r.title}</p>
+                            <p className="text-xs text-muted-foreground md:hidden mt-0.5 truncate">
+                              {meta?.mangakaName ?? '—'}
+                            </p>
+                            {atRisk && (
+                              <div className="mt-1 flex flex-wrap items-center gap-2">
+                                <span className="rounded-full bg-red-100 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-red-700">
+                                  Nguy cơ
+                                </span>
+                                <button
+                                  type="button"
+                                  className="text-[11px] font-semibold text-red-700 underline-offset-2 hover:underline"
+                                  onClick={e => {
+                                    e.stopPropagation();
+                                    navigate(`/board/series-decisions/${r.seriesId}`);
+                                  }}
+                                >
+                                  Quyết định
+                                </button>
+                              </div>
                             )}
-                          >
-                            #{rank}
                           </div>
-                        </td>
-                        <td className="px-3 py-3.5">
-                          <div className="flex items-center gap-2 min-w-0">
-                            <div className="min-w-0">
-                              <p className="font-semibold truncate">{r.title}</p>
-                              <p className="text-xs text-muted-foreground sm:hidden mt-0.5 truncate">
-                                {meta?.mangakaName ?? '—'}
-                              </p>
-                              {atRisk && (
-                                <div className="mt-1 flex flex-wrap items-center gap-2">
-                                  <span className="rounded-full bg-red-100 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-red-700">
-                                    Nguy cơ
-                                  </span>
-                                  <button
-                                    type="button"
-                                    className="text-[11px] font-semibold text-red-700 underline-offset-2 hover:underline"
-                                    onClick={e => {
-                                      e.stopPropagation();
-                                      navigate(`/board/series-decisions/${r.seriesId}`);
-                                    }}
-                                  >
-                                    Quyết định
-                                  </button>
-                                </div>
-                              )}
-                            </div>
-                            <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
-                          </div>
-                        </td>
-                        <td className="px-3 py-3.5 text-muted-foreground hidden sm:table-cell">
-                          {meta?.mangakaName ?? '—'}
-                        </td>
-                        <td className="px-3 py-3.5 text-right font-mono font-semibold tabular-nums">
-                          {r.totalVotes.toLocaleString()}
-                        </td>
-                        <td className="px-4 py-3.5 text-right font-mono tabular-nums text-muted-foreground">
-                          {r.popularityScore.toLocaleString()}
-                        </td>
-                      </tr>
-                    );
-                  })
-                )}
-              </tbody>
-            </table>
-          </div>
-        </Card>
-      </section>
+                          <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
+                        </div>
+                      </td>
+                      <td className="px-3 py-3.5 text-muted-foreground hidden md:table-cell truncate">
+                        {meta?.mangakaName ?? '—'}
+                      </td>
+                      <td className="px-3 py-3.5 text-right font-mono font-semibold tabular-nums">
+                        {r.totalVotes.toLocaleString()}
+                      </td>
+                      <td className="px-4 py-3.5 text-right font-mono tabular-nums text-muted-foreground md:px-5">
+                        {r.popularityScore.toLocaleString()}
+                      </td>
+                    </tr>
+                  );
+                })
+              )}
+            </tbody>
+          </table>
+        </div>
+      </Card>
     </div>
   );
 }
