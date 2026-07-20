@@ -1,5 +1,5 @@
 import { useNavigate } from 'react-router';
-import { CheckCircle, Circle, Trash2 } from 'lucide-react';
+import { CheckCircle, Circle, Trash2, ChevronUp, ChevronDown } from 'lucide-react';
 import Badge from './Badge';
 import MangaPanelPreview from '../workspace/MangaPanelPreview';
 
@@ -14,12 +14,27 @@ interface MangaPageCardProps {
     thumbnailUrl?: string;
   };
   onDelete?: (id: string) => void;
+  onMoveUp?: (id: string) => void;
+  onMoveDown?: (id: string) => void;
+  canMoveUp?: boolean;
+  canMoveDown?: boolean;
   /** Board chỉ xem — không mở mangaka workspace. */
   readOnly?: boolean;
+  reordering?: boolean;
 }
 
-export default function MangaPageCard({ page, onDelete, readOnly = false }: MangaPageCardProps) {
+export default function MangaPageCard({
+  page,
+  onDelete,
+  onMoveUp,
+  onMoveDown,
+  canMoveUp = false,
+  canMoveDown = false,
+  readOnly = false,
+  reordering = false,
+}: MangaPageCardProps) {
   const navigate = useNavigate();
+  const showReorder = Boolean(onMoveUp || onMoveDown);
 
   const openPage = () => {
     if (readOnly) {
@@ -34,7 +49,7 @@ export default function MangaPageCard({ page, onDelete, readOnly = false }: Mang
       onClick={openPage}
       role="button"
       tabIndex={0}
-      onKeyDown={(e) => {
+      onKeyDown={e => {
         if (e.key === 'Enter' || e.key === ' ') {
           e.preventDefault();
           openPage();
@@ -55,12 +70,41 @@ export default function MangaPageCard({ page, onDelete, readOnly = false }: Mang
         </div>
         {onDelete && (
           <button
-            onClick={(e) => { e.stopPropagation(); onDelete(page.id); }}
+            type="button"
+            onClick={e => {
+              e.stopPropagation();
+              onDelete(page.id);
+            }}
             title="Xóa trang"
             className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center w-6 h-6 bg-red-600/90 hover:bg-red-600 text-white rounded-lg"
           >
             <Trash2 size={12} />
           </button>
+        )}
+        {showReorder && (
+          <div
+            className="absolute bottom-2 right-2 flex flex-col gap-0.5 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity"
+            onClick={e => e.stopPropagation()}
+          >
+            <button
+              type="button"
+              title="Đưa lên trước"
+              disabled={!canMoveUp || reordering}
+              onClick={() => onMoveUp?.(page.id)}
+              className="flex h-7 w-7 items-center justify-center rounded-lg bg-foreground/85 text-white hover:bg-foreground disabled:opacity-30 disabled:pointer-events-none"
+            >
+              <ChevronUp size={14} />
+            </button>
+            <button
+              type="button"
+              title="Đưa xuống sau"
+              disabled={!canMoveDown || reordering}
+              onClick={() => onMoveDown?.(page.id)}
+              className="flex h-7 w-7 items-center justify-center rounded-lg bg-foreground/85 text-white hover:bg-foreground disabled:opacity-30 disabled:pointer-events-none"
+            >
+              <ChevronDown size={14} />
+            </button>
+          </div>
         )}
       </div>
       <div className="p-3">
@@ -75,7 +119,9 @@ export default function MangaPageCard({ page, onDelete, readOnly = false }: Mang
             ) : (
               <Circle size={12} className="text-muted-foreground shrink-0" />
             )}
-            <span>{page.completedTasksCount}/{page.tasksCount} nhiệm vụ</span>
+            <span>
+              {page.completedTasksCount}/{page.tasksCount} nhiệm vụ
+            </span>
           </div>
         )}
       </div>

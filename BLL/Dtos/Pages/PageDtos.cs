@@ -29,6 +29,9 @@ public record UpdatePageRequest(
 public record UpdatePageStatusRequest(
     [Required, MaxLength(30)] string Status);
 
+public record ReorderPagesRequest(
+    [Required, MinLength(1)] IReadOnlyList<Guid> PageIds);
+
 public record PageVersionResponse(
     Guid SubmissionId,
     Guid TaskId,

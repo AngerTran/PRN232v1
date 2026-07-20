@@ -75,6 +75,33 @@ public class PagesController : ControllerBase
             : CreatedAtAction(nameof(GetById), new { id = created.Id }, created);
     }
 
+    [HttpPut("/api/chapters/{chapterId:guid}/pages/reorder")]
+    [SwaggerOperation(Summary = "Reorder chapter pages", Description = "Sets page numbers according to the given ordered list of page IDs. Allowed for mangaka author, assistant, or admin.")]
+    [ProducesResponseType(typeof(IReadOnlyList<PageResponse>), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<ActionResult<IReadOnlyList<PageResponse>>> Reorder(
+        Guid chapterId,
+        [FromBody] ReorderPagesRequest request,
+        CancellationToken cancellationToken)
+    {
+        if (!this.TryGetUserId(out var userId))
+        {
+            return Unauthorized();
+        }
+
+        try
+        {
+            var pages = await _pageService.ReorderAsync(userId, chapterId, request, cancellationToken);
+            return pages is null ? NotFound() : Ok(pages);
+        }
+        catch (ArgumentException ex)
+        {
+            return BadRequest(new { message = ex.Message });
+        }
+    }
+
     [HttpGet("/api/pages/{id:guid}")]
     [SwaggerOperation(Summary = "Get page by ID", Description = "Returns page details when the authenticated user can view the page.")]
     [ProducesResponseType(typeof(PageResponse), StatusCodes.Status200OK)]

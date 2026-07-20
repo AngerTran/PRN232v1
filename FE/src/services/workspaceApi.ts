@@ -538,3 +538,17 @@ export async function uploadChapterPage(
 
   return mapPage(unwrap(await response.json()));
 }
+
+/** Sắp xếp lại số trang theo thứ tự id (1…n). */
+export async function reorderChapterPages(
+  chapterId: string,
+  pageIds: string[],
+): Promise<WorkspacePageItem[]> {
+  const items = unwrap(
+    await apiRequest<ApiEnvelope<ApiPage[]>>(`/api/chapters/${chapterId}/pages/reorder`, {
+      method: 'PUT',
+      body: JSON.stringify({ pageIds }),
+    }),
+  );
+  return items.map(mapPage).sort((a, b) => a.pageNumber - b.pageNumber);
+}

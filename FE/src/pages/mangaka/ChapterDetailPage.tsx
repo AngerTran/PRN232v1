@@ -35,7 +35,7 @@ import {
   uploadChapterManuscript,
   updateChapterStatus,
 } from '../../services/seriesApi';
-import { getChapterPages, uploadChapterPage, deleteChapterPage, type WorkspacePageItem } from '../../services/workspaceApi';
+import { getChapterPages, uploadChapterPage, deleteChapterPage, reorderChapterPages, type WorkspacePageItem } from '../../services/workspaceApi';
 import { format } from 'date-fns';
 import { toast } from 'sonner';
 
@@ -92,6 +92,9 @@ export default function ChapterDetailPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [uploadingManuscript, setUploadingManuscript] = useState(false);
+  const [uploadingPages, setUploadingPages] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState<{ done: number; total: number } | null>(null);
+  const [reorderingPages, setReorderingPages] = useState(false);
   const [submittingReview, setSubmittingReview] = useState(false);
   const [withdrawingReview, setWithdrawingReview] = useState(false);
   const manuscriptInputRef = useRef<HTMLInputElement>(null);
@@ -179,24 +182,58 @@ export default function ChapterDetailPage() {
 
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     if (readOnly) return;
-    const file = e.target.files?.[0];
-    if (!file || !chapterId) return;
+    const selected = Array.from(e.target.files ?? []);
+    e.target.value = '';
+    if (selected.length === 0 || !chapterId) return;
+
+    // Sắp xếp theo tên file tự nhiên: 0.jpg, 1.jpg, … 10.jpg
+    const files = selected.sort((a, b) =>
+      a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' }),
+    );
+
+    setUploadingPages(true);
+    setUploadProgress({ done: 0, total: files.length });
+
+    let nextPageNumber = pages.length > 0 ? Math.max(...pages.map(p => p.pageNumber)) + 1 : 1;
+    const uploaded: WorkspacePageItem[] = [];
+    const failures: string[] = [];
 
     try {
-      setIsLoading(true);
-      const nextPageNumber = pages.length > 0 ? Math.max(...pages.map(p => p.pageNumber)) + 1 : 1;
-      const newPage = await uploadChapterPage(chapterId, {
-        file,
-        pageNumber: nextPageNumber,
-      });
-      setPages(prev => [...prev, newPage].sort((a, b) => a.pageNumber - b.pageNumber));
-    } catch (err) {
-      alert(err instanceof Error ? err.message : 'Không thể tải trang lên.');
-    } finally {
-      setIsLoading(false);
-      if (fileInputRef.current) {
-        fileInputRef.current.value = '';
+      for (let i = 0; i < files.length; i++) {
+        const file = files[i];
+        try {
+          const newPage = await uploadChapterPage(chapterId, {
+            file,
+            pageNumber: nextPageNumber,
+          });
+          uploaded.push(newPage);
+          nextPageNumber += 1;
+        } catch (err) {
+          failures.push(
+            `${file.name}: ${err instanceof Error ? err.message : 'lỗi không xác định'}`,
+          );
+        }
+        setUploadProgress({ done: i + 1, total: files.length });
       }
+
+      if (uploaded.length > 0) {
+        setPages(prev => [...prev, ...uploaded].sort((a, b) => a.pageNumber - b.pageNumber));
+      }
+
+      if (failures.length === 0) {
+        toast.success(
+          uploaded.length === 1
+            ? 'Đã thêm 1 trang'
+            : `Đã thêm ${uploaded.length} trang`,
+        );
+      } else if (uploaded.length > 0) {
+        toast.warning(`Đã thêm ${uploaded.length}/${files.length} trang. Một số file lỗi.`);
+      } else {
+        toast.error(failures[0] || 'Không thể tải trang lên.');
+      }
+    } finally {
+      setUploadingPages(false);
+      setUploadProgress(null);
     }
   };
 
@@ -223,6 +260,34 @@ export default function ChapterDetailPage() {
     } catch (err) {
       setPages(previous);
       alert(err instanceof Error ? err.message : 'Không thể xóa trang.');
+    }
+  };
+
+  const handleMovePage = async (pageId: string, direction: 'up' | 'down') => {
+    if (readOnly || reorderingPages || !chapterId) return;
+    const ordered = [...pages].sort((a, b) => a.pageNumber - b.pageNumber);
+    const index = ordered.findIndex(p => p.id === pageId);
+    if (index < 0) return;
+    const swapWith = direction === 'up' ? index - 1 : index + 1;
+    if (swapWith < 0 || swapWith >= ordered.length) return;
+
+    const next = [...ordered];
+    [next[index], next[swapWith]] = [next[swapWith], next[index]];
+    const pageIds = next.map(p => p.id);
+
+    const previous = pages;
+    setPages(
+      next.map((p, i) => ({ ...p, pageNumber: i + 1 })),
+    );
+    setReorderingPages(true);
+    try {
+      const updated = await reorderChapterPages(chapterId, pageIds);
+      setPages(updated);
+    } catch (err) {
+      setPages(previous);
+      toast.error(err instanceof Error ? err.message : 'Không đổi được thứ tự trang.');
+    } finally {
+      setReorderingPages(false);
     }
   };
 
@@ -513,20 +578,30 @@ export default function ChapterDetailPage() {
                 <CardTitle className="mb-0">Trang manga</CardTitle>
                 <p className="text-xs text-muted-foreground mt-1">
                   {pages.length > 0
-                    ? `${pages.length} trang nháp — bấm thẻ để mở workspace`
+                    ? `${pages.length} trang — dùng ▲ ▼ trên thẻ để đổi thứ tự`
                     : 'Chưa có trang — tải lên để bắt đầu sản xuất'}
                 </p>
               </div>
               {!readOnly && (
                 <>
-                  <Button variant="outline" size="sm" onClick={handleAddPageClick} disabled={!canEdit}>
-                    <Plus size={14} /> Thêm trang
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={handleAddPageClick}
+                    disabled={!canEdit || uploadingPages}
+                    loading={uploadingPages}
+                  >
+                    <Plus size={14} />
+                    {uploadingPages && uploadProgress
+                      ? `Đang tải ${uploadProgress.done}/${uploadProgress.total}…`
+                      : 'Thêm trang'}
                   </Button>
                   <input
                     type="file"
                     ref={fileInputRef}
                     onChange={handleFileChange}
                     accept="image/*"
+                    multiple
                     className="hidden"
                   />
                 </>
@@ -537,7 +612,9 @@ export default function ChapterDetailPage() {
               {canEdit && pages.length === 0 && (
                 <div className="mb-4 rounded-xl border border-border bg-muted/40 px-4 py-3 text-sm text-muted-foreground">
                   <strong className="text-foreground font-semibold">Workspace</strong> là studio sản xuất:
-                  tải trang, khoanh vùng, giao task trợ lý. Bấm <strong className="text-foreground">Thêm trang</strong> để bắt đầu.
+                  tải trang, khoanh vùng, giao task trợ lý. Bấm{' '}
+                  <strong className="text-foreground">Thêm trang</strong> và chọn nhiều ảnh cùng lúc (Ctrl/Shift)
+                  để bắt đầu.
                 </div>
               )}
 
@@ -553,11 +630,16 @@ export default function ChapterDetailPage() {
                 />
               ) : (
                 <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-                  {displayPages.map(page => (
+                  {displayPages.map((page, index) => (
                     <MangaPageCard
                       key={page.id}
                       page={page}
                       onDelete={readOnly || !canEdit ? undefined : handleDeletePage}
+                      onMoveUp={readOnly || !canEdit ? undefined : id => handleMovePage(id, 'up')}
+                      onMoveDown={readOnly || !canEdit ? undefined : id => handleMovePage(id, 'down')}
+                      canMoveUp={index > 0}
+                      canMoveDown={index < displayPages.length - 1}
+                      reordering={reorderingPages}
                       readOnly={readOnly || !canEdit}
                     />
                   ))}
@@ -636,7 +718,7 @@ export default function ChapterDetailPage() {
             <div className="rounded-xl border border-border/70 bg-card px-4 py-3.5 text-xs text-muted-foreground space-y-1.5">
               <p className="font-semibold text-foreground text-sm">Gợi ý</p>
               <p>• <span className="text-foreground/80">Bản thảo</span> = file gốc (PDF/ZIP).</p>
-              <p>• <span className="text-foreground/80">Trang manga</span> = ảnh từng trang để giao task.</p>
+              <p>• <span className="text-foreground/80">Trang manga</span> = ảnh từng trang; chọn nhiều ảnh một lần, dùng ▲ ▼ để sửa thứ tự.</p>
               {canEdit && (
                 <>
                   <p>• Bấm thẻ trang hoặc <span className="text-foreground/80">Mở Workspace</span> để sản xuất.</p>

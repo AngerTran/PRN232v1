@@ -115,6 +115,70 @@ public class PageService
         return MapToDto(page);
     }
 
+    public async Task<IReadOnlyList<PageResponse>?> ReorderAsync(
+        Guid callerId,
+        Guid chapterId,
+        ReorderPagesRequest request,
+        CancellationToken cancellationToken = default)
+    {
+        var caller = await _pageAccess.RequireProfileAsync(callerId, cancellationToken);
+        var chapter = await GetChapterWithSeriesAsync(chapterId, asNoTracking: false, cancellationToken);
+        if (chapter is null)
+        {
+            return null;
+        }
+
+        if (!CanCreatePage(caller, chapter))
+        {
+            throw new WorkflowForbiddenException("Only the series author (mangaka), assistant, or admin can reorder pages.");
+        }
+
+        EnsurePageProductionAllowed(caller, chapter);
+
+        var pages = await _unitOfWork.Context.Pages
+            .Where(p => p.ChapterId == chapterId)
+            .ToListAsync(cancellationToken);
+
+        if (pages.Count == 0)
+        {
+            return Array.Empty<PageResponse>();
+        }
+
+        if (request.PageIds.Count != pages.Count
+            || request.PageIds.Distinct().Count() != request.PageIds.Count
+            || request.PageIds.Any(id => pages.All(p => p.Id != id)))
+        {
+            throw new ArgumentException("Danh sách trang sắp xếp không khớp với chương này.");
+        }
+
+        var byId = pages.ToDictionary(p => p.Id);
+        var now = DateTime.UtcNow;
+
+        // Tránh va chạm unique (chapter_id, page_number): gán số tạm trước.
+        for (var i = 0; i < request.PageIds.Count; i++)
+        {
+            var page = byId[request.PageIds[i]];
+            page.PageNumber = -(i + 1);
+            page.UpdatedAt = now;
+        }
+
+        await _unitOfWork.SaveChangesAsync(cancellationToken);
+
+        for (var i = 0; i < request.PageIds.Count; i++)
+        {
+            var page = byId[request.PageIds[i]];
+            page.PageNumber = i + 1;
+            page.UpdatedAt = now;
+        }
+
+        await _unitOfWork.SaveChangesAsync(cancellationToken);
+
+        return pages
+            .OrderBy(p => p.PageNumber)
+            .Select(MapToDto)
+            .ToList();
+    }
+
     public async Task<PageResponse?> GetByIdAsync(
         Guid callerId,
         Guid pageId,
