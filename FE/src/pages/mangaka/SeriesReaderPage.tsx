@@ -21,9 +21,17 @@ export default function SeriesReaderPage() {
   const initialChapterId = searchParams.get('chapter');
   const { setPageMeta } = usePageMeta();
   const isBoardReader = location.pathname.startsWith('/board/');
+  const isEditorReader = location.pathname.startsWith('/editor/');
   const backHref = isBoardReader
-    ? `/board/approved-series/${seriesId}/chapters`
-    : `/mangaka/series/${seriesId}/chapters`;
+    ? `/board/approved-series/${seriesId}`
+    : isEditorReader
+      ? `/editor/studio`
+      : `/mangaka/series/${seriesId}/chapters`;
+  const listHomeHref = isBoardReader
+    ? '/board/approved-series'
+    : isEditorReader
+      ? '/editor/studio'
+      : '/mangaka/series';
   const [series, setSeries] = useState<Series | null>(null);
   const [chapters, setChapters] = useState<Chapter[]>([]);
   const [bookPages, setBookPages] = useState<BookPage[]>([]);
@@ -46,8 +54,8 @@ export default function SeriesReaderPage() {
           getSeries(seriesId!),
           getSeriesChapters(seriesId!),
         ]);
-        // Board xem nội dung sản xuất (bỏ chapter 0 bản thảo đề xuất).
-        const filtered = isBoardReader
+        // Board / Editor xem nội dung sản xuất (bỏ chapter 0 bản thảo đề xuất).
+        const filtered = isBoardReader || isEditorReader
           ? chapterItems.filter(c => c.number > 0)
           : chapterItems;
         const orderedChapters = [...filtered].sort((a, b) => a.number - b.number);
@@ -75,7 +83,7 @@ export default function SeriesReaderPage() {
     return () => {
       active = false;
     };
-  }, [seriesId, isBoardReader]);
+  }, [seriesId, isBoardReader, isEditorReader]);
 
   useEffect(() => {
     setJumpedToChapter(false);
@@ -98,17 +106,22 @@ export default function SeriesReaderPage() {
         ? [
             { label: 'Series Đã Nhận', href: '/board/approved-series' },
             { label: series.title, href: `/board/approved-series/${series.id}` },
-            { label: 'Chương', href: `/board/approved-series/${series.id}/chapters` },
             { label: 'Đọc truyện' },
           ]
-        : [
-            { label: 'Series của tôi', href: '/mangaka/series' },
-            { label: series.title, href: `/mangaka/series/${series.id}` },
-            { label: 'Chương', href: `/mangaka/series/${series.id}/chapters` },
-            { label: 'Đọc truyện' },
-          ],
+        : isEditorReader
+          ? [
+              { label: 'Tiến độ Studio', href: '/editor/studio' },
+              { label: series.title, href: `/editor/series/${series.id}` },
+              { label: 'Đọc truyện' },
+            ]
+          : [
+              { label: 'Series của tôi', href: '/mangaka/series' },
+              { label: series.title, href: `/mangaka/series/${series.id}` },
+              { label: 'Chương', href: `/mangaka/series/${series.id}/chapters` },
+              { label: 'Đọc truyện' },
+            ],
     });
-  }, [series, isBoardReader, setPageMeta]);
+  }, [series, isBoardReader, isEditorReader, setPageMeta]);
 
   const currentPage = bookPages[spreadIndex];
   const nextPage = bookPages[spreadIndex + 1];
@@ -148,7 +161,7 @@ export default function SeriesReaderPage() {
           title="Không thể mở manga"
           description={error || 'Series này không tồn tại.'}
           action={
-            <Button variant="outline" onClick={() => navigate(isBoardReader ? '/board/approved-series' : '/mangaka/series')}>
+            <Button variant="outline" onClick={() => navigate(listHomeHref)}>
               Quay lại series
             </Button>
           }

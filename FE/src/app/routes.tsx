@@ -191,6 +191,7 @@ export const router = createBrowserRouter([
           { path: '/editor/series', element: <AssignedSeriesPage /> },
           { path: '/editor/studio', element: <EditorStudioPage /> },
           { path: '/editor/series/:seriesId', element: <SeriesDetailPage /> },
+          { path: '/editor/series/:seriesId/read', element: <SeriesReaderPage /> },
           { path: '/editor/reviews', element: <ChapterReviewsPage /> },
           { path: '/editor/chapters/:chapterId/review', element: <ChapterReviewPage /> },
           { path: '/editor/ranking-watch', element: <RankingWatchPage /> },
