@@ -226,10 +226,10 @@ export default function CreateSeriesPage() {
 
       <div className="flex flex-col gap-3">
         <Button type="button" variant="outline" onClick={handleSaveDraft} disabled={submitting} className="w-full">
-          {saved ? '✓ Đã lưu bản nháp' : 'Lưu bản nháp'}
+          <span>{saved ? '✓ Đã lưu bản nháp' : 'Lưu bản nháp'}</span>
         </Button>
         <Button type="submit" variant="primary" loading={submitting} className="w-full">
-          Tạo series
+          <span>Tạo series</span>
         </Button>
       </div>
     </>
@@ -285,18 +285,24 @@ export default function CreateSeriesPage() {
                     highlightField === 'genres' && 'ring-2 ring-red-400 ring-offset-2',
                   )}
                 >
-                  {GENRES.map(genre => (
-                    <button key={genre} type="button" onClick={() => toggleGenre(genre)}
-                      className={`px-3 py-1.5 text-xs font-semibold rounded-lg border transition-all duration-150 ${
-                        form.genres.includes(genre)
-                          ? 'bg-secondary text-white border-secondary'
-                          : 'bg-card border-border text-muted-foreground hover:border-foreground/30 hover:text-foreground'
-                      }`}
-                    >
-                      {form.genres.includes(genre) && <Check size={10} className="inline mr-1" />}
-                      {genre}
-                    </button>
-                  ))}
+                  {GENRES.map(genre => {
+                    const selected = form.genres.includes(genre);
+                    return (
+                      <button
+                        key={genre}
+                        type="button"
+                        onClick={() => toggleGenre(genre)}
+                        className={`inline-flex items-center gap-1 px-3 py-1.5 text-xs font-semibold rounded-lg border transition-all duration-150 ${
+                          selected
+                            ? 'bg-secondary text-white border-secondary'
+                            : 'bg-card border-border text-muted-foreground hover:border-foreground/30 hover:text-foreground'
+                        }`}
+                      >
+                        {selected ? <Check size={10} aria-hidden /> : null}
+                        <span>{genre}</span>
+                      </button>
+                    );
+                  })}
                 </div>
               </div>
               <div>

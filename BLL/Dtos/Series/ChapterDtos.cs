@@ -14,7 +14,8 @@ public record ChapterResponse(
     DateTime? CreatedAt,
     DateTime? UpdatedAt,
     DateTime? ReviewAcceptedAt = null,
-    Guid? ReviewAcceptedBy = null);
+    Guid? ReviewAcceptedBy = null,
+    string? ManuscriptFileName = null);
 
 public record CreateChapterRequest(
     [Range(0, int.MaxValue)] int ChapterNumber,

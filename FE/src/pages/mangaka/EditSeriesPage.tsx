@@ -48,6 +48,7 @@ export default function EditSeriesPage() {
   const [coverPreview, setCoverPreview] = useState('');
   const [manuscriptFile, setManuscriptFile] = useState<File | null>(null);
   const [existingManuscriptUrl, setExistingManuscriptUrl] = useState('');
+  const [existingManuscriptName, setExistingManuscriptName] = useState('');
   const [proposalChapterId, setProposalChapterId] = useState<string | undefined>();
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
@@ -85,6 +86,7 @@ export default function EditSeriesPage() {
         const proposal = chapters.find(c => c.number === 0);
         setProposalChapterId(proposal?.id);
         setExistingManuscriptUrl(proposal?.description ?? '');
+        setExistingManuscriptName(proposal?.manuscriptFileName ?? '');
 
         setPageMeta({
           title: 'Chỉnh sửa Series',
@@ -260,8 +262,14 @@ export default function EditSeriesPage() {
               <label className="block text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-2">Bản thảo đề xuất</label>
               {existingManuscriptUrl && !manuscriptFile && (
                 <p className="text-xs text-muted-foreground mb-2">
-                  Đã có file đính kèm —{' '}
-                  <a href={existingManuscriptUrl} target="_blank" rel="noopener noreferrer" className="text-primary font-medium hover:underline">
+                  Đã có file{existingManuscriptName ? ` «${existingManuscriptName}»` : ''} —{' '}
+                  <a
+                    href={existingManuscriptUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    download={existingManuscriptName || undefined}
+                    className="text-primary font-medium hover:underline"
+                  >
                     xem bản thảo hiện tại
                   </a>
                 </p>

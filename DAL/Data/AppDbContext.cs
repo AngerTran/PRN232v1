@@ -250,6 +250,9 @@ public partial class AppDbContext : DbContext
                 .HasColumnName("created_at");
             entity.Property(e => e.Deadline).HasColumnName("deadline");
             entity.Property(e => e.ManuscriptUrl).HasColumnName("manuscript_url");
+            entity.Property(e => e.ManuscriptFileName)
+                .HasMaxLength(255)
+                .HasColumnName("manuscript_file_name");
             entity.Property(e => e.ReleaseDate).HasColumnName("release_date");
             entity.Property(e => e.Status)
                 .HasColumnType("chapter_status")

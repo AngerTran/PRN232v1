@@ -86,6 +86,7 @@ export default function SeriesDetailPage() {
   const waitingForBoardEditor = isMangakaView && series && canProduce && !series.editorId;
   const proposalChapter = chapters.find(c => c.number === 0) ?? chapters.find(c => Boolean(c.description?.trim()));
   const manuscriptUrl = proposalChapter?.description?.trim() || null;
+  const manuscriptName = proposalChapter?.manuscriptFileName?.trim() || null;
 
   useEffect(() => {
     if (!seriesId) return;
@@ -529,7 +530,7 @@ export default function SeriesDetailPage() {
                           <FileText size={16} />
                         </span>
                         <div className="min-w-0">
-                          <p className="text-sm font-semibold truncate">File bản thảo</p>
+                          <p className="text-sm font-semibold truncate">{manuscriptName || 'File bản thảo'}</p>
                           <p className="text-xs text-muted-foreground">Đính kèm khi mangaka gửi duyệt</p>
                         </div>
                       </div>
@@ -538,6 +539,7 @@ export default function SeriesDetailPage() {
                           href={manuscriptUrl}
                           target="_blank"
                           rel="noopener noreferrer"
+                          download={manuscriptName || undefined}
                           className="inline-flex items-center gap-1.5 rounded-lg border border-primary/25 bg-primary/5 px-3 py-1.5 text-sm font-semibold text-primary hover:bg-primary/10"
                         >
                           <FileDown size={14} />

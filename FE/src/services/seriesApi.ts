@@ -31,6 +31,7 @@ interface ApiChapter {
   chapterNumber: number;
   title?: string | null;
   manuscriptUrl?: string | null;
+  manuscriptFileName?: string | null;
   status: string;
   deadline?: string | null;
   releaseDate?: string | null;
@@ -226,6 +227,7 @@ export function mapChapter(item: ApiChapter): Chapter {
     status: mapChapterStatus(item.status),
     pagesCount: 0,
     description: item.manuscriptUrl || '',
+    manuscriptFileName: item.manuscriptFileName ?? null,
     createdAt: dateOnly(item.createdAt),
     updatedAt: item.updatedAt ? dateOnly(item.updatedAt) : undefined,
     reviewAcceptedAt: item.reviewAcceptedAt ?? null,

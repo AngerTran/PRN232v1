@@ -16,6 +16,9 @@ public partial class Chapter
 
     public string? ManuscriptUrl { get; set; }
 
+    /// <summary>Tên file gốc lúc mangaka tải lên (để hiển thị / download).</summary>
+    public string? ManuscriptFileName { get; set; }
+
     public ChapterStatus Status { get; set; } = ChapterStatus.Draft;
 
     /// <summary>Editor đã nhận xét duyệt chương (null = mangaka vẫn thu hồi được).</summary>

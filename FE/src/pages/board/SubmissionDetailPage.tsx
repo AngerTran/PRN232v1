@@ -36,7 +36,9 @@ function mapStatus(status: string): BoardSubmissionStatus {
   }
 }
 
-function manuscriptFileName(url: string): string {
+function manuscriptFileName(url: string, preferredName?: string | null): string {
+  const preferred = preferredName?.trim();
+  if (preferred) return preferred;
   try {
     const name = decodeURIComponent(url.split('/').pop()?.split('?')[0] || '');
     return name || 'ban-thao';
@@ -77,6 +79,7 @@ export default function SubmissionDetailPage() {
   const [votes, setVotes] = useState<BoardVote[]>([]);
   const [voteProgress, setVoteProgress] = useState<BoardVoteProgress | null>(null);
   const [manuscriptUrl, setManuscriptUrl] = useState<string | null>(null);
+  const [manuscriptName, setManuscriptName] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [decision, setDecision] = useState<BoardDecision | null>(null);
   const [reason, setReason] = useState('');
@@ -107,6 +110,7 @@ export default function SubmissionDetailPage() {
         setTeam(teamData);
         const proposal = chapters.find(c => c.number === 0) ?? chapters.find(c => c.description);
         setManuscriptUrl(proposal?.description?.trim() || null);
+        setManuscriptName(proposal?.manuscriptFileName?.trim() || null);
 
         const currentUserId = getStoredUser()?.id;
         const myVote = currentUserId ? v.find(vote => vote.boardMemberId === currentUserId) : undefined;
@@ -347,13 +351,13 @@ export default function SubmissionDetailPage() {
                 <div className="flex items-start gap-3">
                   <FileText className="h-8 w-8 text-primary shrink-0 mt-0.5" />
                   <div className="min-w-0">
-                    <p className="text-sm font-medium truncate">{manuscriptFileName(manuscriptUrl)}</p>
+                    <p className="text-sm font-medium truncate">{manuscriptFileName(manuscriptUrl, manuscriptName)}</p>
                     <p className="text-xs text-muted-foreground mt-0.5">Tài liệu do mangaka tải lên khi gửi đề xuất</p>
                   </div>
                 </div>
                 <a
                   href={manuscriptUrl}
-                  download={manuscriptFileName(manuscriptUrl)}
+                  download={manuscriptFileName(manuscriptUrl, manuscriptName)}
                   className="inline-flex items-center justify-center gap-2 rounded-xl border border-primary/30 bg-primary/5 px-4 py-2.5 text-sm font-semibold text-primary hover:bg-primary/10 transition-colors w-full"
                 >
                   <Download size={16} />

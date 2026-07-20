@@ -282,6 +282,11 @@ namespace DAL.Migrations
                         .HasColumnType("text")
                         .HasColumnName("manuscript_url");
 
+                    b.Property<string>("ManuscriptFileName")
+                        .HasMaxLength(255)
+                        .HasColumnType("character varying(255)")
+                        .HasColumnName("manuscript_file_name");
+
                     b.Property<DateTime?>("ReviewAcceptedAt")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("review_accepted_at");

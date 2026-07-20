@@ -15,6 +15,7 @@ import ProfilePage from '../pages/common/ProfilePage';
 import SettingsPage from '../pages/common/SettingsPage';
 import NotificationsPage from '../pages/common/NotificationsPage';
 import NotFoundPage from '../pages/common/NotFoundPage';
+import RouteErrorPage from '../pages/common/RouteErrorPage';
 import PaymentReturnPage from '../pages/common/PaymentReturnPage';
 
 // Mangaka pages
@@ -134,6 +135,7 @@ export const router = createBrowserRouter([
   // Protected routes with MainLayout
   {
     element: <MainLayout />,
+    errorElement: <RouteErrorPage />,
     children: [
       // Common
       { path: '/profile', element: <ProfilePage /> },

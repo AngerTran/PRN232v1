@@ -71,6 +71,8 @@ export interface Chapter {
   status: ChapterStatus;
   pagesCount: number;
   description: string;
+  /** Tên file bản thảo gốc lúc upload (nếu có). */
+  manuscriptFileName?: string | null;
   createdAt: string;
   updatedAt?: string;
   /** Editor đã nhận xét duyệt — mangaka không thu hồi được nữa. */

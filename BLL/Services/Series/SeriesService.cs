@@ -1235,12 +1235,23 @@ public class SeriesService
       extension = ".bin";
     }
 
+    var originalName = Path.GetFileName(file.FileName);
+    if (string.IsNullOrWhiteSpace(originalName))
+    {
+      originalName = $"manuscript{extension.ToLowerInvariant()}";
+    }
+    else if (originalName.Length > 255)
+    {
+      originalName = originalName[^255..];
+    }
+
     var objectPath = $"chapters/{chapterId}/manuscript{extension.ToLowerInvariant()}";
     chapter.ManuscriptUrl = await _storage.UploadAsync(
       _supabaseOptions.ManuscriptsBucket,
       objectPath,
       file,
       cancellationToken);
+    chapter.ManuscriptFileName = originalName;
     chapter.UpdatedAt = DateTime.UtcNow;
 
     ChapterRepository.Update(chapter);
@@ -1667,7 +1678,8 @@ public class SeriesService
       c.CreatedAt,
       c.UpdatedAt,
       c.ReviewAcceptedAt,
-      c.ReviewAcceptedBy);
+      c.ReviewAcceptedBy,
+      c.ManuscriptFileName);
 
   private static SeriesResponse MapToDto(SeriesEntity s) =>
     new(

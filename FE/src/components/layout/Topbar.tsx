@@ -38,14 +38,15 @@ export default function Topbar({ title, breadcrumb }: TopbarProps) {
         {breadcrumb && breadcrumb.length > 0 ? (
           <div className="flex items-center gap-1.5 text-sm text-muted-foreground">
             {breadcrumb.map((b, i) => (
-              <span key={i} className="flex items-center gap-1.5">
-                {i > 0 && <span className="text-border">/</span>}
+              <span key={`${b.label}-${i}`} className="flex items-center gap-1.5">
+                {i > 0 && <span className="text-border" aria-hidden>/</span>}
                 {b.href ? (
                   <button
+                    type="button"
                     onClick={() => b.href && navigate(b.href)}
                     className="hover:text-foreground transition-colors"
                   >
-                    {b.label}
+                    <span>{b.label}</span>
                   </button>
                 ) : (
                   <span className="font-semibold text-foreground">{b.label}</span>

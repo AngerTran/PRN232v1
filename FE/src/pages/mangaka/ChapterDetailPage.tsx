@@ -49,7 +49,9 @@ function isManuscriptUrl(value?: string | null): value is string {
   }
 }
 
-function manuscriptFileName(url: string): string {
+function manuscriptFileName(url: string, preferredName?: string | null): string {
+  const preferred = preferredName?.trim();
+  if (preferred) return preferred;
   try {
     return decodeURIComponent(url.split('/').pop()?.split('?')[0] || '') || 'ban-thao-chuong';
   } catch {
@@ -354,6 +356,9 @@ export default function ChapterDetailPage() {
   };
 
   const manuscriptUrl = isManuscriptUrl(chapter.description) ? chapter.description.trim() : null;
+  const displayManuscriptName = manuscriptUrl
+    ? manuscriptFileName(manuscriptUrl, chapter.manuscriptFileName)
+    : null;
   const hasDeadline = Boolean(chapter.deadline) && !Number.isNaN(new Date(chapter.deadline).getTime());
 
   return (
@@ -599,7 +604,7 @@ export default function ChapterDetailPage() {
                       </span>
                       <div className="min-w-0">
                         <p className="text-sm font-semibold break-all leading-snug">
-                          {manuscriptFileName(manuscriptUrl)}
+                          {displayManuscriptName}
                         </p>
                         <p className="text-xs text-muted-foreground mt-1">File bản thảo đầy đủ của chương</p>
                       </div>
@@ -608,7 +613,7 @@ export default function ChapterDetailPage() {
                       href={manuscriptUrl}
                       target="_blank"
                       rel="noopener noreferrer"
-                      download={manuscriptFileName(manuscriptUrl)}
+                      download={displayManuscriptName ?? undefined}
                       className="inline-flex w-full items-center justify-center gap-2 rounded-xl border border-primary/25 bg-primary/5 px-4 py-2.5 text-sm font-semibold text-primary hover:bg-primary/10 transition-colors"
                     >
                       <FileDown size={15} />
