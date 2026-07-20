@@ -1,5 +1,5 @@
 import { useNavigate } from 'react-router';
-import { BookOpen, TrendingUp, TrendingDown, Minus, Star, ChevronRight, Trash2 } from 'lucide-react';
+import { BookOpen, TrendingUp, TrendingDown, Star, ChevronRight, Trash2 } from 'lucide-react';
 import { clsx } from 'clsx';
 import Badge from './Badge';
 import type { Series } from '../../types/domain';
@@ -13,11 +13,17 @@ interface SeriesCardProps {
 export default function SeriesCard({ series, view = 'grid', onDelete }: SeriesCardProps) {
   const navigate = useNavigate();
 
+  // Chỉ hiện xu hướng khi đã có hạng kỳ trước thật (không mặc định 0).
+  const hasTrend =
+    series.currentRank > 0
+    && series.previousRank > 0
+    && series.previousRank !== series.currentRank;
   const rankDelta = series.previousRank - series.currentRank;
-  const trendIcon =
-    rankDelta > 0 ? <TrendingUp size={13} className="text-green-600" /> :
-    rankDelta < 0 ? <TrendingDown size={13} className="text-red-500" /> :
-    <Minus size={13} className="text-muted-foreground" />;
+  const trendIcon = hasTrend
+    ? (rankDelta > 0
+      ? <TrendingUp size={13} className="text-green-500" />
+      : <TrendingDown size={13} className="text-red-400" />)
+    : null;
 
   if (view === 'list') {
     return (
@@ -42,8 +48,8 @@ export default function SeriesCard({ series, view = 'grid', onDelete }: SeriesCa
           <Badge status={series.status} />
           {series.currentRank > 0 && (
             <div className="flex items-center gap-1 text-xs">
-              {trendIcon}
               <span className="font-semibold">#{series.currentRank}</span>
+              {trendIcon}
             </div>
           )}
           {onDelete && series.status === 'Draft' && (
@@ -90,7 +96,7 @@ export default function SeriesCard({ series, view = 'grid', onDelete }: SeriesCa
           <div className="absolute bottom-3 right-3 flex items-center gap-1 bg-black/60 text-white px-2 py-1 rounded-lg text-xs">
             <Star size={10} className="fill-accent text-accent" />
             <span className="font-bold">#{series.currentRank}</span>
-            {trendIcon && <span className="ml-0.5">{trendIcon}</span>}
+            {trendIcon}
           </div>
         )}
       </div>
