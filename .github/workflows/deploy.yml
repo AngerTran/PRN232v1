@@ -110,6 +110,8 @@ jobs:
           Swagger__Enabled=true
           Google__RedirectUri=${PUBLIC_FRONTEND_BASE_URL}/auth/google/callback
           Google__FrontendBaseUrl=${PUBLIC_FRONTEND_BASE_URL}
+          Cors__AllowedOrigins__0=${PUBLIC_FRONTEND_BASE_URL}
+          Cors__AllowedOrigins__1=https://chaydev.me
           EOF
 
           add_optional() {

@@ -23,5 +23,7 @@ ENV ASPNETCORE_URLS=http://+:3001
 ENV Swagger__Enabled=true
 ENV Google__RedirectUri=https://www.chaydev.me/auth/google/callback
 ENV Google__FrontendBaseUrl=https://www.chaydev.me
+ENV Cors__AllowedOrigins__0=https://www.chaydev.me
+ENV Cors__AllowedOrigins__1=https://chaydev.me
 
 ENTRYPOINT ["dotnet", "PRN232v1.dll"]
