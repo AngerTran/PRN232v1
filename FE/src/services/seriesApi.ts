@@ -236,15 +236,20 @@ export function mapChapter(item: ApiChapter): Chapter {
 async function enrichChapter(chapter: Chapter): Promise<Chapter> {
   try {
     const stats = await getChapterTaskStats(chapter.id);
-    const progress = stats.progress > 0
+    const progress = stats.totalTasks > 0
       ? stats.progress
       : (chapter.status === 'Published' || chapter.status === 'Approved' ? 100 : 0);
 
     // Không ghi đè status workflow (Draft/Review/Approved) bằng tiến độ task —
     // status quyết định Editor/Board có thấy chương hay không.
-    return { ...chapter, pagesCount: stats.pagesCount, progress };
+    return {
+      ...chapter,
+      pagesCount: stats.pagesCount,
+      progress,
+      totalTasks: stats.totalTasks,
+    };
   } catch {
-    return chapter;
+    return { ...chapter, totalTasks: chapter.totalTasks ?? 0 };
   }
 }
 

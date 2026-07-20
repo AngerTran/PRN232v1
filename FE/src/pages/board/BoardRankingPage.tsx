@@ -11,14 +11,11 @@ import {
   Trophy,
   BarChart3,
   Star,
-  Eye,
   AlertTriangle,
-  TrendingUp,
-  TrendingDown,
-  Minus,
   CalendarRange,
   SlidersHorizontal,
   Crown,
+  ChevronRight,
 } from 'lucide-react';
 import { clsx } from 'clsx';
 
@@ -79,7 +76,6 @@ export default function BoardRankingPage() {
   const [issueOptions, setIssueOptions] = useState<number[]>([]);
   const [items, setItems] = useState<LeaderboardItem[]>([]);
   const [metaById, setMetaById] = useState<Map<string, SeriesMeta>>(new Map());
-  const [prevRankById, setPrevRankById] = useState<Map<string, number>>(new Map());
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
@@ -100,24 +96,6 @@ export default function BoardRankingPage() {
       })
       .catch(() => setMetaById(new Map()));
   }, []);
-
-  useEffect(() => {
-    if (viewMode !== 'latest' || issueOptions.length < 2) {
-      setPrevRankById(new Map());
-      return;
-    }
-    const sorted = [...issueOptions].sort((a, b) => b - a);
-    const prevIssue = sorted[1];
-    getLeaderboard('rank', prevIssue)
-      .then(list => {
-        const map = new Map<string, number>();
-        list.forEach(i => {
-          if (i.latestRank != null) map.set(i.seriesId, i.latestRank);
-        });
-        setPrevRankById(map);
-      })
-      .catch(() => setPrevRankById(new Map()));
-  }, [viewMode, issueOptions]);
 
   useEffect(() => {
     let isActive = true;
@@ -148,19 +126,19 @@ export default function BoardRankingPage() {
   const totalVotes = items.reduce((sum, i) => sum + i.totalVotes, 0);
 
   return (
-    <div className="w-full min-w-0 space-y-5 p-6">
-      <div className="flex flex-wrap items-start justify-between gap-3">
+    <div className="w-full min-w-0 space-y-5 p-5 md:p-6 max-w-6xl">
+      <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
-          <div className="flex items-center gap-2">
-            <h1 className="text-2xl font-bold tracking-tight">Bảng Xếp Hạng Series</h1>
-            <span className="rounded-full border border-primary/20 bg-primary/5 px-2.5 py-1 text-[11px] font-semibold text-primary">
+          <div className="flex flex-wrap items-center gap-2">
+            <h1 className="text-xl font-bold tracking-tight">Bảng xếp hạng</h1>
+            <span className="rounded-full border border-primary/20 bg-primary/5 px-2.5 py-0.5 text-[11px] font-semibold text-primary">
               {viewMode === 'issue' && issueNumber != null
                 ? formatPublishingIssueLabel(issueNumber)
                 : 'Kỳ mới nhất'}
             </span>
           </div>
           <p className="mt-1 text-sm text-muted-foreground">
-            So sánh thứ hạng, lượt vote và độ phổ biến của các series.
+            Hạng, vote và độ phổ biến theo kỳ xuất bản.
           </p>
         </div>
         <Button variant="outline" size="sm" onClick={() => navigate('/board/vote-input')}>
@@ -212,15 +190,15 @@ export default function BoardRankingPage() {
         />
       </div>
 
-      <Card className="gap-0 overflow-visible shadow-sm">
+      <Card className="gap-0 overflow-visible shadow-none border-border/80">
         <CardContent className="p-4">
-          <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-            <div className="flex items-start gap-3">
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex items-start gap-3 min-w-0">
               <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
                 <SlidersHorizontal className="h-4 w-4" />
               </div>
-              <div>
-                <p className="text-sm font-semibold">Phạm vi dữ liệu</p>
+              <div className="min-w-0">
+                <p className="text-sm font-semibold">Phạm vi</p>
                 <div className="mt-2 flex flex-wrap items-center gap-2">
                   <Button
                     variant={viewMode === 'latest' ? 'default' : 'outline'}
@@ -246,7 +224,7 @@ export default function BoardRankingPage() {
                       value={issueNumber != null ? String(issueNumber) : undefined}
                       onValueChange={v => setIssueNumber(Number(v))}
                     >
-                      <SelectTrigger className="h-9 w-[240px]">
+                      <SelectTrigger className="h-9 w-[220px]">
                         <CalendarRange className="mr-2 h-4 w-4" />
                         <SelectValue placeholder="Chọn kỳ" />
                       </SelectTrigger>
@@ -263,8 +241,8 @@ export default function BoardRankingPage() {
               </div>
             </div>
 
-            <div className="lg:border-l lg:pl-5">
-              <p className="text-sm font-semibold">Sắp xếp theo</p>
+            <div className="sm:border-l sm:pl-5">
+              <p className="text-sm font-semibold">Sắp xếp</p>
               <div className="mt-2 flex flex-wrap gap-2">
                 {(['rank', 'votes', 'popularity'] as const).map(f => (
                   <Button
@@ -282,135 +260,144 @@ export default function BoardRankingPage() {
         </CardContent>
       </Card>
 
-      <Card className="gap-0 overflow-hidden shadow-sm">
-        <div className="flex flex-wrap items-center justify-between gap-3 border-b px-5 py-4">
-          <div>
-            <div className="flex items-center gap-2">
-              <Trophy className="h-4 w-4 text-amber-500" />
-              <h2 className="font-semibold">Xếp hạng chi tiết</h2>
-            </div>
-            <p className="mt-1 text-xs text-muted-foreground">
-              {loading ? 'Đang tải dữ liệu…' : `${items.length} series trong bảng hiện tại`}
-            </p>
+      <section className="space-y-2.5">
+        <div className="flex flex-wrap items-baseline justify-between gap-2 px-0.5">
+          <div className="flex items-center gap-2">
+            <Trophy className="h-4 w-4 text-amber-500" />
+            <h2 className="text-sm font-semibold">Xếp hạng chi tiết</h2>
+            <span className="text-xs text-muted-foreground">
+              {loading ? 'Đang tải…' : `${items.length} series`}
+            </span>
           </div>
-          <span className="rounded-lg bg-muted px-2.5 py-1 text-xs font-medium text-muted-foreground">
-            {METRIC_LABEL[metric]}
-          </span>
+          <span className="text-xs font-medium text-muted-foreground">{METRIC_LABEL[metric]}</span>
         </div>
 
-        <div className="overflow-x-auto">
-          <table className="w-full min-w-[760px] text-sm">
-            <thead className="border-b bg-muted/35">
-              <tr>
-                <th className="w-24 px-5 py-3 text-left text-xs font-semibold uppercase tracking-wide text-muted-foreground">Hạng</th>
-                <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-muted-foreground">Series</th>
-                <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-muted-foreground">Mangaka</th>
-                <th className="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wide text-muted-foreground">Vote</th>
-                <th className="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wide text-muted-foreground">Phổ biến</th>
-                <th className="px-4 py-3 text-center text-xs font-semibold uppercase tracking-wide text-muted-foreground">Xu hướng</th>
-                <th className="w-28 px-5 py-3"></th>
-              </tr>
-            </thead>
-            <tbody className="divide-y">
-              {loading ? (
+        <Card className="gap-0 overflow-hidden shadow-none border-border/80">
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[560px] text-sm">
+              <thead className="border-b bg-muted/30">
                 <tr>
-                  <td colSpan={7} className="px-4 py-14 text-center text-muted-foreground">Đang tải bảng xếp hạng…</td>
+                  <th className="w-16 px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                    Hạng
+                  </th>
+                  <th className="px-3 py-3 text-left text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                    Series
+                  </th>
+                  <th className="px-3 py-3 text-left text-xs font-semibold uppercase tracking-wide text-muted-foreground hidden sm:table-cell">
+                    Mangaka
+                  </th>
+                  <th className="px-3 py-3 text-right text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                    Vote
+                  </th>
+                  <th className="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                    Phổ biến
+                  </th>
                 </tr>
-              ) : error ? (
-                <tr>
-                  <td colSpan={7} className="px-4 py-14 text-center text-destructive">{error}</td>
-                </tr>
-              ) : items.length === 0 ? (
-                <tr>
-                  <td colSpan={7} className="px-4 py-14 text-center text-muted-foreground">Chưa có dữ liệu xếp hạng</td>
-                </tr>
-              ) : (
-                items.map((r, idx) => {
-                  const rank = r.latestRank ?? idx + 1;
-                  const meta = metaById.get(r.seriesId);
-                  const prevRank = prevRankById.get(r.seriesId);
-                  const delta = prevRank != null ? prevRank - rank : 0;
-                  const atRisk = meta?.isAtRisk ?? false;
+              </thead>
+              <tbody className="divide-y">
+                {loading ? (
+                  <tr>
+                    <td colSpan={5} className="px-4 py-12 text-center text-muted-foreground">
+                      Đang tải bảng xếp hạng…
+                    </td>
+                  </tr>
+                ) : error ? (
+                  <tr>
+                    <td colSpan={5} className="px-4 py-12 text-center text-destructive">
+                      {error}
+                    </td>
+                  </tr>
+                ) : items.length === 0 ? (
+                  <tr>
+                    <td colSpan={5} className="px-4 py-12 text-center text-muted-foreground">
+                      Chưa có dữ liệu xếp hạng
+                    </td>
+                  </tr>
+                ) : (
+                  items.map((r, idx) => {
+                    const rank = r.latestRank ?? idx + 1;
+                    const meta = metaById.get(r.seriesId);
+                    const atRisk = meta?.isAtRisk ?? false;
 
-                  return (
-                    <tr
-                      key={r.seriesId}
-                      className={clsx(
-                        'transition-colors hover:bg-muted/30',
-                        atRisk && 'bg-red-50/60'
-                      )}
-                    >
-                      <td className="px-5 py-4">
-                        <div className={clsx(
-                          'flex h-10 w-10 items-center justify-center rounded-xl text-sm font-bold',
-                          rank === 1 ? 'bg-amber-100 text-amber-700 ring-1 ring-amber-200' :
-                          rank === 2 ? 'bg-slate-100 text-slate-700 ring-1 ring-slate-200' :
-                          rank === 3 ? 'bg-orange-100 text-orange-700 ring-1 ring-orange-200' :
-                          'bg-muted text-muted-foreground'
-                        )}>
-                          #{rank}
-                        </div>
-                      </td>
-                      <td className="px-4 py-4">
-                        <div className="flex items-center gap-2">
-                          <span className="font-semibold">{r.title}</span>
-                          {atRisk && (
-                            <span className="rounded-full bg-red-100 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-red-700">
-                              Nguy cơ
-                            </span>
-                          )}
-                        </div>
-                      </td>
-                      <td className="px-4 py-4 text-muted-foreground">{meta?.mangakaName ?? '—'}</td>
-                      <td className="px-4 py-4 text-right font-mono font-semibold">{r.totalVotes.toLocaleString()}</td>
-                      <td className="px-4 py-4 text-right font-mono">{r.popularityScore.toLocaleString()}</td>
-                      <td className="px-4 py-4">
-                        <div className="flex items-center justify-center gap-1 text-xs">
-                          {prevRank == null ? (
-                            <span className="text-muted-foreground">—</span>
-                          ) : delta > 0 ? (
-                            <>
-                              <TrendingUp className="h-4 w-4 text-green-600" />
-                              <span className="font-semibold text-green-600">+{delta}</span>
-                            </>
-                          ) : delta < 0 ? (
-                            <>
-                              <TrendingDown className="h-4 w-4 text-red-600" />
-                              <span className="font-semibold text-red-600">{delta}</span>
-                            </>
-                          ) : (
-                            <>
-                              <Minus className="h-4 w-4 text-muted-foreground" />
-                              <span className="text-muted-foreground">0</span>
-                            </>
-                          )}
-                        </div>
-                      </td>
-                      <td className="px-5 py-4">
-                        <div className="flex justify-end gap-1">
-                          {atRisk && (
-                            <Button size="sm" variant="outline" onClick={() => navigate(`/board/series-decisions/${r.seriesId}`)}>
-                              Quyết định
-                            </Button>
-                          )}
-                          <Button
-                            size="icon"
-                            variant="ghost"
-                            title="Xem series"
-                            onClick={() => navigate(`/board/approved-series/${r.seriesId}`)}
+                    return (
+                      <tr
+                        key={r.seriesId}
+                        role="link"
+                        tabIndex={0}
+                        onClick={() => navigate(`/board/approved-series/${r.seriesId}`)}
+                        onKeyDown={e => {
+                          if (e.key === 'Enter' || e.key === ' ') {
+                            e.preventDefault();
+                            navigate(`/board/approved-series/${r.seriesId}`);
+                          }
+                        }}
+                        className={clsx(
+                          'group cursor-pointer transition-colors hover:bg-muted/40',
+                          atRisk && 'bg-red-50/50'
+                        )}
+                      >
+                        <td className="px-4 py-3.5">
+                          <div
+                            className={clsx(
+                              'flex h-9 w-9 items-center justify-center rounded-lg text-sm font-bold',
+                              rank === 1
+                                ? 'bg-amber-100 text-amber-700 ring-1 ring-amber-200'
+                                : rank === 2
+                                  ? 'bg-slate-100 text-slate-700 ring-1 ring-slate-200'
+                                  : rank === 3
+                                    ? 'bg-orange-100 text-orange-700 ring-1 ring-orange-200'
+                                    : 'bg-muted text-muted-foreground'
+                            )}
                           >
-                            <Eye className="h-4 w-4" />
-                          </Button>
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                })
-              )}
-            </tbody>
-          </table>
-        </div>
-      </Card>
+                            #{rank}
+                          </div>
+                        </td>
+                        <td className="px-3 py-3.5">
+                          <div className="flex items-center gap-2 min-w-0">
+                            <div className="min-w-0">
+                              <p className="font-semibold truncate">{r.title}</p>
+                              <p className="text-xs text-muted-foreground sm:hidden mt-0.5 truncate">
+                                {meta?.mangakaName ?? '—'}
+                              </p>
+                              {atRisk && (
+                                <div className="mt-1 flex flex-wrap items-center gap-2">
+                                  <span className="rounded-full bg-red-100 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-red-700">
+                                    Nguy cơ
+                                  </span>
+                                  <button
+                                    type="button"
+                                    className="text-[11px] font-semibold text-red-700 underline-offset-2 hover:underline"
+                                    onClick={e => {
+                                      e.stopPropagation();
+                                      navigate(`/board/series-decisions/${r.seriesId}`);
+                                    }}
+                                  >
+                                    Quyết định
+                                  </button>
+                                </div>
+                              )}
+                            </div>
+                            <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
+                          </div>
+                        </td>
+                        <td className="px-3 py-3.5 text-muted-foreground hidden sm:table-cell">
+                          {meta?.mangakaName ?? '—'}
+                        </td>
+                        <td className="px-3 py-3.5 text-right font-mono font-semibold tabular-nums">
+                          {r.totalVotes.toLocaleString()}
+                        </td>
+                        <td className="px-4 py-3.5 text-right font-mono tabular-nums text-muted-foreground">
+                          {r.popularityScore.toLocaleString()}
+                        </td>
+                      </tr>
+                    );
+                  })
+                )}
+              </tbody>
+            </table>
+          </div>
+        </Card>
+      </section>
     </div>
   );
 }

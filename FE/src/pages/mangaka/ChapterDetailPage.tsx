@@ -450,7 +450,7 @@ export default function ChapterDetailPage() {
               )}
             </div>
 
-            <div className="mt-5 grid grid-cols-2 lg:grid-cols-4 gap-2.5">
+            <div className={`mt-5 grid gap-2.5 ${totalTasks > 0 ? 'grid-cols-2 lg:grid-cols-4' : 'grid-cols-2'}`}>
               {(chapter.status === 'Approved' || chapter.status === 'Published') ? (
                 <StatTile
                   icon={CheckCircle2}
@@ -469,17 +469,23 @@ export default function ChapterDetailPage() {
                 />
               )}
               <StatTile icon={FileText} label="Trang" value={`${pages.length} trang`} />
-              <StatTile
-                icon={CheckCircle2}
-                label="Trang xong"
-                value={`${completedPages}/${pages.length}`}
-              />
-              <StatTile icon={Layers} label="Tiến độ task" value={`${progress}%`} />
+              {totalTasks > 0 && (
+                <>
+                  <StatTile
+                    icon={CheckCircle2}
+                    label="Trang xong"
+                    value={`${completedPages}/${pages.length}`}
+                  />
+                  <StatTile icon={Layers} label="Tiến độ task" value={`${progress}%`} />
+                </>
+              )}
             </div>
 
-            <div className="mt-4">
-              <ProgressBar value={progress} showLabel size="md" />
-            </div>
+            {totalTasks > 0 && (
+              <div className="mt-4">
+                <ProgressBar value={progress} showLabel size="md" />
+              </div>
+            )}
           </div>
         </Card>
 

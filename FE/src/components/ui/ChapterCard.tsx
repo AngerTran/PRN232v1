@@ -65,7 +65,10 @@ export default function ChapterCard({ chapter, seriesId, onDelete, chapterDetail
           <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Ch.{chapter.number}</span>
           <span className="text-foreground font-semibold text-sm truncate">{chapter.title}</span>
         </div>
-        <div className="flex items-center gap-3 text-xs text-muted-foreground mb-2">
+        <div className={clsx(
+          'flex items-center gap-3 text-xs text-muted-foreground',
+          (chapter.totalTasks ?? 0) > 0 && 'mb-2',
+        )}>
           <span className="flex items-center gap-1">
             <FileText size={11} />
             {chapter.pagesCount} trang
@@ -75,7 +78,9 @@ export default function ChapterCard({ chapter, seriesId, onDelete, chapterDetail
             {metaLabel}
           </span>
         </div>
-        <ProgressBar value={chapter.progress} showLabel />
+        {(chapter.totalTasks ?? 0) > 0 && (
+          <ProgressBar value={chapter.progress} showLabel />
+        )}
       </div>
       <div className="flex items-center gap-3 shrink-0">
         <Badge status={chapter.status} statusKind="chapter" />

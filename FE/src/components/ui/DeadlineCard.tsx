@@ -57,7 +57,9 @@ export default function DeadlineCard({ chapter, onDelete, hint }: DeadlineCardPr
           </span>
         </div>
       </div>
-      <ProgressBar value={chapter.progress} showLabel className="mb-2" />
+      {(chapter.totalTasks ?? 0) > 0 && (
+        <ProgressBar value={chapter.progress} showLabel className="mb-2" />
+      )}
       {hint && <p className="text-xs text-muted-foreground mb-2">{hint}</p>}
       <div className="flex items-center justify-between text-xs text-muted-foreground">
         <div className="flex items-center gap-1">

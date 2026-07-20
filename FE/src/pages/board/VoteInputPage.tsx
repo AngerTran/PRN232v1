@@ -1,5 +1,16 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { CheckCircle, History, Save, Vote, CalendarDays, CircleDashed, Trash2, Sparkles } from 'lucide-react';
+import {
+  CheckCircle,
+  History,
+  Save,
+  Vote,
+  Trash2,
+  Sparkles,
+  Search,
+  Plus,
+  Pencil,
+  CalendarDays,
+} from 'lucide-react';
 import { toast } from 'sonner';
 import { usePageMeta } from '../../hooks/usePageMeta';
 import { Card, CardContent, CardHeader, CardTitle } from '../../app/components/ui/card';
@@ -20,6 +31,7 @@ import { useConfirm } from '../../components/ui/ConfirmDialog';
 import { SERIES_STATUS_LABELS } from '../../utils/statusLabels';
 import { formatPublishingIssueLabel } from '../../utils/publishingIssue';
 import type { SeriesStatus } from '../../types/domain';
+import { clsx } from 'clsx';
 
 type RowDraft = {
   voteCount: string;
@@ -37,6 +49,10 @@ function initDraft(row: VoteInputSeriesRow): RowDraft {
     popularityScore: row.existingPopularityScore != null ? String(row.existingPopularityScore) : '',
     notes: row.existingNotes ?? '',
   };
+}
+
+function emptyDraft(): RowDraft {
+  return { voteCount: '', popularityScore: '', notes: '' };
 }
 
 function formatInputDate(value?: string) {
@@ -60,73 +76,8 @@ function mapApiStatusToLabel(status: string): string {
   return feStatus ? (SERIES_STATUS_LABELS[feStatus] ?? status) : status;
 }
 
-function SeriesVoteTable({
-  rows,
-  drafts,
-  updateDraft,
-}: {
-  rows: VoteInputSeriesRow[];
-  drafts: Record<string, RowDraft>;
-  updateDraft: (seriesId: string, patch: Partial<RowDraft>) => void;
-}) {
-  return (
-    <div className="overflow-x-auto">
-      <table className="w-full text-sm">
-        <thead>
-          <tr className="border-b text-left text-muted-foreground">
-            <th className="py-2 pr-3 font-medium">Series</th>
-            <th className="py-2 px-2 font-medium w-28">Trạng thái</th>
-            <th className="py-2 px-2 font-medium w-28">Vote</th>
-            <th className="py-2 px-2 font-medium w-28">Phổ biến</th>
-            <th className="py-2 px-2 font-medium min-w-[160px]">Ghi chú</th>
-            <th className="py-2 pl-2 font-medium w-20 text-right">Lịch kỳ</th>
-          </tr>
-        </thead>
-        <tbody className="divide-y">
-          {rows.map(row => {
-            const draft = drafts[rowKey(row.seriesId)] ?? initDraft(row);
-            return (
-              <tr key={row.seriesId}>
-                <td className="py-2 pr-3 font-medium">{row.title}</td>
-                <td className="py-2 px-2 text-muted-foreground whitespace-nowrap">
-                  {mapApiStatusToLabel(row.status)}
-                </td>
-                <td className="py-2 px-2">
-                  <Input
-                    type="number"
-                    min={0}
-                    placeholder="0"
-                    value={draft.voteCount}
-                    onChange={e => updateDraft(row.seriesId, { voteCount: e.target.value })}
-                  />
-                </td>
-                <td className="py-2 px-2">
-                  <Input
-                    type="number"
-                    min={0}
-                    step={0.1}
-                    placeholder="0"
-                    value={draft.popularityScore}
-                    onChange={e => updateDraft(row.seriesId, { popularityScore: e.target.value })}
-                  />
-                </td>
-                <td className="py-2 px-2">
-                  <Input
-                    placeholder="Nhận xét kỳ này…"
-                    value={draft.notes}
-                    onChange={e => updateDraft(row.seriesId, { notes: e.target.value })}
-                  />
-                </td>
-                <td className="py-2 pl-2 text-right text-muted-foreground">
-                  {row.scheduleCountForIssue > 0 ? `${row.scheduleCountForIssue} lịch` : '—'}
-                </td>
-              </tr>
-            );
-          })}
-        </tbody>
-      </table>
-    </div>
-  );
+function isDraftFilled(draft?: RowDraft): boolean {
+  return Boolean(draft?.voteCount.trim());
 }
 
 export default function VoteInputPage() {
@@ -138,6 +89,10 @@ export default function VoteInputPage() {
   const [drafts, setDrafts] = useState<Record<string, RowDraft>>({});
   const [recentInputs, setRecentInputs] = useState<RecentRankingInput[]>([]);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [selectedSeriesId, setSelectedSeriesId] = useState<string>('');
+  const [seriesQuery, setSeriesQuery] = useState('');
+  const [form, setForm] = useState<RowDraft>(emptyDraft());
+  const [pickerOpen, setPickerOpen] = useState(false);
   const [loading, setLoading] = useState(true);
   const [historyLoading, setHistoryLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -171,6 +126,9 @@ export default function VoteInputPage() {
       setAvailableIssues(ctx.availableIssueNumbers);
       setRows(ctx.series);
       setDrafts(Object.fromEntries(ctx.series.map(row => [rowKey(row.seriesId), initDraft(row)])));
+      setSelectedSeriesId('');
+      setForm(emptyDraft());
+      setSeriesQuery('');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Không thể tải dữ liệu ranking.');
       setRows([]);
@@ -190,28 +148,83 @@ export default function VoteInputPage() {
     return [...set].sort((a, b) => b - a);
   }, [availableIssues, issueNumber]);
 
-  const scheduledForIssue = useMemo(
-    () => rows.filter(row => row.scheduleCountForIssue > 0),
-    [rows]
-  );
-  const withoutScheduleForIssue = useMemo(
-    () => rows.filter(row => row.scheduleCountForIssue <= 0),
-    [rows]
+  const selectedRow = useMemo(
+    () => rows.find(r => r.seriesId === selectedSeriesId) ?? null,
+    [rows, selectedSeriesId]
   );
 
-  const filledCount = useMemo(
-    () => Object.values(drafts).filter(d => d.voteCount.trim() !== '').length,
-    [drafts]
+  const filteredSeries = useMemo(() => {
+    const q = seriesQuery.trim().toLowerCase();
+    const list = [...rows].sort((a, b) => {
+      const aSched = a.scheduleCountForIssue > 0 ? 0 : 1;
+      const bSched = b.scheduleCountForIssue > 0 ? 0 : 1;
+      if (aSched !== bSched) return aSched - bSched;
+      return a.title.localeCompare(b.title, 'vi');
+    });
+    if (!q) return list;
+    return list.filter(r =>
+      r.title.toLowerCase().includes(q)
+      || mapApiStatusToLabel(r.status).toLowerCase().includes(q)
+    );
+  }, [rows, seriesQuery]);
+
+  const pendingRows = useMemo(
+    () => rows.filter(r => isDraftFilled(drafts[rowKey(r.seriesId)])),
+    [rows, drafts]
+  );
+
+  const scheduledCount = useMemo(
+    () => rows.filter(r => r.scheduleCountForIssue > 0).length,
+    [rows]
   );
 
   const allSelected = recentInputs.length > 0 && selectedIds.size === recentInputs.length;
   const someSelected = selectedIds.size > 0 && selectedIds.size < recentInputs.length;
 
-  const updateDraft = (seriesId: string, patch: Partial<RowDraft>) => {
+  const selectSeries = (seriesId: string) => {
+    const row = rows.find(r => r.seriesId === seriesId);
+    if (!row) return;
+    setSelectedSeriesId(seriesId);
+    setForm(drafts[rowKey(seriesId)] ?? initDraft(row));
+    setSeriesQuery(row.title);
+    setPickerOpen(false);
+    setSaved(false);
+  };
+
+  const applyFormToDraft = () => {
+    if (!selectedSeriesId) {
+      setError('Chọn series trước khi thêm vào danh sách.');
+      return;
+    }
+    if (!form.voteCount.trim()) {
+      setError('Nhập số vote trước khi thêm.');
+      return;
+    }
+    const voteCount = Number(form.voteCount);
+    if (!Number.isFinite(voteCount) || voteCount < 0) {
+      setError('Số vote không hợp lệ.');
+      return;
+    }
+
     setDrafts(prev => ({
       ...prev,
-      [seriesId]: { ...prev[seriesId], ...patch },
+      [selectedSeriesId]: {
+        voteCount: form.voteCount.trim(),
+        popularityScore: form.popularityScore.trim(),
+        notes: form.notes,
+      },
     }));
+    setError('');
+    setSaved(false);
+    toast.success(`Đã thêm «${selectedRow?.title ?? 'series'}» vào danh sách lưu.`);
+  };
+
+  const removePending = (seriesId: string) => {
+    setDrafts(prev => ({
+      ...prev,
+      [seriesId]: emptyDraft(),
+    }));
+    if (selectedSeriesId === seriesId) setForm(emptyDraft());
     setSaved(false);
   };
 
@@ -297,7 +310,7 @@ export default function VoteInputPage() {
 
   const submit = async () => {
     if (issueNumber == null) return;
-    const entries = rows
+    const entries = pendingRows
       .map(row => {
         const draft = drafts[rowKey(row.seriesId)];
         if (!draft?.voteCount.trim()) return null;
@@ -313,7 +326,7 @@ export default function VoteInputPage() {
       .filter((e): e is NonNullable<typeof e> => e != null);
 
     if (entries.length === 0) {
-      setError('Nhập ít nhất một số vote trước khi lưu.');
+      setError('Thêm ít nhất một series (có số vote) trước khi lưu.');
       return;
     }
 
@@ -323,7 +336,7 @@ export default function VoteInputPage() {
       await bulkSaveRankings(issueNumber, entries);
       setSaved(true);
       await Promise.all([load(issueNumber), loadHistory()]);
-      toast.success(`Đã lưu ${formatPublishingIssueLabel(issueNumber)}.`);
+      toast.success(`Đã lưu ${entries.length} series · ${formatPublishingIssueLabel(issueNumber)}.`);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Không thể lưu ranking.');
     } finally {
@@ -332,22 +345,22 @@ export default function VoteInputPage() {
   };
 
   return (
-    <div className="mx-auto w-full max-w-7xl space-y-5 p-5 sm:p-6">
-      <section className="overflow-hidden rounded-2xl border border-border/80 bg-card shadow-sm">
-        <div className="flex flex-col gap-5 p-5 sm:p-6 lg:flex-row lg:items-center lg:justify-between">
-          <div className="flex min-w-0 items-start gap-4">
-            <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
+    <div className="mx-auto w-full max-w-5xl space-y-5 p-5 sm:p-6">
+      <section className="overflow-hidden rounded-2xl border border-border/80 bg-card">
+        <div className="flex flex-col gap-4 p-5 sm:flex-row sm:items-center sm:justify-between sm:p-6">
+          <div className="flex min-w-0 items-start gap-3">
+            <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
               <Vote className="h-5 w-5" />
             </span>
             <div>
-              <h1 className="text-xl font-bold tracking-tight sm:text-2xl">Nhập vote độc giả</h1>
-              <p className="mt-1 max-w-2xl text-sm leading-6 text-muted-foreground">
-                Nhập lượt vote và điểm phổ biến. Hệ thống tự tính hạng; hòa cả hai tiêu chí sẽ đồng hạng.
+              <h1 className="text-xl font-bold tracking-tight">Nhập vote độc giả</h1>
+              <p className="mt-1 text-sm text-muted-foreground leading-relaxed">
+                Chọn series → nhập vote/phổ biến → thêm vào danh sách → lưu một lần.
               </p>
             </div>
           </div>
 
-          <div className="space-y-1.5">
+          <div className="space-y-1.5 shrink-0">
             <label className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
               Đợt xuất bản
             </label>
@@ -367,12 +380,13 @@ export default function VoteInputPage() {
           </div>
         </div>
 
-        <div className="flex flex-wrap items-center gap-x-6 gap-y-2 border-t border-border/60 bg-muted/20 px-5 py-3 text-xs text-muted-foreground sm:px-6">
-          <span><strong className="text-foreground">{rows.length}</strong> series đang xuất bản</span>
-          <span><strong className="text-foreground">{scheduledForIssue.length}</strong> series có lịch đợt này</span>
-          <span className="inline-flex items-center gap-1.5">
+        <div className="flex flex-wrap items-center gap-x-5 gap-y-2 border-t border-border/60 bg-muted/20 px-5 py-2.5 text-xs text-muted-foreground sm:px-6">
+          <span><strong className="text-foreground">{rows.length}</strong> series</span>
+          <span><strong className="text-foreground">{scheduledCount}</strong> có lịch đợt này</span>
+          <span><strong className="text-foreground">{pendingRows.length}</strong> chờ lưu</span>
+          <span className="inline-flex items-center gap-1">
             <Sparkles className="h-3.5 w-3.5 text-primary" />
-            Hạng được tính sau khi lưu
+            Hạng tự tính sau khi lưu
           </span>
         </div>
       </section>
@@ -384,82 +398,245 @@ export default function VoteInputPage() {
         </p>
       )}
 
-      <Card className="overflow-hidden border-border/80 shadow-sm">
-        <CardHeader className="flex flex-row items-center justify-between gap-3">
-          <div>
-            <CardTitle className="flex items-center gap-2 text-base">
-              <Vote className="h-4 w-4" />
-              Series đang xuất bản
-            </CardTitle>
-            <p className="text-xs text-muted-foreground mt-1">
-              {loading
-                ? 'Đang tải...'
-                : `${rows.length} series · ${formatPublishingIssueLabel(issueNumber)} · ${scheduledForIssue.length} có lịch đợt này`}
-            </p>
-          </div>
-          <Button type="button" onClick={submit} disabled={saving || loading || filledCount === 0}>
-            <Save className="h-4 w-4 mr-1" />
-            {saving ? 'Đang lưu...' : 'Lưu kết quả vote'}
-          </Button>
+      <Card className="overflow-visible border-border/80 shadow-none">
+        <CardHeader className="pb-3">
+          <CardTitle className="text-base">Nhập theo series</CardTitle>
+          <p className="text-xs text-muted-foreground">
+            Tìm và chọn series — không cần kéo cả bảng dài khi có nhiều bộ.
+          </p>
         </CardHeader>
-        <CardContent className="space-y-6">
+        <CardContent className="space-y-4">
           {loading ? (
-            <p className="text-sm text-muted-foreground py-8 text-center">Đang tải...</p>
+            <p className="py-8 text-center text-sm text-muted-foreground">Đang tải…</p>
           ) : rows.length === 0 ? (
-            <p className="text-sm text-muted-foreground py-8 text-center">
-              Chưa có series đang xuất bản. Duyệt series và lên lịch XB trước.
+            <p className="py-8 text-center text-sm text-muted-foreground">
+              Chưa có series để nhập. Duyệt series và lên lịch XB trước.
             </p>
           ) : (
             <>
-              <section className="space-y-3">
-                <div className="flex items-center gap-2">
-                  <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-emerald-50 text-emerald-700">
-                    <CalendarDays className="h-3.5 w-3.5" />
-                  </span>
-                  <div>
-                    <p className="text-sm font-semibold">Có lịch {formatPublishingIssueLabel(issueNumber)}</p>
-                    <p className="text-xs text-muted-foreground">{scheduledForIssue.length} series khớp đợt XB này</p>
-                  </div>
-                </div>
-                {scheduledForIssue.length === 0 ? (
-                  <p className="text-sm text-muted-foreground rounded-xl border border-dashed border-border px-4 py-6 text-center">
-                    Chưa series nào có lịch đúng đợt này.
-                  </p>
-                ) : (
-                  <SeriesVoteTable
-                    rows={scheduledForIssue}
-                    drafts={drafts}
-                    updateDraft={updateDraft}
+              <div className="space-y-1.5">
+                <label className="text-xs font-medium text-muted-foreground">Series</label>
+                <div className="relative">
+                  <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                  <Input
+                    className="pl-9"
+                    placeholder="Tìm theo tên series…"
+                    value={seriesQuery}
+                    onChange={e => {
+                      setSeriesQuery(e.target.value);
+                      setPickerOpen(true);
+                    }}
+                    onFocus={() => setPickerOpen(true)}
+                    onBlur={() => {
+                      // Delay để click item kịp chạy
+                      window.setTimeout(() => setPickerOpen(false), 150);
+                    }}
                   />
-                )}
-              </section>
-
-              {withoutScheduleForIssue.length > 0 && (
-                <section className="space-y-3">
-                  <div className="flex items-center gap-2">
-                    <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-amber-50 text-amber-800">
-                      <CircleDashed className="h-3.5 w-3.5" />
-                    </span>
-                    <div>
-                      <p className="text-sm font-semibold">Chưa gắn lịch {formatPublishingIssueLabel(issueNumber)}</p>
-                      <p className="text-xs text-muted-foreground">
-                        Vẫn nhập vote được — {withoutScheduleForIssue.length} series
-                      </p>
+                  {pickerOpen && (
+                    <div className="absolute z-20 mt-1 max-h-64 w-full overflow-auto rounded-xl border border-border bg-card shadow-lg">
+                      {filteredSeries.length === 0 ? (
+                        <p className="px-3 py-4 text-center text-sm text-muted-foreground">Không tìm thấy series</p>
+                      ) : (
+                        filteredSeries.map(row => {
+                          const filled = isDraftFilled(drafts[rowKey(row.seriesId)]);
+                          return (
+                            <button
+                              key={row.seriesId}
+                              type="button"
+                              className={clsx(
+                                'flex w-full items-start gap-2 px-3 py-2.5 text-left text-sm hover:bg-muted/60',
+                                selectedSeriesId === row.seriesId && 'bg-primary/5'
+                              )}
+                              onMouseDown={e => e.preventDefault()}
+                              onClick={() => selectSeries(row.seriesId)}
+                            >
+                              <div className="min-w-0 flex-1">
+                                <p className="font-medium truncate">{row.title}</p>
+                                <p className="text-[11px] text-muted-foreground mt-0.5">
+                                  {mapApiStatusToLabel(row.status)}
+                                  {row.scheduleCountForIssue > 0
+                                    ? ` · ${row.scheduleCountForIssue} lịch kỳ này`
+                                    : ' · chưa có lịch kỳ này'}
+                                </p>
+                              </div>
+                              {filled && (
+                                <span className="shrink-0 rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-semibold text-emerald-700">
+                                  Đã nhập
+                                </span>
+                              )}
+                            </button>
+                          );
+                        })
+                      )}
                     </div>
-                  </div>
-                  <SeriesVoteTable
-                    rows={withoutScheduleForIssue}
-                    drafts={drafts}
-                    updateDraft={updateDraft}
+                  )}
+                </div>
+                {selectedRow && (
+                  <p className="text-xs text-muted-foreground flex items-center gap-1.5 pt-0.5">
+                    {selectedRow.scheduleCountForIssue > 0 ? (
+                      <>
+                        <CalendarDays className="h-3.5 w-3.5 text-emerald-600" />
+                        Có {selectedRow.scheduleCountForIssue} lịch đúng đợt này
+                      </>
+                    ) : (
+                      'Series chưa gắn lịch đợt này — vẫn nhập vote được'
+                    )}
+                  </p>
+                )}
+              </div>
+
+              <div className="grid gap-3 sm:grid-cols-2">
+                <div className="space-y-1.5">
+                  <label className="text-xs font-medium text-muted-foreground">Vote</label>
+                  <Input
+                    type="number"
+                    min={0}
+                    placeholder="0"
+                    disabled={!selectedSeriesId}
+                    value={form.voteCount}
+                    onChange={e => setForm(prev => ({ ...prev, voteCount: e.target.value }))}
                   />
-                </section>
-              )}
+                </div>
+                <div className="space-y-1.5">
+                  <label className="text-xs font-medium text-muted-foreground">Phổ biến</label>
+                  <Input
+                    type="number"
+                    min={0}
+                    step={0.1}
+                    placeholder="0"
+                    disabled={!selectedSeriesId}
+                    value={form.popularityScore}
+                    onChange={e => setForm(prev => ({ ...prev, popularityScore: e.target.value }))}
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="text-xs font-medium text-muted-foreground">Ghi chú (tuỳ chọn)</label>
+                <Input
+                  placeholder="Nhận xét kỳ này…"
+                  disabled={!selectedSeriesId}
+                  value={form.notes}
+                  onChange={e => setForm(prev => ({ ...prev, notes: e.target.value }))}
+                />
+              </div>
+
+              <div className="flex flex-wrap gap-2">
+                <Button type="button" onClick={applyFormToDraft} disabled={!selectedSeriesId}>
+                  <Plus className="h-4 w-4 mr-1" />
+                  Thêm / cập nhật danh sách
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  disabled={!selectedSeriesId}
+                  onClick={() => {
+                    if (!selectedSeriesId) return;
+                    const row = rows.find(r => r.seriesId === selectedSeriesId);
+                    setForm(row ? initDraft(row) : emptyDraft());
+                  }}
+                >
+                  Đặt lại form
+                </Button>
+              </div>
             </>
           )}
         </CardContent>
       </Card>
 
-      <Card className="overflow-hidden border-border/80 shadow-sm">
+      <Card className="overflow-hidden border-border/80 shadow-none">
+        <CardHeader className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between pb-3">
+          <div>
+            <CardTitle className="text-base">Danh sách chờ lưu</CardTitle>
+            <p className="mt-1 text-xs text-muted-foreground">
+              {pendingRows.length === 0
+                ? 'Chưa có series nào — chọn và thêm ở form phía trên'
+                : `${pendingRows.length} series sẽ được lưu cho ${formatPublishingIssueLabel(issueNumber)}`}
+            </p>
+          </div>
+          <Button
+            type="button"
+            onClick={() => void submit()}
+            disabled={saving || loading || pendingRows.length === 0}
+          >
+            <Save className="h-4 w-4 mr-1" />
+            {saving ? 'Đang lưu…' : `Lưu kết quả (${pendingRows.length})`}
+          </Button>
+        </CardHeader>
+        <CardContent>
+          {pendingRows.length === 0 ? (
+            <p className="rounded-xl border border-dashed border-border px-4 py-8 text-center text-sm text-muted-foreground">
+              Danh sách trống. Mỗi lần chọn một series, nhập vote, rồi bấm «Thêm / cập nhật danh sách».
+            </p>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b text-left text-muted-foreground">
+                    <th className="py-2 pr-3 font-medium">Series</th>
+                    <th className="py-2 px-2 font-medium w-24 text-right">Vote</th>
+                    <th className="py-2 px-2 font-medium w-28 text-right">Phổ biến</th>
+                    <th className="py-2 px-2 font-medium">Ghi chú</th>
+                    <th className="py-2 pl-2 font-medium w-24 text-right"> </th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y">
+                  {pendingRows.map(row => {
+                    const draft = drafts[rowKey(row.seriesId)];
+                    return (
+                      <tr key={row.seriesId} className="group">
+                        <td className="py-2.5 pr-3">
+                          <p className="font-medium">{row.title}</p>
+                          <p className="text-[11px] text-muted-foreground mt-0.5">
+                            {row.scheduleCountForIssue > 0
+                              ? `${row.scheduleCountForIssue} lịch kỳ này`
+                              : 'Chưa có lịch kỳ này'}
+                          </p>
+                        </td>
+                        <td className="py-2.5 px-2 text-right font-mono font-semibold tabular-nums">
+                          {Number(draft.voteCount).toLocaleString()}
+                        </td>
+                        <td className="py-2.5 px-2 text-right font-mono tabular-nums text-muted-foreground">
+                          {(Number(draft.popularityScore) || 0).toLocaleString()}
+                        </td>
+                        <td className="py-2.5 px-2 text-muted-foreground max-w-[200px] truncate">
+                          {draft.notes.trim() || '—'}
+                        </td>
+                        <td className="py-2.5 pl-2 text-right">
+                          <div className="inline-flex gap-1">
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant="ghost"
+                              className="h-8 px-2"
+                              title="Sửa"
+                              onClick={() => selectSeries(row.seriesId)}
+                            >
+                              <Pencil className="h-3.5 w-3.5" />
+                            </Button>
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant="ghost"
+                              className="h-8 px-2 text-destructive hover:text-destructive"
+                              title="Bỏ khỏi danh sách"
+                              onClick={() => removePending(row.seriesId)}
+                            >
+                              <Trash2 className="h-3.5 w-3.5" />
+                            </Button>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      <Card className="overflow-hidden border-border/80 shadow-none">
         <CardHeader className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <CardTitle className="flex items-center gap-2 text-base">
@@ -517,8 +694,8 @@ export default function VoteInputPage() {
                     <th className="py-2 pr-3 font-medium">Ngày nhập</th>
                     <th className="py-2 px-2 font-medium">Đợt XB</th>
                     <th className="py-2 px-2 font-medium">Series</th>
-                    <th className="py-2 px-2 font-medium w-20">Vote</th>
-                    <th className="py-2 px-2 font-medium w-24">Phổ biến</th>
+                    <th className="py-2 px-2 font-medium w-20 text-right">Vote</th>
+                    <th className="py-2 px-2 font-medium w-24 text-right">Phổ biến</th>
                     <th className="py-2 pl-2 font-medium">Ghi chú</th>
                   </tr>
                 </thead>
@@ -544,8 +721,8 @@ export default function VoteInputPage() {
                           {formatPublishingIssueLabel(item.issueNumber)}
                         </td>
                         <td className="py-2 px-2">{item.seriesTitle ?? item.seriesId.slice(0, 8)}</td>
-                        <td className="py-2 px-2 tabular-nums">{item.voteCount.toLocaleString()}</td>
-                        <td className="py-2 px-2 tabular-nums">{item.popularityScore.toLocaleString()}</td>
+                        <td className="py-2 px-2 text-right tabular-nums">{item.voteCount.toLocaleString()}</td>
+                        <td className="py-2 px-2 text-right tabular-nums">{item.popularityScore.toLocaleString()}</td>
                         <td className="py-2 pl-2 text-muted-foreground max-w-xs truncate" title={item.notes}>
                           {item.notes || '—'}
                         </td>

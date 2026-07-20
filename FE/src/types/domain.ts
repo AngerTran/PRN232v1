@@ -66,6 +66,8 @@ export interface Chapter {
   title: string;
   deadline: string;
   progress: number;
+  /** Số task giao trợ lý trên chương (0 = chưa giao → ẩn tiến độ). */
+  totalTasks?: number;
   status: ChapterStatus;
   pagesCount: number;
   description: string;
