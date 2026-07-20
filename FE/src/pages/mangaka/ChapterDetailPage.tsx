@@ -171,8 +171,16 @@ export default function ChapterDetailPage() {
     setUploadingManuscript(true);
     try {
       const updated = await uploadChapterManuscript(chapterId, file);
-      setChapter(prev => (prev ? { ...prev, description: updated.description } : updated));
-      toast.success('Đã cập nhật bản thảo chương');
+      setChapter(prev =>
+        prev
+          ? {
+              ...prev,
+              description: updated.description,
+              manuscriptFileName: updated.manuscriptFileName,
+            }
+          : updated,
+      );
+      toast.success(`Đã cập nhật bản thảo: ${updated.manuscriptFileName || file.name}`);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Tải bản thảo thất bại');
     } finally {
@@ -656,7 +664,7 @@ export default function ChapterDetailPage() {
                   <CardTitle className="mb-0">Bản thảo chương</CardTitle>
                   <p className="text-xs text-muted-foreground mt-1">PDF / ZIP / CBZ — khác với trang nháp</p>
                 </div>
-                {!readOnly && canEdit && (
+                {!readOnly && (
                   <>
                     <Button
                       variant="outline"
@@ -705,11 +713,22 @@ export default function ChapterDetailPage() {
                 ) : (
                   <div className="rounded-xl border border-dashed border-border bg-muted/30 px-4 py-8 text-center">
                     <FileText className="h-8 w-8 mx-auto text-muted-foreground/50 mb-2" />
-                    <p className="text-sm text-muted-foreground">
+                    <p className="text-sm text-muted-foreground mb-3">
                       {readOnly
                         ? 'Chưa có file bản thảo chương.'
                         : 'Chưa có bản thảo — tải lên để lưu file gốc chương.'}
                     </p>
+                    {!readOnly && (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        loading={uploadingManuscript}
+                        onClick={() => manuscriptInputRef.current?.click()}
+                      >
+                        <Upload size={14} />
+                        Tải lên
+                      </Button>
+                    )}
                   </div>
                 )}
               </div>
