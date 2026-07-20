@@ -1,6 +1,7 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate, useLocation } from 'react-router';
-import { ArrowLeft, BookOpen, FileText, BarChart2, Send, Plus, CheckCircle2, Pencil, FileDown, Tags } from 'lucide-react';
+import { ArrowLeft, BookOpen, FileText, BarChart2, Send, Plus, CheckCircle2, Pencil, FileDown, Tags, Upload } from 'lucide-react';
+import { toast } from 'sonner';
 import { getStoredUser } from '../../services/authApi';
 import { Tabs, TabsList, Tab, TabPanel } from '../../components/ui/Tabs';
 import Badge from '../../components/ui/Badge';
@@ -27,6 +28,7 @@ import {
   SERIES_SUBMISSION_STATUS_HINT,
   submitSeriesForReview,
   markSeriesCompleted,
+  upsertSeriesProposalManuscript,
   type SeriesStats,
   type SeriesTeam,
 } from '../../services/seriesApi';
@@ -67,6 +69,8 @@ export default function SeriesDetailPage() {
   const [proposalNote, setProposalNote] = useState('');
   const [proposalDraft, setProposalDraft] = useState<Record<string, string>>({});
   const [submittingProposal, setSubmittingProposal] = useState(false);
+  const [replacingManuscript, setReplacingManuscript] = useState(false);
+  const manuscriptInputRef = useRef<HTMLInputElement>(null);
 
   const showRankingTab = series
     ? !['Draft', 'Submitted', 'Cancelled'].includes(series.status)
@@ -83,6 +87,8 @@ export default function SeriesDetailPage() {
   const canMarkReadyForPublish =
     isAssignedEditor && canProduce && !alreadyReportedReady;
   const canEditProfile = isMangakaView && series && (series.status === 'Draft' || series.status === 'Cancelled');
+  // Bản thảo đề xuất (chapter 0) — mangaka được thay file mọi lúc.
+  const canReplaceManuscript = Boolean(isMangakaView && series);
   const waitingForBoardEditor = isMangakaView && series && canProduce && !series.editorId;
   const proposalChapter = chapters.find(c => c.number === 0) ?? chapters.find(c => Boolean(c.description?.trim()));
   const manuscriptUrl = proposalChapter?.description?.trim() || null;
@@ -257,6 +263,30 @@ export default function SeriesDetailPage() {
       setError(err instanceof Error ? err.message : 'Không thể gửi đề xuất giá.');
     } finally {
       setSubmittingProposal(false);
+    }
+  };
+
+  const handleReplaceManuscript = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (!seriesId || !canReplaceManuscript) return;
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file) return;
+
+    setReplacingManuscript(true);
+    setError('');
+    try {
+      const updated = await upsertSeriesProposalManuscript(seriesId, file, proposalChapter?.id);
+      setChapters(prev => {
+        const others = prev.filter(c => c.id !== updated.id && c.number !== 0);
+        return [...others, updated].sort((a, b) => a.number - b.number);
+      });
+      toast.success(`Đã cập nhật bản thảo: ${updated.manuscriptFileName || file.name}`);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Không thể thay bản thảo.';
+      setError(message);
+      toast.error(message);
+    } finally {
+      setReplacingManuscript(false);
     }
   };
 
@@ -523,6 +553,13 @@ export default function SeriesDetailPage() {
                       Bản thảo
                     </h4>
                   </div>
+                  <input
+                    ref={manuscriptInputRef}
+                    type="file"
+                    accept=".pdf,.zip,.cbz,application/pdf,application/zip"
+                    className="hidden"
+                    onChange={handleReplaceManuscript}
+                  />
                   {manuscriptUrl ? (
                     <div className="rounded-xl border border-dashed border-amber-300/70 bg-amber-50/50 px-3.5 py-3 flex flex-wrap items-center justify-between gap-3">
                       <div className="min-w-0 flex items-center gap-2.5">
@@ -545,8 +582,14 @@ export default function SeriesDetailPage() {
                           <FileDown size={14} />
                           Tải bản thảo
                         </a>
-                        {canEditProfile && (
-                          <Button variant="outline" size="sm" onClick={() => navigate(`/mangaka/series/${series.id}/edit`)}>
+                        {canReplaceManuscript && (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            loading={replacingManuscript}
+                            onClick={() => manuscriptInputRef.current?.click()}
+                          >
+                            <Upload size={14} />
                             Thay file
                           </Button>
                         )}
@@ -554,10 +597,16 @@ export default function SeriesDetailPage() {
                     </div>
                   ) : (
                     <div className="rounded-xl border border-dashed border-border bg-muted/25 px-3.5 py-3.5 text-sm text-muted-foreground">
-                      {canEditProfile ? (
+                      {canReplaceManuscript ? (
                         <div className="flex flex-wrap items-center justify-between gap-3">
-                          <span>Chưa có file — cần tải trước khi gửi duyệt.</span>
-                          <Button variant="outline" size="sm" onClick={() => navigate(`/mangaka/series/${series.id}/edit`)}>
+                          <span>Chưa có file — tải lên bản thảo đề xuất (PDF/ZIP).</span>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            loading={replacingManuscript}
+                            onClick={() => manuscriptInputRef.current?.click()}
+                          >
+                            <Upload size={14} />
                             Tải bản thảo
                           </Button>
                         </div>

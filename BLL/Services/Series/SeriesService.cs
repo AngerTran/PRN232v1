@@ -1227,7 +1227,12 @@ public class SeriesService
       throw new SeriesForbiddenException("Only the series author (mangaka) or admin can upload a chapter manuscript.");
     }
 
-    EnsureMangakaCanEditChapterContent(caller, chapter);
+    // Chapter 0 = bản thảo đề xuất — cho phép thay file bất kỳ lúc nào.
+    // Chương sản xuất vẫn khóa theo trạng thái workflow.
+    if (chapter.ChapterNumber != 0)
+    {
+      EnsureMangakaCanEditChapterContent(caller, chapter);
+    }
 
     var extension = Path.GetExtension(file.FileName);
     if (string.IsNullOrWhiteSpace(extension))
