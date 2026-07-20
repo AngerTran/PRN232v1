@@ -19,14 +19,11 @@ import {
   TableHeader,
   TableRow,
 } from '../../app/components/ui/table';
-import { IncomeSummaryCard } from '../../app/components/ui/assistant';
 import type { Task } from '../../types/domain';
 import { getMyTasks } from '../../services/tasksApi';
 import { getMe } from '../../services/authApi';
 import { getMyEarnings, type AssistantEarnings } from '../../services/submissionsApi';
-import { FileCheck, ClipboardCheck, Clock, CheckCircle, Eye, Wallet, Banknote, Info } from 'lucide-react';
-import { format } from 'date-fns';
-import { vi } from 'date-fns/locale';
+import { ClipboardCheck, Clock, CheckCircle, Eye, Wallet, Banknote, Info } from 'lucide-react';
 import { formatVnd } from '../../utils/formatCurrency';
 import {
   formatNextPayoutLabel,
@@ -121,18 +118,20 @@ export default function IncomePage() {
   const pendingEarnings = Math.max(0, totalEarnings - paidEarnings);
   const [yearPart, monthPart] = monthFilter.split('-');
   const monthPayoutLabel = formatPayoutDate(Number(yearPart), Number(monthPart));
-  const monthNum = monthFilter.split('-')[1];
+  const monthNum = Number(monthPart);
 
   return (
-    <div className="p-4 md:p-5 space-y-4">
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <div className="flex items-center gap-2">
-          <FileCheck className="h-4 w-4 text-primary" />
-          <h1 className="text-lg font-bold">Thu Nhập</h1>
+    <div className="p-5 md:p-6 space-y-5 max-w-6xl">
+      <div className="flex flex-wrap items-end justify-between gap-3">
+        <div>
+          <h1 className="text-xl font-bold tracking-tight text-foreground">Thu nhập</h1>
+          <p className="text-sm text-muted-foreground mt-0.5">
+            Thù lao tháng {monthNum} · Chi dự kiến {monthPayoutLabel}
+          </p>
         </div>
 
         <Select value={monthFilter} onValueChange={setMonthFilter}>
-          <SelectTrigger className="h-8 w-[160px] text-sm">
+          <SelectTrigger className="h-9 w-[168px] bg-background">
             <SelectValue placeholder="Chọn tháng" />
           </SelectTrigger>
           <SelectContent>
@@ -146,149 +145,163 @@ export default function IncomePage() {
       </div>
 
       {!hasPayoutBank && pendingEarnings > 0 && (
-        <div className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-950">
-          <p>
-            Có thù lao chờ chi nhưng chưa khai báo STK. Cập nhật tại Hồ sơ để nhận đúng kỳ.
-          </p>
-          <Button variant="outline" size="sm" className="h-7 text-xs" onClick={() => navigate('/profile')}>
+        <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-amber-200/80 bg-amber-50 px-3.5 py-2.5 text-sm text-amber-950">
+          <p>Có thù lao chờ chi nhưng chưa khai báo STK.</p>
+          <Button variant="outline" size="sm" onClick={() => navigate('/profile')}>
             Cập nhật STK
           </Button>
         </div>
       )}
 
-      <div className="flex gap-2 rounded-md border border-border bg-muted/40 px-3 py-2 text-xs text-muted-foreground leading-relaxed">
-        <Info className="h-3.5 w-3.5 shrink-0 text-primary mt-0.5" />
-        <p>
-          {PAYROLL_POLICY_SUMMARY}{' '}
-          Kỳ tiếp theo: <strong className="text-foreground">{formatNextPayoutLabel()}</strong>
-          {' '}· Tháng đang chọn chi ngày <strong className="text-foreground">{monthPayoutLabel}</strong>.
-        </p>
+      <div className="grid gap-3 lg:grid-cols-12">
+        <Card className="lg:col-span-5 border-0 shadow-none bg-gradient-to-br from-primary/10 via-primary/5 to-transparent ring-1 ring-primary/15">
+          <div className="p-5 flex flex-col justify-between min-h-[140px]">
+            <div className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
+              <Wallet className="h-4 w-4 text-primary" />
+              Tổng thù lao tháng {monthNum}
+            </div>
+            <div>
+              <p className="text-3xl font-bold tracking-tight tabular-nums text-foreground mt-3">
+                {formatVnd(totalEarnings)}
+              </p>
+              <p className="text-xs text-muted-foreground mt-1.5 flex items-start gap-1.5 leading-relaxed">
+                <Info className="h-3.5 w-3.5 shrink-0 mt-0.5" />
+                <span>
+                  {PAYROLL_POLICY_SUMMARY} Kỳ tiếp theo:{' '}
+                  <span className="text-foreground font-medium">{formatNextPayoutLabel()}</span>
+                </span>
+              </p>
+            </div>
+          </div>
+        </Card>
+
+        <div className="lg:col-span-7 grid grid-cols-2 gap-3">
+          <Card className="border-border/80 shadow-none">
+            <div className="p-4 space-y-2">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-medium text-muted-foreground">Chờ chi trả</span>
+                <Banknote className="h-3.5 w-3.5 text-amber-600" />
+              </div>
+              <p className="text-xl font-bold tabular-nums tracking-tight">{formatVnd(pendingEarnings)}</p>
+              <p className="text-[11px] text-muted-foreground">Đã duyệt, chưa ghi nhận chi</p>
+            </div>
+          </Card>
+          <Card className="border-border/80 shadow-none">
+            <div className="p-4 space-y-2">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-medium text-muted-foreground">Đã chi trả</span>
+                <CheckCircle className="h-3.5 w-3.5 text-emerald-600" />
+              </div>
+              <p className="text-xl font-bold tabular-nums tracking-tight">{formatVnd(paidEarnings)}</p>
+              <p className="text-[11px] text-muted-foreground">Kế toán đã xác nhận</p>
+            </div>
+          </Card>
+          <Card className="border-border/80 shadow-none">
+            <div className="p-4 space-y-2">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-medium text-muted-foreground">Task đã duyệt</span>
+                <ClipboardCheck className="h-3.5 w-3.5 text-primary" />
+              </div>
+              <p className="text-xl font-bold tabular-nums tracking-tight">{approvedInMonth.length}</p>
+              <p className="text-[11px] text-muted-foreground">Trong tháng đang chọn</p>
+            </div>
+          </Card>
+          <Card className="border-border/80 shadow-none">
+            <div className="p-4 space-y-2">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-medium text-muted-foreground">Task chờ duyệt</span>
+                <Clock className="h-3.5 w-3.5 text-muted-foreground" />
+              </div>
+              <p className="text-xl font-bold tabular-nums tracking-tight">{submittedTasks.length}</p>
+              <p className="text-[11px] text-muted-foreground">Đã nộp, chờ mangaka</p>
+            </div>
+          </Card>
+        </div>
       </div>
 
-      <div className="grid gap-2 grid-cols-2 sm:grid-cols-3 xl:grid-cols-7">
-        <IncomeSummaryCard
-          compact
-          title="Tổng thù lao"
-          value={formatVnd(totalEarnings)}
-          icon={Wallet}
-          description={`Tháng ${monthNum}`}
-        />
-        <IncomeSummaryCard
-          compact
-          title="Chờ chi trả"
-          value={formatVnd(pendingEarnings)}
-          icon={Banknote}
-          description="Chưa ghi nhận chi"
-        />
-        <IncomeSummaryCard
-          compact
-          title="Đã chi trả"
-          value={formatVnd(paidEarnings)}
-          icon={CheckCircle}
-          description="Đã xác nhận"
-        />
-        <IncomeSummaryCard
-          compact
-          title="Bài duyệt"
-          value={earnings?.approvedSubmissions ?? 0}
-          icon={CheckCircle}
-          description={`Tháng ${monthNum}`}
-        />
-        <IncomeSummaryCard
-          compact
-          title="Trang duyệt"
-          value={earnings?.approvedPages ?? 0}
-          icon={FileCheck}
-          description={`Tháng ${monthNum}`}
-        />
-        <IncomeSummaryCard
-          compact
-          title="Task duyệt"
-          value={approvedInMonth.length}
-          icon={ClipboardCheck}
-          description="Trong tháng"
-        />
-        <IncomeSummaryCard
-          compact
-          title="Task chờ"
-          value={submittedTasks.length}
-          icon={Clock}
-          description="Chờ review"
-        />
-      </div>
+      <section className="space-y-2.5">
+        <div className="flex items-baseline justify-between gap-2">
+          <h2 className="text-sm font-semibold text-foreground">Chi tiết thù lao</h2>
+          <span className="text-xs text-muted-foreground">{approvedInMonth.length} task</span>
+        </div>
 
-      <Card className="shadow-none">
-        <div className="overflow-x-auto">
-          <Table>
-            <TableHeader>
-              <TableRow className="hover:bg-transparent">
-                <TableHead className="h-9 text-xs">Task</TableHead>
-                <TableHead className="h-9 text-xs">Series</TableHead>
-                <TableHead className="h-9 text-xs">Trang</TableHead>
-                <TableHead className="h-9 text-xs">Ngày duyệt</TableHead>
-                <TableHead className="h-9 text-xs text-right">Giá</TableHead>
-                <TableHead className="h-9 text-xs">Chi trả</TableHead>
-                <TableHead className="h-9 text-xs text-right">Hành động</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {approvedInMonth.length === 0 ? (
-                <TableRow>
-                  <TableCell colSpan={7} className="text-center py-6 text-sm text-muted-foreground">
-                    Chưa có task được duyệt trong tháng này
-                  </TableCell>
+        <Card className="shadow-none overflow-hidden border-border/80">
+          <div className="overflow-x-auto">
+            <Table>
+              <TableHeader>
+                <TableRow className="hover:bg-transparent bg-muted/30">
+                  <TableHead className="h-10 text-xs font-semibold">Task</TableHead>
+                  <TableHead className="h-10 text-xs font-semibold">Series</TableHead>
+                  <TableHead className="h-10 text-xs font-semibold text-right">Giá</TableHead>
+                  <TableHead className="h-10 text-xs font-semibold">Chi trả</TableHead>
+                  <TableHead className="h-10 text-xs font-semibold text-right w-[88px]" />
                 </TableRow>
-              ) : (
-                approvedInMonth.map(task => {
-                  const paid = isPaid(task.paymentStatus);
-                  const hasPay = (task.price ?? 0) > 0;
-
-                  return (
-                  <TableRow key={task.id}>
-                    <TableCell className="py-2 text-sm font-medium">{task.title}</TableCell>
-                    <TableCell className="py-2 text-sm">{task.seriesTitle}</TableCell>
-                    <TableCell className="py-2 text-sm">Trang {task.pageNumber}</TableCell>
-                    <TableCell className="py-2 text-sm">
-                      {task.reviewedAt
-                        ? format(new Date(task.reviewedAt), 'dd/MM/yyyy', { locale: vi })
-                        : '—'}
-                    </TableCell>
-                    <TableCell className="py-2 text-sm text-right font-medium">
-                      {formatVnd(task.price)}
-                    </TableCell>
-                    <TableCell className="py-2">
-                      {!hasPay ? (
-                        <span className="text-muted-foreground text-xs">—</span>
-                      ) : (
-                        <div>
-                          <Badge variant={paid ? 'default' : 'secondary'} className="text-[10px] px-1.5 py-0">
-                            {paid ? 'Đã chi trả' : 'Chờ chi trả'}
-                          </Badge>
-                          {paid && task.paymentReference && (
-                            <p className="text-[10px] text-muted-foreground mt-0.5">Mã CK: {task.paymentReference}</p>
-                          )}
-                        </div>
-                      )}
-                    </TableCell>
-                    <TableCell className="py-2 text-right">
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        className="h-7 px-2 text-xs"
-                        onClick={() => navigate(`/assistant/tasks/${task.id}`)}
-                      >
-                        <Eye className="h-3.5 w-3.5 mr-1" />
-                        Xem
-                      </Button>
+              </TableHeader>
+              <TableBody>
+                {approvedInMonth.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={5} className="text-center py-10 text-sm text-muted-foreground">
+                      Chưa có task được duyệt trong tháng này
                     </TableCell>
                   </TableRow>
-                  );
-                })
-              )}
-            </TableBody>
-          </Table>
-        </div>
-      </Card>
+                ) : (
+                  approvedInMonth.map(task => {
+                    const paid = isPaid(task.paymentStatus);
+                    const hasPay = (task.price ?? 0) > 0;
+
+                    return (
+                      <TableRow key={task.id} className="group">
+                        <TableCell className="py-3">
+                          <p className="text-sm font-medium leading-snug">{task.title}</p>
+                          {task.pageNumber != null && (
+                            <p className="text-[11px] text-muted-foreground mt-0.5">Trang {task.pageNumber}</p>
+                          )}
+                        </TableCell>
+                        <TableCell className="py-3 text-sm text-muted-foreground">
+                          {task.seriesTitle || '—'}
+                        </TableCell>
+                        <TableCell className="py-3 text-sm text-right font-semibold tabular-nums">
+                          {formatVnd(task.price)}
+                        </TableCell>
+                        <TableCell className="py-3">
+                          {!hasPay ? (
+                            <span className="text-muted-foreground text-xs">—</span>
+                          ) : (
+                            <div>
+                              <Badge
+                                variant={paid ? 'default' : 'secondary'}
+                                className="text-[10px] font-medium"
+                              >
+                                {paid ? 'Đã chi trả' : 'Chờ chi trả'}
+                              </Badge>
+                              {paid && task.paymentReference && (
+                                <p className="text-[10px] text-muted-foreground mt-1">
+                                  Mã CK: {task.paymentReference}
+                                </p>
+                              )}
+                            </div>
+                          )}
+                        </TableCell>
+                        <TableCell className="py-3 text-right">
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-8 px-2 text-xs opacity-80 group-hover:opacity-100"
+                            onClick={() => navigate(`/assistant/tasks/${task.id}`)}
+                          >
+                            <Eye className="h-3.5 w-3.5 mr-1" />
+                            Xem
+                          </Button>
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })
+                )}
+              </TableBody>
+            </Table>
+          </div>
+        </Card>
+      </section>
     </div>
   );
 }
