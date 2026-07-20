@@ -1,6 +1,12 @@
 import { apiRequest } from './apiClient';
 import { getStoredUser } from './authApi';
-import { getVisibleSeries } from './seriesApi';
+import {
+  computeSeriesAtRisk,
+  getSeriesRanking,
+  getVisibleSeries,
+  mapUiStatusToApi,
+  type SeriesRankingItem,
+} from './seriesApi';
 import type { Series } from '../types/domain';
 
 type ApiEnvelope<T> = T | { data: T };
@@ -109,14 +115,29 @@ function mapStudioProgress(item: ApiEditorStudioProgress): EditorStudioProgress 
   };
 }
 
-/** Series editor được phép xem: gán cho editor hiện tại. */
+/** Series editor được phép xem: gán cho editor hiện tại + gắn hạng kỳ mới nhất. */
 export async function getEditorAssignedSeries(): Promise<Series[]> {
   const user = getStoredUser();
   const items = await getVisibleSeries();
-  if (!user || user.role !== 'editor') {
-    return items;
-  }
-  return items.filter(series => series.editorId === user.id);
+  const assigned =
+    !user || user.role !== 'editor'
+      ? items
+      : items.filter(series => series.editorId === user.id);
+
+  const rankings = await getSeriesRanking().catch(() => [] as SeriesRankingItem[]);
+  const rankById = new Map(rankings.map(r => [r.seriesId, r]));
+
+  return assigned.map(s => {
+    const r = rankById.get(s.id);
+    if (!r) return s;
+    return {
+      ...s,
+      currentRank: r.rankPosition,
+      voteScore: r.voteCount,
+      isAtRisk:
+        computeSeriesAtRisk(mapUiStatusToApi(s.status), r.rankPosition) || s.isAtRisk,
+    };
+  });
 }
 
 export async function getEditorStudioProgress(seriesId: string): Promise<EditorStudioProgress> {

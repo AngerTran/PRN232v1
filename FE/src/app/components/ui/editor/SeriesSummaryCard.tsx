@@ -42,8 +42,10 @@ export function SeriesSummaryCard({ series, onClick }: SeriesSummaryCardProps) {
             <div className="flex items-center gap-4 text-sm">
               <div className="flex items-center gap-1">
                 <span className="text-muted-foreground">Hạng:</span>
-                <span className="font-semibold">#{series.currentRank}</span>
-                {rankChange !== 0 && (
+                <span className="font-semibold">
+                  {series.currentRank > 0 ? `#${series.currentRank}` : '—'}
+                </span>
+                {series.currentRank > 0 && rankChange !== 0 && (
                   <span className={`flex items-center ${isRising ? 'text-green-600' : 'text-red-600'}`}>
                     {isRising ? <TrendingUp className="h-3 w-3" /> : <TrendingDown className="h-3 w-3" />}
                     {Math.abs(rankChange)}

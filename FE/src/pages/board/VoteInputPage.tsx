@@ -536,7 +536,7 @@ export default function VoteInputPage() {
 
               <div className="space-y-2.5 lg:border-l lg:border-border/60 lg:pl-8">
                 <div className="flex items-baseline justify-between gap-2">
-                  <p className="text-sm font-semibold">Sẽ lưu trong đợt này</p>
+                  <p className="text-sm font-semibold">Đánh giá đợt này</p>
                   <span className="text-xs text-muted-foreground">{pendingRows.length} series</span>
                 </div>
 

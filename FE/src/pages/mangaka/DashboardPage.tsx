@@ -3,8 +3,8 @@ import { useNavigate } from 'react-router';
 import { BookOpen, FileText, ClipboardList, AlertTriangle, ArrowRight, TrendingDown } from 'lucide-react';
 import Card, { StatCard } from '../../components/ui/Card';
 import DeadlineCard from '../../components/ui/DeadlineCard';
-import Badge from '../../components/ui/Badge';
 import Button from '../../components/ui/Button';
+import SeriesCard from '../../components/ui/SeriesCard';
 import { usePageMeta } from '../../hooks/usePageMeta';
 import { useConfirm } from '../../components/ui/ConfirmDialog';
 import type { Chapter, Series } from '../../types/domain';
@@ -206,36 +206,25 @@ export default function DashboardPage() {
           <div>
             <div className="flex items-center justify-between mb-3">
               <h2 className="font-bold text-base">Series đang hoạt động</h2>
-              <button onClick={() => navigate('/mangaka/series')} className="text-xs text-primary font-semibold hover:underline flex items-center gap-1">
+              <button
+                type="button"
+                onClick={() => navigate('/mangaka/series')}
+                className="text-xs text-primary font-semibold hover:underline flex items-center gap-1"
+              >
                 Tất cả series <ArrowRight size={12} />
               </button>
             </div>
-            <Card padding="none">
-              {activeSeries.length === 0 ? (
-                <p className="text-sm text-muted-foreground text-center py-5 px-4">Chưa có series đang hoạt động.</p>
-              ) : (
-                <div className="divide-y divide-border">
-                  {activeSeries.map(s => (
-                    <div
-                      key={s.id}
-                      onClick={() => navigate(`/mangaka/series/${s.id}`)}
-                      className="flex items-center gap-3 p-4 hover:bg-muted/40 cursor-pointer transition-colors"
-                    >
-                      {s.coverUrl && (
-                        <div className="w-8 h-10 rounded-lg overflow-hidden shrink-0">
-                          <img src={s.coverUrl} alt={s.title} className="w-full h-full object-cover" />
-                        </div>
-                      )}
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm font-semibold truncate">{s.title}</p>
-                        <p className="text-xs text-muted-foreground truncate">{s.genre}</p>
-                      </div>
-                      <Badge status={s.status} size="sm" />
-                    </div>
-                  ))}
-                </div>
-              )}
-            </Card>
+            {activeSeries.length === 0 ? (
+              <Card>
+                <p className="text-sm text-muted-foreground text-center py-5">Chưa có series đang hoạt động.</p>
+              </Card>
+            ) : (
+              <div className="space-y-4">
+                {activeSeries.slice(0, 3).map(s => (
+                  <SeriesCard key={s.id} series={s} view="grid" />
+                ))}
+              </div>
+            )}
           </div>
 
           <div>
@@ -262,7 +251,11 @@ export default function DashboardPage() {
                           <p className="text-sm font-semibold truncate">{s.title}</p>
                           <p className="text-xs text-muted-foreground">{s.voteScore.toLocaleString()} phiếu</p>
                         </div>
-                        <div className={`flex items-center gap-1 text-xs font-bold ${delta > 0 ? 'text-green-600' : delta < 0 ? 'text-red-500' : 'text-muted-foreground'}`}>
+                        <div
+                          className={`flex items-center gap-1 text-xs font-bold ${
+                            delta > 0 ? 'text-green-600' : delta < 0 ? 'text-red-500' : 'text-muted-foreground'
+                          }`}
+                        >
                           {delta > 0 ? '↑' : delta < 0 ? '↓' : '—'}
                           {delta !== 0 && Math.abs(delta)}
                           {s.isAtRisk && <TrendingDown size={12} className="text-red-500 ml-1" />}

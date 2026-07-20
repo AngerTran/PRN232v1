@@ -13,7 +13,6 @@ import {
 import { clsx } from 'clsx';
 import { usePageMeta } from '../../hooks/usePageMeta';
 import { Button } from '../../app/components/ui/button';
-import ProgressBar from '../../components/ui/ProgressBar';
 import {
   getEditorAssignedSeries,
   getEditorStudioProgress,
@@ -223,64 +222,51 @@ function SeriesProgressCard({
 }) {
   return (
     <article className="rounded-2xl border border-border bg-card shadow-sm overflow-hidden">
-      <div className="p-4 sm:p-5 border-b border-border/70">
-        <div className="flex flex-col lg:flex-row lg:items-start gap-4">
-          <div className="min-w-0 flex-1">
-            <div className="flex flex-wrap items-center gap-2">
-              <h2 className="text-lg font-bold tracking-tight truncate">{progress.title}</h2>
-              {progress.overdueChapters > 0 && (
-                <span className="inline-flex items-center gap-1 rounded-lg bg-red-50 border border-red-100 px-2 py-0.5 text-[11px] font-semibold text-red-700">
-                  <AlertTriangle className="h-3 w-3" />
-                  {progress.overdueChapters} trễ hạn
-                </span>
-              )}
-            </div>
-            <p className="mt-1 text-sm text-muted-foreground">
-              {progress.chapterCount} chương · {progress.completedPages}/{progress.totalPages} trang ·{' '}
-              {progress.completedTasks}/{progress.totalTasks} task
-            </p>
-            <div className="mt-3 max-w-xl">
-              <div className="flex items-center justify-between text-xs text-muted-foreground mb-1.5">
-                <span className="inline-flex items-center gap-1 font-medium">
-                  <Activity className="h-3.5 w-3.5" />
-                  Tiến độ studio
-                </span>
-                <span className="font-semibold text-foreground tabular-nums">
-                  {progress.overallProgressPercent}%
-                </span>
-              </div>
-              <ProgressBar value={progress.overallProgressPercent} />
-            </div>
+      <div className="px-4 py-3.5 sm:px-5 flex flex-col sm:flex-row sm:items-center gap-3 border-b border-border/70">
+        <div className="min-w-0 flex-1">
+          <div className="flex flex-wrap items-center gap-2">
+            <h2 className="text-base font-bold tracking-tight truncate">{progress.title}</h2>
+            {progress.overdueChapters > 0 && (
+              <span className="inline-flex items-center gap-1 rounded-lg bg-red-50 border border-red-100 px-2 py-0.5 text-[11px] font-semibold text-red-700">
+                <AlertTriangle className="h-3 w-3" />
+                {progress.overdueChapters} trễ hạn
+              </span>
+            )}
+            <span className="text-xs font-semibold tabular-nums text-muted-foreground">
+              {progress.overallProgressPercent}%
+            </span>
           </div>
+          <p className="mt-0.5 text-xs text-muted-foreground">
+            {progress.chapterCount} chương · {progress.completedPages}/{progress.totalPages} trang ·{' '}
+            {progress.completedTasks}/{progress.totalTasks} task
+          </p>
+        </div>
 
-          <div className="flex flex-wrap gap-2 shrink-0 lg:justify-end">
-            <Button variant="outline" size="sm" onClick={onRead}>
-              <Eye className="h-4 w-4 mr-1.5" />
-              Xem trang truyện
-            </Button>
-            <Button variant="secondary" size="sm" onClick={onStudio}>
-              <LayoutDashboard className="h-4 w-4 mr-1.5" />
-              Studio
-            </Button>
-          </div>
+        <div className="flex flex-wrap gap-2 shrink-0">
+          <Button variant="outline" size="sm" onClick={onRead}>
+            <Eye className="h-4 w-4 mr-1.5" />
+            Xem trang truyện
+          </Button>
+          <Button variant="secondary" size="sm" onClick={onStudio}>
+            <LayoutDashboard className="h-4 w-4 mr-1.5" />
+            Studio
+          </Button>
         </div>
       </div>
 
-      <div className="p-4 sm:p-5">
-        {progress.chapters.length === 0 ? (
-          <p className="text-sm text-muted-foreground py-2">Chưa có chương sản xuất.</p>
-        ) : (
-          <ul className="divide-y divide-border/70 rounded-xl border border-border/70 overflow-hidden bg-muted/15">
-            {progress.chapters.map(chapter => (
-              <ChapterRow
-                key={chapter.id}
-                chapter={chapter}
-                onReview={() => onReviewChapter(chapter.id)}
-              />
-            ))}
-          </ul>
-        )}
-      </div>
+      {progress.chapters.length === 0 ? (
+        <p className="px-4 sm:px-5 py-3 text-sm text-muted-foreground">Chưa có chương sản xuất.</p>
+      ) : (
+        <ul className="divide-y divide-border/70">
+          {progress.chapters.map(chapter => (
+            <ChapterRow
+              key={chapter.id}
+              chapter={chapter}
+              onReview={() => onReviewChapter(chapter.id)}
+            />
+          ))}
+        </ul>
+      )}
     </article>
   );
 }
@@ -295,7 +281,7 @@ function ChapterRow({
   const totalTasks = chapter.pendingTasks + chapter.activeTasks + chapter.doneTasks;
 
   return (
-    <li className="flex flex-col sm:flex-row sm:items-center gap-3 px-3.5 sm:px-4 py-3.5 bg-card/80 hover:bg-muted/30 transition-colors">
+    <li className="flex flex-col sm:flex-row sm:items-center gap-2.5 px-4 sm:px-5 py-3 hover:bg-muted/25 transition-colors">
       <div className="min-w-0 flex-1">
         <div className="flex flex-wrap items-center gap-2">
           <p className="font-semibold text-sm truncate">
@@ -309,8 +295,11 @@ function ChapterRow({
               Trễ hạn
             </span>
           )}
+          <span className="text-[11px] font-semibold tabular-nums text-muted-foreground">
+            {chapter.progressPercent}%
+          </span>
         </div>
-        <p className="mt-1 text-xs text-muted-foreground flex flex-wrap items-center gap-x-2 gap-y-0.5">
+        <p className="mt-0.5 text-xs text-muted-foreground flex flex-wrap items-center gap-x-2 gap-y-0.5">
           <span>
             {chapter.completedPages}/{chapter.pageCount} trang
           </span>
@@ -328,9 +317,6 @@ function ChapterRow({
             </>
           )}
         </p>
-        <div className="mt-2 max-w-sm">
-          <ProgressBar value={chapter.progressPercent} showLabel />
-        </div>
       </div>
 
       <Button variant="outline" size="sm" className="shrink-0 self-start sm:self-center" onClick={onReview}>
