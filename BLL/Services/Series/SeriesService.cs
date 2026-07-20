@@ -1519,15 +1519,7 @@ public class SeriesService
     };
 
     await ChapterRepository.AddAsync(chapter, cancellationToken);
-
-    // Chương sản xuất đầu tiên: Approved → Publishing để board/editor theo dõi đúng giai đoạn.
-    if (request.ChapterNumber > 0 && series.Status == SeriesStatus.Approved)
-    {
-      series.Status = SeriesStatus.Publishing;
-      series.UpdatedAt = now;
-      SeriesRepository.Update(series);
-    }
-
+    // Không đổi series → publishing chỉ vì tạo chương nháp; chỉ chuyển khi có chương Published.
     await _unitOfWork.SaveChangesAsync(cancellationToken);
 
     return MapChapterToDto(chapter);
@@ -1584,36 +1576,62 @@ public class SeriesService
       .Include(s => s.Editor);
 
   /// <summary>
-  /// Series đã có lịch XB nhưng còn nhãn approved/completed → chuyển sang publishing.
+  /// Đồng bộ nhãn series với thực tế xuất bản:
+  /// có chương Published → publishing; đang publishing nhưng chưa có chương Published → approved.
   /// </summary>
   private async Task PromoteScheduledSeriesToPublishingAsync(
     CancellationToken cancellationToken,
     Guid? seriesId = null)
   {
-    var query = _unitOfWork.Context.Series
+    var candidates = _unitOfWork.Context.Series
       .Where(s =>
-        (s.Status == SeriesStatus.Approved || s.Status == SeriesStatus.Completed)
-        && _unitOfWork.Context.PublishingSchedules.Any(ps => ps.SeriesId == s.Id));
+        s.Status == SeriesStatus.Approved
+        || s.Status == SeriesStatus.Completed
+        || s.Status == SeriesStatus.Publishing);
 
     if (seriesId is Guid id)
     {
-      query = query.Where(s => s.Id == id);
+      candidates = candidates.Where(s => s.Id == id);
     }
 
-    var toPromote = await query.ToListAsync(cancellationToken);
-    if (toPromote.Count == 0)
+    var list = await candidates.ToListAsync(cancellationToken);
+    if (list.Count == 0)
     {
       return;
     }
 
+    var seriesIds = list.Select(s => s.Id).ToList();
+    var publishedSeriesIds = (await _unitOfWork.Context.Chapters
+        .AsNoTracking()
+        .Where(c => seriesIds.Contains(c.SeriesId) && c.Status == ChapterStatus.Published)
+        .Select(c => c.SeriesId)
+        .Distinct()
+        .ToListAsync(cancellationToken))
+      .ToHashSet();
+
     var now = DateTime.UtcNow;
-    foreach (var series in toPromote)
+    var changed = false;
+    foreach (var series in list)
     {
-      series.Status = SeriesStatus.Publishing;
-      series.UpdatedAt = now;
+      var hasPublished = publishedSeriesIds.Contains(series.Id);
+      if (hasPublished && series.Status is SeriesStatus.Approved or SeriesStatus.Completed)
+      {
+        series.Status = SeriesStatus.Publishing;
+        series.UpdatedAt = now;
+        changed = true;
+      }
+      else if (!hasPublished && series.Status == SeriesStatus.Publishing)
+      {
+        series.Status = SeriesStatus.Approved;
+        series.UpdatedAt = now;
+        changed = true;
+      }
     }
 
-    await _unitOfWork.SaveChangesAsync(cancellationToken);
+    if (changed)
+    {
+      await _unitOfWork.SaveChangesAsync(cancellationToken);
+    }
   }
 
   private static System.Linq.Expressions.Expression<Func<SeriesEntity, SeriesResponse>> MapProjection() =>
@@ -1772,6 +1790,15 @@ public class SeriesService
       chapter.Status = ChapterStatus.Published;
       chapter.UpdatedAt = now;
       await SyncPagesWithChapterStatusAsync(chapter.Id, ChapterStatus.Published, cancellationToken);
+    }
+
+    var series = await SeriesRepository.GetByIdAsync(seriesId, asNoTracking: false, cancellationToken);
+    if (series is not null
+        && series.Status is SeriesStatus.Approved or SeriesStatus.Completed)
+    {
+      series.Status = SeriesStatus.Publishing;
+      series.UpdatedAt = now;
+      SeriesRepository.Update(series);
     }
 
     await _unitOfWork.SaveChangesAsync(cancellationToken);

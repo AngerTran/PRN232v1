@@ -146,17 +146,12 @@ public class PublishingScheduleService
 
         await Repository.AddAsync(schedule, cancellationToken);
 
-        // Đã lên lịch XB → series chuyển sang đang xuất bản (không còn dừng ở "sẵn sàng XB").
-        if (series.Status is SeriesStatus.Approved or SeriesStatus.Completed)
-        {
-            series.Status = SeriesStatus.Publishing;
-            series.UpdatedAt = DateTime.UtcNow;
-        }
-
         // Chỉ Published khi ngày XB đã tới; ngày tương lai giữ Completed (đã lên lịch).
+        // Series → publishing chỉ khi có chương thực sự Published (không chỉ vì có lịch).
         if (chapter is not null)
         {
             await ApplyChapterPublishStateAsync(chapter, request.PublishDate, cancellationToken);
+            await SyncSeriesPublishingStatusAsync(series, cancellationToken);
         }
 
         await _unitOfWork.SaveChangesAsync(cancellationToken);
@@ -270,12 +265,7 @@ public class PublishingScheduleService
         }
 
         Repository.Update(schedule);
-
-        if (series.Status is SeriesStatus.Approved or SeriesStatus.Completed)
-        {
-            series.Status = SeriesStatus.Publishing;
-            series.UpdatedAt = DateTime.UtcNow;
-        }
+        await SyncSeriesPublishingStatusAsync(series, cancellationToken);
 
         await _unitOfWork.SaveChangesAsync(cancellationToken);
 
@@ -450,6 +440,47 @@ public class PublishingScheduleService
         if (publishDate < today)
         {
             throw new ArgumentException("Không thể chọn ngày phát hành trong quá khứ.");
+        }
+    }
+
+    /// <summary>
+    /// Series chỉ là <c>publishing</c> khi đã có ít nhất một chương <c>Published</c>.
+    /// Có lịch XB nhưng chưa tới ngày / chương còn nháp → giữ approved hoặc completed.
+    /// </summary>
+    private async Task SyncSeriesPublishingStatusAsync(
+        DAL.Models.Series series,
+        CancellationToken cancellationToken)
+    {
+        if (series.Status is SeriesStatus.Draft
+            or SeriesStatus.PendingReview
+            or SeriesStatus.Cancelled
+            or SeriesStatus.Hiatus)
+        {
+            return;
+        }
+
+        var hasPublishedChapter = await _unitOfWork.Context.Chapters
+            .AsNoTracking()
+            .AnyAsync(
+                c => c.SeriesId == series.Id && c.Status == ChapterStatus.Published,
+                cancellationToken);
+
+        if (hasPublishedChapter)
+        {
+            if (series.Status is SeriesStatus.Approved or SeriesStatus.Completed)
+            {
+                series.Status = SeriesStatus.Publishing;
+                series.UpdatedAt = DateTime.UtcNow;
+            }
+
+            return;
+        }
+
+        // Đã gắn nhãn publishing sớm (tạo chương / tạo lịch) nhưng chưa XB thật → trả về đúng giai đoạn.
+        if (series.Status == SeriesStatus.Publishing)
+        {
+            series.Status = SeriesStatus.Approved;
+            series.UpdatedAt = DateTime.UtcNow;
         }
     }
 

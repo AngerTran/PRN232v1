@@ -41,11 +41,12 @@ export default function ChapterListPage() {
 
         if (!active) return;
         setSeries(seriesItem);
-        // Board bỏ chapter 0 (bản thảo đề xuất).
-        const filtered = readOnly
-          ? chapterItems.filter(c => c.number > 0)
-          : chapterItems;
-        setChapters(filtered.sort((a, b) => a.number - b.number));
+        // Chương 0 = bản thảo đề xuất khi nộp board — không hiện trong danh sách sản xuất.
+        setChapters(
+          chapterItems
+            .filter(c => c.number > 0)
+            .sort((a, b) => a.number - b.number),
+        );
       } catch (err) {
         if (active) {
           setSeries(null);
