@@ -23,9 +23,9 @@ import { usePageMeta } from '../../hooks/usePageMeta';
 import { useConfirm } from '../../components/ui/ConfirmDialog';
 import { useSeriesContentPaths } from '../../hooks/useSeriesContentPaths';
 import {
-  buildManuscriptDownloadUrl,
   resolveManuscriptFileName,
 } from '../../utils/manuscriptDownload';
+import ManuscriptDownloadButton from '../../components/ui/ManuscriptDownloadButton';
 import type { Chapter, Series } from '../../types/domain';
 import {
   getChapter,
@@ -693,15 +693,14 @@ export default function ChapterDetailPage() {
                         <p className="text-xs text-muted-foreground mt-1">File bản thảo đầy đủ của chương</p>
                       </div>
                     </div>
-                    <a
-                      href={buildManuscriptDownloadUrl(manuscriptUrl, displayManuscriptName)}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="inline-flex w-full items-center justify-center gap-2 rounded-xl border border-primary/25 bg-primary/5 px-4 py-2.5 text-sm font-semibold text-primary hover:bg-primary/10 transition-colors"
+                    <ManuscriptDownloadButton
+                      url={manuscriptUrl}
+                      fileName={displayManuscriptName}
+                      className="inline-flex w-full items-center justify-center gap-2 rounded-xl border border-primary/25 bg-primary/5 px-4 py-2.5 text-sm font-semibold text-primary hover:bg-primary/10 transition-colors disabled:opacity-60"
                     >
                       <FileDown size={15} />
                       Tải bản thảo
-                    </a>
+                    </ManuscriptDownloadButton>
                   </div>
                 ) : (
                   <div className="rounded-xl border border-dashed border-border bg-muted/30 px-4 py-8 text-center">

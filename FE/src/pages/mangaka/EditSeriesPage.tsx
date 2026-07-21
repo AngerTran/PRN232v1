@@ -16,7 +16,7 @@ import {
   uploadSeriesCover,
   upsertSeriesProposalManuscript,
 } from '../../services/seriesApi';
-import { buildManuscriptDownloadUrl } from '../../utils/manuscriptDownload';
+import ManuscriptDownloadButton from '../../components/ui/ManuscriptDownloadButton';
 
 const GENRES = ['Action', 'Adventure', 'Comedy', 'Drama', 'Fantasy', 'Historical', 'Horror', 'Mystery', 'Romance', 'Sci-fi', 'Slice of Life', 'Sports', 'Supernatural', 'Thriller'];
 const AUDIENCES = ['Shōnen (12-18)', 'Shōjo (12-18)', 'Seinen (18-35)', 'Josei (20-40)', 'Kodomomuke (Trẻ em)'];
@@ -264,14 +264,13 @@ export default function EditSeriesPage() {
               {existingManuscriptUrl && !manuscriptFile && (
                 <p className="text-xs text-muted-foreground mb-2">
                   Đã có file{existingManuscriptName ? ` «${existingManuscriptName}»` : ''} —{' '}
-                  <a
-                    href={buildManuscriptDownloadUrl(existingManuscriptUrl, existingManuscriptName)}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-primary font-medium hover:underline"
+                  <ManuscriptDownloadButton
+                    url={existingManuscriptUrl}
+                    fileName={existingManuscriptName}
+                    className="inline p-0 bg-transparent border-0 text-primary font-medium hover:underline disabled:opacity-60 cursor-pointer"
                   >
                     xem bản thảo hiện tại
-                  </a>
+                  </ManuscriptDownloadButton>
                 </p>
               )}
               <UploadBox

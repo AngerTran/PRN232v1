@@ -20,10 +20,10 @@ import {
 } from '../../services/boardApi';
 import { getStoredUser } from '../../services/authApi';
 import {
-  buildManuscriptDownloadUrl,
   getProposalChapter,
   resolveManuscriptFileName,
 } from '../../utils/manuscriptDownload';
+import ManuscriptDownloadButton from '../../components/ui/ManuscriptDownloadButton';
 
 function mapStatus(status: string): BoardSubmissionStatus {
   switch (status) {
@@ -349,13 +349,14 @@ export default function SubmissionDetailPage() {
                     <p className="text-xs text-muted-foreground mt-0.5">Tài liệu do mangaka tải lên khi gửi đề xuất</p>
                   </div>
                 </div>
-                <a
-                  href={buildManuscriptDownloadUrl(manuscriptUrl, manuscriptName)}
-                  className="inline-flex items-center justify-center gap-2 rounded-xl border border-primary/30 bg-primary/5 px-4 py-2.5 text-sm font-semibold text-primary hover:bg-primary/10 transition-colors w-full"
+                <ManuscriptDownloadButton
+                  url={manuscriptUrl}
+                  fileName={manuscriptName}
+                  className="inline-flex items-center justify-center gap-2 rounded-xl border border-primary/30 bg-primary/5 px-4 py-2.5 text-sm font-semibold text-primary hover:bg-primary/10 transition-colors w-full disabled:opacity-60"
                 >
                   <Download size={16} />
                   Tải bản thảo
-                </a>
+                </ManuscriptDownloadButton>
               </div>
             ) : (
               <div className="rounded-xl border border-dashed border-border bg-muted/20 p-6 text-center text-sm text-muted-foreground">

@@ -15,9 +15,9 @@ import SeriesTeamCard from '../../components/series/SeriesTeamCard';
 import { usePageMeta } from '../../hooks/usePageMeta';
 import { useConfirm } from '../../components/ui/ConfirmDialog';
 import {
-  buildManuscriptDownloadUrl,
   getProposalChapter,
 } from '../../utils/manuscriptDownload';
+import ManuscriptDownloadButton from '../../components/ui/ManuscriptDownloadButton';
 import type { Chapter, Series, SeriesRanking } from '../../types/domain';
 import {
   getSeries,
@@ -580,15 +580,14 @@ export default function SeriesDetailPage() {
                         </div>
                       </div>
                       <div className="flex flex-wrap items-center gap-2">
-                        <a
-                          href={buildManuscriptDownloadUrl(manuscriptUrl, manuscriptName)}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="inline-flex items-center gap-1.5 rounded-lg border border-primary/25 bg-primary/5 px-3 py-1.5 text-sm font-semibold text-primary hover:bg-primary/10"
+                        <ManuscriptDownloadButton
+                          url={manuscriptUrl}
+                          fileName={manuscriptName}
+                          className="inline-flex items-center gap-1.5 rounded-lg border border-primary/25 bg-primary/5 px-3 py-1.5 text-sm font-semibold text-primary hover:bg-primary/10 disabled:opacity-60"
                         >
                           <FileDown size={14} />
                           Tải bản thảo
-                        </a>
+                        </ManuscriptDownloadButton>
                         {canReplaceManuscript && (
                           <Button
                             variant="outline"

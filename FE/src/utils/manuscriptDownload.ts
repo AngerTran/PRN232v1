@@ -11,32 +11,37 @@ export function resolveManuscriptFileName(url: string, preferredName?: string | 
   }
 }
 
-export function buildManuscriptDownloadUrl(url: string, preferredName?: string | null): string {
+/** Tải file qua fetch + blob để giữ tên gốc (thuộc tính download không hoạt động với URL cross-origin). */
+export async function downloadManuscriptFile(url: string, preferredName?: string | null): Promise<void> {
   const trimmed = url.trim();
-  if (!trimmed) return trimmed;
+  if (!trimmed) {
+    throw new Error('Không có liên kết bản thảo.');
+  }
 
   const filename = resolveManuscriptFileName(trimmed, preferredName);
-  if (!trimmed.includes('res.cloudinary.com')) {
-    return trimmed;
+  const response = await fetch(trimmed);
+  if (!response.ok) {
+    throw new Error(`Không thể tải bản thảo (${response.status}).`);
   }
 
-  const markerIdx = trimmed.indexOf(CLOUDINARY_UPLOAD);
-  if (markerIdx === -1) {
-    return trimmed;
+  const blob = await response.blob();
+  const objectUrl = URL.createObjectURL(blob);
+  try {
+    const anchor = document.createElement('a');
+    anchor.href = objectUrl;
+    anchor.download = filename;
+    anchor.rel = 'noopener';
+    document.body.appendChild(anchor);
+    anchor.click();
+    anchor.remove();
+  } finally {
+    URL.revokeObjectURL(objectUrl);
   }
-
-  const insertAt = markerIdx + CLOUDINARY_UPLOAD.length;
-  const afterUpload = trimmed.slice(insertAt);
-  if (afterUpload.startsWith('fl_attachment:') || afterUpload.includes('/fl_attachment:')) {
-    return trimmed;
-  }
-
-  const attachmentFlag = `fl_attachment:${encodeAttachmentFilename(filename)}`;
-  return `${trimmed.slice(0, insertAt)}${attachmentFlag}/${afterUpload}`;
 }
 
-function encodeAttachmentFilename(filename: string): string {
-  return encodeURIComponent(filename).replace(/'/g, '%27');
+/** @deprecated Dùng downloadManuscriptFile — fl_attachment gây HTTP 400 trên raw upload. */
+export function buildManuscriptDownloadUrl(url: string, _preferredName?: string | null): string {
+  return url.trim();
 }
 
 /** Chương 0 = bản thảo đề xuất series (không lấy bản thảo chương sản xuất). */
