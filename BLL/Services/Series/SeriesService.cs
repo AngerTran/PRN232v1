@@ -1726,12 +1726,17 @@ public class SeriesService
       return status is ChapterStatus.Completed or ChapterStatus.Published;
     }
 
-    // Editor: chỉ thấy sau khi mangaka bấm gửi xét duyệt; sau yêu cầu sửa (in_progress) ẩn đến khi gửi lại.
+    // Editor: bản thảo đề xuất (chương 0) chỉ xem/tải; chương sản xuất sau khi mangaka gửi xét duyệt.
     if (IsEditor(caller.Role))
     {
       if (series.EditorId != caller.Id)
       {
         return false;
+      }
+
+      if (chapterNumber == 0)
+      {
+        return true;
       }
 
       return status is ChapterStatus.Reviewing

@@ -19,6 +19,11 @@ import {
   type BoardVoteProgress,
 } from '../../services/boardApi';
 import { getStoredUser } from '../../services/authApi';
+import {
+  buildManuscriptDownloadUrl,
+  getProposalChapter,
+  resolveManuscriptFileName,
+} from '../../utils/manuscriptDownload';
 
 function mapStatus(status: string): BoardSubmissionStatus {
   switch (status) {
@@ -33,17 +38,6 @@ function mapStatus(status: string): BoardSubmissionStatus {
       return 'Pending Review';
     default:
       return 'Pending Review';
-  }
-}
-
-function manuscriptFileName(url: string, preferredName?: string | null): string {
-  const preferred = preferredName?.trim();
-  if (preferred) return preferred;
-  try {
-    const name = decodeURIComponent(url.split('/').pop()?.split('?')[0] || '');
-    return name || 'ban-thao';
-  } catch {
-    return 'ban-thao';
   }
 }
 
@@ -108,7 +102,7 @@ export default function SubmissionDetailPage() {
         setVotes(v);
         setVoteProgress(progress);
         setTeam(teamData);
-        const proposal = chapters.find(c => c.number === 0) ?? chapters.find(c => c.description);
+        const proposal = getProposalChapter(chapters);
         setManuscriptUrl(proposal?.description?.trim() || null);
         setManuscriptName(proposal?.manuscriptFileName?.trim() || null);
 
@@ -351,13 +345,12 @@ export default function SubmissionDetailPage() {
                 <div className="flex items-start gap-3">
                   <FileText className="h-8 w-8 text-primary shrink-0 mt-0.5" />
                   <div className="min-w-0">
-                    <p className="text-sm font-medium truncate">{manuscriptFileName(manuscriptUrl, manuscriptName)}</p>
+                    <p className="text-sm font-medium truncate">{resolveManuscriptFileName(manuscriptUrl, manuscriptName)}</p>
                     <p className="text-xs text-muted-foreground mt-0.5">Tài liệu do mangaka tải lên khi gửi đề xuất</p>
                   </div>
                 </div>
                 <a
-                  href={manuscriptUrl}
-                  download={manuscriptFileName(manuscriptUrl, manuscriptName)}
+                  href={buildManuscriptDownloadUrl(manuscriptUrl, manuscriptName)}
                   className="inline-flex items-center justify-center gap-2 rounded-xl border border-primary/30 bg-primary/5 px-4 py-2.5 text-sm font-semibold text-primary hover:bg-primary/10 transition-colors w-full"
                 >
                   <Download size={16} />

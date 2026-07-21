@@ -22,6 +22,10 @@ import EmptyState from '../../components/ui/EmptyState';
 import { usePageMeta } from '../../hooks/usePageMeta';
 import { useConfirm } from '../../components/ui/ConfirmDialog';
 import { useSeriesContentPaths } from '../../hooks/useSeriesContentPaths';
+import {
+  buildManuscriptDownloadUrl,
+  resolveManuscriptFileName,
+} from '../../utils/manuscriptDownload';
 import type { Chapter, Series } from '../../types/domain';
 import {
   getChapter,
@@ -46,16 +50,6 @@ function isManuscriptUrl(value?: string | null): value is string {
     return u.protocol === 'http:' || u.protocol === 'https:';
   } catch {
     return false;
-  }
-}
-
-function manuscriptFileName(url: string, preferredName?: string | null): string {
-  const preferred = preferredName?.trim();
-  if (preferred) return preferred;
-  try {
-    return decodeURIComponent(url.split('/').pop()?.split('?')[0] || '') || 'ban-thao-chuong';
-  } catch {
-    return 'ban-thao-chuong';
   }
 }
 
@@ -430,7 +424,7 @@ export default function ChapterDetailPage() {
 
   const manuscriptUrl = isManuscriptUrl(chapter.description) ? chapter.description.trim() : null;
   const displayManuscriptName = manuscriptUrl
-    ? manuscriptFileName(manuscriptUrl, chapter.manuscriptFileName)
+    ? resolveManuscriptFileName(manuscriptUrl, chapter.manuscriptFileName)
     : null;
   const hasDeadline = Boolean(chapter.deadline) && !Number.isNaN(new Date(chapter.deadline).getTime());
 
@@ -700,10 +694,9 @@ export default function ChapterDetailPage() {
                       </div>
                     </div>
                     <a
-                      href={manuscriptUrl}
+                      href={buildManuscriptDownloadUrl(manuscriptUrl, displayManuscriptName)}
                       target="_blank"
                       rel="noopener noreferrer"
-                      download={displayManuscriptName ?? undefined}
                       className="inline-flex w-full items-center justify-center gap-2 rounded-xl border border-primary/25 bg-primary/5 px-4 py-2.5 text-sm font-semibold text-primary hover:bg-primary/10 transition-colors"
                     >
                       <FileDown size={15} />

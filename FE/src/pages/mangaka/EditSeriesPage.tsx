@@ -16,6 +16,7 @@ import {
   uploadSeriesCover,
   upsertSeriesProposalManuscript,
 } from '../../services/seriesApi';
+import { buildManuscriptDownloadUrl } from '../../utils/manuscriptDownload';
 
 const GENRES = ['Action', 'Adventure', 'Comedy', 'Drama', 'Fantasy', 'Historical', 'Horror', 'Mystery', 'Romance', 'Sci-fi', 'Slice of Life', 'Sports', 'Supernatural', 'Thriller'];
 const AUDIENCES = ['Shōnen (12-18)', 'Shōjo (12-18)', 'Seinen (18-35)', 'Josei (20-40)', 'Kodomomuke (Trẻ em)'];
@@ -264,10 +265,9 @@ export default function EditSeriesPage() {
                 <p className="text-xs text-muted-foreground mb-2">
                   Đã có file{existingManuscriptName ? ` «${existingManuscriptName}»` : ''} —{' '}
                   <a
-                    href={existingManuscriptUrl}
+                    href={buildManuscriptDownloadUrl(existingManuscriptUrl, existingManuscriptName)}
                     target="_blank"
                     rel="noopener noreferrer"
-                    download={existingManuscriptName || undefined}
                     className="text-primary font-medium hover:underline"
                   >
                     xem bản thảo hiện tại

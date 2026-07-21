@@ -14,6 +14,10 @@ import EmptyState from '../../components/ui/EmptyState';
 import SeriesTeamCard from '../../components/series/SeriesTeamCard';
 import { usePageMeta } from '../../hooks/usePageMeta';
 import { useConfirm } from '../../components/ui/ConfirmDialog';
+import {
+  buildManuscriptDownloadUrl,
+  getProposalChapter,
+} from '../../utils/manuscriptDownload';
 import type { Chapter, Series, SeriesRanking } from '../../types/domain';
 import {
   getSeries,
@@ -90,7 +94,7 @@ export default function SeriesDetailPage() {
   // Bản thảo đề xuất (chapter 0) — mangaka được thay file mọi lúc.
   const canReplaceManuscript = Boolean(isMangakaView && series);
   const waitingForBoardEditor = isMangakaView && series && canProduce && !series.editorId;
-  const proposalChapter = chapters.find(c => c.number === 0) ?? chapters.find(c => Boolean(c.description?.trim()));
+  const proposalChapter = getProposalChapter(chapters);
   const manuscriptUrl = proposalChapter?.description?.trim() || null;
   const manuscriptName = proposalChapter?.manuscriptFileName?.trim() || null;
 
@@ -568,15 +572,18 @@ export default function SeriesDetailPage() {
                         </span>
                         <div className="min-w-0">
                           <p className="text-sm font-semibold truncate">{manuscriptName || 'File bản thảo'}</p>
-                          <p className="text-xs text-muted-foreground">Đính kèm khi mangaka gửi duyệt</p>
+                          <p className="text-xs text-muted-foreground">
+                            {isEditorView
+                              ? 'Bản thảo đề xuất do mangaka cập nhật — chỉ tải về'
+                              : 'Đính kèm khi mangaka gửi duyệt'}
+                          </p>
                         </div>
                       </div>
                       <div className="flex flex-wrap items-center gap-2">
                         <a
-                          href={manuscriptUrl}
+                          href={buildManuscriptDownloadUrl(manuscriptUrl, manuscriptName)}
                           target="_blank"
                           rel="noopener noreferrer"
-                          download={manuscriptName || undefined}
                           className="inline-flex items-center gap-1.5 rounded-lg border border-primary/25 bg-primary/5 px-3 py-1.5 text-sm font-semibold text-primary hover:bg-primary/10"
                         >
                           <FileDown size={14} />
